@@ -12,6 +12,8 @@ import type {
   WorkoutSlotKey,
   WorkoutStatus,
   CheckIn,
+  ActivityKind,
+  ActivityLogEntry,
 } from '@household-os/shared/types';
 
 const TOKEN = import.meta.env.VITE_API_TOKEN ?? '';
@@ -111,6 +113,13 @@ export const api = {
       }),
     skip: (id: string) =>
       request<CheckIn>(`/checkins/${id}/skip`, { method: 'POST' }),
+  },
+  activity: {
+    list: (days = 7, kind?: ActivityKind) => {
+      const qs = new URLSearchParams({ days: String(days) });
+      if (kind) qs.set('kind', kind);
+      return request<ActivityLogEntry[]>(`/activity?${qs.toString()}`);
+    },
   },
   chat: (
     persona: string,

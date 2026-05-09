@@ -12,6 +12,7 @@ import workoutsRouter from './routes/workouts.js';
 import patternsRouter from './routes/patterns.js';
 import checkinsRouter from './routes/checkins.js';
 import zonesRouter from './routes/zones.js';
+import activityRouter from './routes/activity.js';
 import { generateTodayPlan } from './cron/morning-gen.js';
 import { ingestCalendarTriggers } from './cron/calendar-ingest.js';
 import {
@@ -69,6 +70,7 @@ app.use('/api/workouts', workoutsRouter);
 app.use('/api/patterns', patternsRouter);
 app.use('/api/checkins', checkinsRouter);
 app.use('/api/zones', zonesRouter);
+app.use('/api/activity', activityRouter);
 
 cron.schedule('30 5 * * *', () => {
   console.log('[cron] ingesting calendar triggers');

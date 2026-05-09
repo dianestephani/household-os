@@ -232,5 +232,17 @@ You do NOT handle nutrition/groceries or finance — direct her to those persona
         required: ['task_id'],
       },
     },
+    {
+      name: 'recent_activity',
+      description:
+        "Unified chronological activity log: tasks completed/deferred/swapped/pulled, plan generation, mood/energy/workout/zone logs, check-in lifecycle, trigger adds. Use this to answer 'what have I been up to lately' without joining specialized collections. Optional `kind` filter narrows to one activity type.",
+      input_schema: {
+        type: 'object',
+        properties: {
+          days: { type: 'integer' },
+          kind: { type: 'string' },
+        },
+      },
+    },
   ],
 };

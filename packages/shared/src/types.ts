@@ -172,6 +172,40 @@ export interface WorkoutPattern {
   recent_streaks: { kind: 'done' | 'skipped'; length: number }[];
 }
 
+// ----- Activity log -----
+
+export type ActivityKind =
+  | 'task_done'
+  | 'task_deferred'
+  | 'task_swapped'
+  | 'task_pulled'
+  | 'task_created'
+  | 'task_cancelled'
+  | 'plan_generated'
+  | 'plan_regenerated'
+  | 'energy_logged'
+  | 'mood_logged'
+  | 'workout_logged'
+  | 'zone_assessed'
+  | 'check_in_created'
+  | 'check_in_answered'
+  | 'check_in_skipped'
+  | 'trigger_added'
+  | 'routine_edited';
+
+export type ActivityActor = 'user' | 'system' | 'cron';
+
+export interface ActivityLogEntry {
+  _id?: string;
+  ts: Date | string;
+  kind: ActivityKind;
+  /** Human-readable summary for the timeline display. */
+  summary: string;
+  actor: ActivityActor;
+  /** Optional structured metadata for analytics / dashboards. */
+  metadata?: Record<string, unknown>;
+}
+
 // ----- Check-ins -----
 
 export type CheckInType =

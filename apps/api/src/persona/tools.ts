@@ -24,6 +24,8 @@ import {
   listOpenAdHocTasks,
   listRecentAssessments,
 } from '../services/zones.js';
+import { recentActivity } from '../services/activity.js';
+import type { ActivityKind } from '@household-os/shared/types';
 import type {
   DeferReasonCode,
   EnergyLevel,
@@ -114,6 +116,12 @@ export const householdTools: Record<string, ToolImpl> = {
 
   cancel_zone_task: async (input) =>
     cancelAdHocTask(input.task_id as string),
+
+  recent_activity: async (input) =>
+    recentActivity(
+      (input.days as number | undefined) ?? 7,
+      input.kind as ActivityKind | undefined,
+    ),
 };
 
 export const stubTools: Record<string, ToolImpl> = {

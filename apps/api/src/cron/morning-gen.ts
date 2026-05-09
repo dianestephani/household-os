@@ -6,6 +6,7 @@ import { AdHocTask } from '../db/models/AdHocTask.js';
 import { addDays, dayOfWeek, diffDays, parseYmd, ymd } from '../utils/dates.js';
 import { classifyDay } from '../utils/day-classify.js';
 import { adHocKeyFor } from '../services/zones.js';
+import { logActivity } from '../services/activity.js';
 import inventory from '@household-os/shared/inventory.json' with { type: 'json' };
 import type {
   DayType,
@@ -326,6 +327,20 @@ export async function generateTodayPlan(
     publisher: {},
   });
   await recordOverflowDeferrals(dateStr, overflow);
+  await logActivity(
+    'plan_generated',
+    `Generated plan for ${dateStr}: ${items.length} items, ${swap_pool.length} in swap pool`,
+    {
+      actor: 'cron',
+      metadata: {
+        date: dateStr,
+        day_type: dayType,
+        budget_minutes: budget,
+        item_count: items.length,
+        swap_pool_count: swap_pool.length,
+      },
+    },
+  );
   return { planId: plan.id, created: true };
 }
 

@@ -1,5 +1,6 @@
 import { AdHocTask } from '../db/models/AdHocTask.js';
 import { ZoneAssessment } from '../db/models/ZoneAssessment.js';
+import { logActivity } from './activity.js';
 import type {
   AdHocTask as AdHocTaskType,
   EnergyLevel,
@@ -82,6 +83,10 @@ export async function recordAssessment(
     source_checkin_id,
   });
 
+  await logActivity('zone_assessed', `Zone ${zone}: ${level}`, {
+    metadata: { zone, level, notes },
+  });
+
   if (level === 'fine') {
     return {
       assessment: assessment.toObject() as unknown as ZoneAssessmentType,
@@ -102,6 +107,11 @@ export async function recordAssessment(
     estimate_minutes: ESTIMATE_BY_SEVERITY[level],
     energy: ENERGY_BY_SEVERITY[level],
     status: 'open',
+  });
+
+  await logActivity('task_created', `Task added: "${taskName}"`, {
+    actor: 'system',
+    metadata: { zone, severity: level, source: 'zone_assessment' },
   });
 
   return {
@@ -137,10 +147,16 @@ export async function latestAssessmentByZone(): Promise<
 }
 
 export async function cancelAdHocTask(id: string) {
+  const before = await AdHocTask.findById(id).lean();
   await AdHocTask.updateOne(
     { _id: id },
     { $set: { status: 'cancelled' } },
   );
+  if (before) {
+    await logActivity('task_cancelled', `Cancelled task: "${before.name}"`, {
+      metadata: { task_id: id, zone: before.zone },
+    });
+  }
   return AdHocTask.findById(id).lean();
 }
 

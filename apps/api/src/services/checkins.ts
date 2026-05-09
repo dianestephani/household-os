@@ -2,6 +2,7 @@ import { CheckIn } from '../db/models/CheckIn.js';
 import { logEnergy } from './energy.js';
 import { logMood } from './mood.js';
 import { recordAssessment } from './zones.js';
+import { logActivity } from './activity.js';
 import type {
   CheckInContext,
   CheckInQuestion,
@@ -25,7 +26,7 @@ export async function createCheckIn(input: {
   questions: CheckInQuestion[];
   context?: CheckInContext;
 }) {
-  return CheckIn.create({
+  const created = await CheckIn.create({
     type: input.type,
     scheduled_for: input.scheduled_for,
     status: 'pending',
@@ -33,6 +34,11 @@ export async function createCheckIn(input: {
     context: input.context,
     created_at: new Date(),
   });
+  await logActivity('check_in_created', `Check-in created: ${input.type}`, {
+    actor: 'cron',
+    metadata: { type: input.type, checkin_id: created.id },
+  });
+  return created;
 }
 
 /**
@@ -101,6 +107,9 @@ export async function answerCheckIn(
   checkin.status = 'answered';
   checkin.answered_at = new Date();
   await checkin.save();
+  await logActivity('check_in_answered', `Answered ${checkin.type} check-in`, {
+    metadata: { type: checkin.type, checkin_id: checkin.id },
+  });
   return checkin.toObject();
 }
 
@@ -110,6 +119,9 @@ export async function skipCheckIn(id: string) {
   checkin.status = 'skipped';
   checkin.answered_at = new Date();
   await checkin.save();
+  await logActivity('check_in_skipped', `Skipped ${checkin.type} check-in`, {
+    metadata: { type: checkin.type, checkin_id: checkin.id },
+  });
   return checkin.toObject();
 }
 

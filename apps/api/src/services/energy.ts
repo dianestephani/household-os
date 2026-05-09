@@ -1,5 +1,6 @@
 import { EnergyLog } from '../db/models/EnergyLog.js';
 import { ensureTodayPlan } from './today.js';
+import { logActivity } from './activity.js';
 import type { EnergyLevel, EnergySuggestion } from '@household-os/shared/types';
 
 const RANK: Record<EnergyLevel, number> = { low: 1, medium: 2, high: 3 };
@@ -14,6 +15,10 @@ export async function logEnergy(
     plan.current_energy = level;
     await plan.save();
   }
+  await logActivity('energy_logged', `Energy: ${level}`, {
+    actor: source === 'cron-default' ? 'cron' : 'user',
+    metadata: { level, source },
+  });
   return plan;
 }
 
