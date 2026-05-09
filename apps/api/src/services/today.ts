@@ -1,9 +1,13 @@
 import { Routine } from '../db/models/Routine.js';
 import { TodayPlan } from '../db/models/TodayPlan.js';
+import { DeferralEvent } from '../db/models/DeferralEvent.js';
 import { ymd } from '../utils/dates.js';
 import { generateTodayPlan } from '../cron/morning-gen.js';
 import { publish } from '../publisher/index.js';
-import type { EnergyLevel } from '@household-os/shared/types';
+import type {
+  DeferReasonCode,
+  EnergyLevel,
+} from '@household-os/shared/types';
 
 export async function ensureTodayPlan() {
   const dateStr = ymd(new Date());
@@ -25,7 +29,12 @@ export async function regenerateToday() {
   return TodayPlan.findById(planId);
 }
 
-export async function swapTask(itemKey: string, replacementKey?: string) {
+export async function swapTask(
+  itemKey: string,
+  replacementKey?: string,
+  reason: DeferReasonCode = 'manual_swap',
+  notes?: string,
+) {
   const plan = await ensureTodayPlan();
   if (!plan) return null;
 
@@ -39,9 +48,19 @@ export async function swapTask(itemKey: string, replacementKey?: string) {
     estimate_minutes: removed.estimate_minutes ?? 0,
     energy: (removed.energy as EnergyLevel) ?? 'low',
     deferred_at: new Date(),
-    reason: 'manual_swap',
+    reason,
   });
   plan.items.splice(idx, 1);
+
+  await DeferralEvent.create({
+    ts: new Date(),
+    date: plan.date,
+    routine_key: removed.routine_key,
+    routine_name: removed.name,
+    reason,
+    notes,
+    source: 'user',
+  });
 
   if (replacementKey) {
     const poolIdx = plan.swap_pool.findIndex(

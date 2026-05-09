@@ -4,6 +4,14 @@ import type {
   Trigger,
   EnergyLevel,
   EnergySuggestion,
+  MoodLevel,
+  DeferReasonCode,
+  DeferralPattern,
+  WorkoutLog,
+  WorkoutPattern,
+  WorkoutSlotKey,
+  WorkoutStatus,
+  CheckIn,
 } from '@household-os/shared/types';
 
 const TOKEN = import.meta.env.VITE_API_TOKEN ?? '';
@@ -25,10 +33,15 @@ export const api = {
     get: () => request<TodayPlan>('/today'),
     regenerate: () =>
       request<TodayPlan>('/today/regenerate', { method: 'POST' }),
-    swap: (item_key: string, replacement_key?: string) =>
+    swap: (
+      item_key: string,
+      replacement_key?: string,
+      reason?: DeferReasonCode,
+      notes?: string,
+    ) =>
       request<TodayPlan>('/today/swap', {
         method: 'POST',
-        body: JSON.stringify({ item_key, replacement_key }),
+        body: JSON.stringify({ item_key, replacement_key, reason, notes }),
       }),
     markDone: (item_key: string) =>
       request<TodayPlan>('/today/mark-done', {
@@ -58,6 +71,46 @@ export const api = {
   },
   triggers: {
     list: () => request<Trigger[]>('/triggers'),
+  },
+  mood: {
+    set: (level: MoodLevel) =>
+      request<unknown>('/mood', {
+        method: 'POST',
+        body: JSON.stringify({ level, source: 'dashboard' }),
+      }),
+  },
+  workouts: {
+    today: () =>
+      request<{
+        slot: { slot_key: WorkoutSlotKey; name: string; type: string } | null;
+        log: WorkoutLog | null;
+      }>('/workouts/today'),
+    list: (days = 14) => request<WorkoutLog[]>(`/workouts?days=${days}`),
+    log: (input: {
+      slot_key: WorkoutSlotKey;
+      status: WorkoutStatus;
+      notes?: string;
+    }) =>
+      request<WorkoutLog>('/workouts', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+  },
+  patterns: {
+    deferrals: (days = 14, min = 2) =>
+      request<DeferralPattern[]>(`/patterns/deferrals?days=${days}&min=${min}`),
+    workouts: (days = 14) =>
+      request<WorkoutPattern>(`/patterns/workouts?days=${days}`),
+  },
+  checkins: {
+    pending: () => request<CheckIn[]>('/checkins/pending'),
+    answer: (id: string, answers: Record<string, string>) =>
+      request<CheckIn>(`/checkins/${id}/answer`, {
+        method: 'POST',
+        body: JSON.stringify({ answers }),
+      }),
+    skip: (id: string) =>
+      request<CheckIn>(`/checkins/${id}/skip`, { method: 'POST' }),
   },
   chat: (
     persona: string,

@@ -1,4 +1,4 @@
-import { Schema, model, type InferSchemaType } from 'mongoose';
+import mongoose, { Schema, type InferSchemaType, type Model } from 'mongoose';
 
 const PlanItemSchema = new Schema(
   {
@@ -48,4 +48,7 @@ const TodayPlanSchema = new Schema(
 );
 
 export type TodayPlanDoc = InferSchemaType<typeof TodayPlanSchema>;
-export const TodayPlan = model('TodayPlan', TodayPlanSchema);
+type TodayPlanModel = Model<TodayPlanDoc>;
+export const TodayPlan: TodayPlanModel =
+  (mongoose.models.TodayPlan as TodayPlanModel | undefined) ??
+  mongoose.model<TodayPlanDoc>('TodayPlan', TodayPlanSchema);

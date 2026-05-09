@@ -2,11 +2,14 @@ import { useEffect, useState } from 'react';
 import { api } from './api.js';
 import TodayList from './components/TodayList.js';
 import EnergyButtons from './components/EnergyButtons.js';
+import MoodButtons from './components/MoodButtons.js';
+import WorkoutPanel from './components/WorkoutPanel.js';
+import CheckInBanner from './components/CheckInBanner.js';
 import ChatPanel from './components/ChatPanel.js';
 import RoutinesPage from './components/RoutinesPage.js';
 import type { TodayPlan } from '@household-os/shared/types';
 
-type View = 'today' | 'household' | 'nutrition' | 'finance' | 'routines';
+type View = 'today' | 'workouts' | 'household' | 'nutrition' | 'finance' | 'routines';
 
 export default function App() {
   const [view, setView] = useState<View>('today');
@@ -33,6 +36,12 @@ export default function App() {
       <div className="tabs">
         <button className={view === 'today' ? 'active' : ''} onClick={() => setView('today')}>
           Today
+        </button>
+        <button
+          className={view === 'workouts' ? 'active' : ''}
+          onClick={() => setView('workouts')}
+        >
+          Workouts
         </button>
         <button
           className={view === 'household' ? 'active' : ''}
@@ -68,11 +77,15 @@ export default function App() {
 
       {view === 'today' && plan && (
         <>
+          <CheckInBanner />
           <EnergyButtons current={plan.current_energy} onChange={setPlan} />
+          <MoodButtons />
           <TodayList plan={plan} onChange={setPlan} />
         </>
       )}
       {view === 'today' && !plan && !error && <div className="muted">Loading…</div>}
+
+      {view === 'workouts' && <WorkoutPanel />}
 
       {view === 'household' && <ChatPanel persona="household" onUpdate={refresh} />}
       {view === 'nutrition' && <ChatPanel persona="nutrition" stub />}

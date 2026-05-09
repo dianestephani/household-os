@@ -1,4 +1,4 @@
-import { Schema, model, type InferSchemaType } from 'mongoose';
+import mongoose, { Schema, type InferSchemaType, type Model } from 'mongoose';
 
 const EnergyLogSchema = new Schema(
   {
@@ -10,4 +10,7 @@ const EnergyLogSchema = new Schema(
 );
 
 export type EnergyLogDoc = InferSchemaType<typeof EnergyLogSchema>;
-export const EnergyLog = model('EnergyLog', EnergyLogSchema);
+type EnergyLogModel = Model<EnergyLogDoc>;
+export const EnergyLog: EnergyLogModel =
+  (mongoose.models.EnergyLog as EnergyLogModel | undefined) ??
+  mongoose.model<EnergyLogDoc>('EnergyLog', EnergyLogSchema);

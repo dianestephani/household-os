@@ -20,12 +20,12 @@ router.post('/regenerate', async (_req, res) => {
 });
 
 router.post('/swap', async (req, res) => {
-  const { item_key, replacement_key } = req.body ?? {};
+  const { item_key, replacement_key, reason, notes } = req.body ?? {};
   if (!item_key) {
     res.status(400).json({ error: 'item_key required' });
     return;
   }
-  const plan = await swapTask(item_key, replacement_key);
+  const plan = await swapTask(item_key, replacement_key, reason, notes);
   res.json(plan);
 });
 

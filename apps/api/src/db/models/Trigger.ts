@@ -1,4 +1,4 @@
-import { Schema, model, type InferSchemaType } from 'mongoose';
+import mongoose, { Schema, type InferSchemaType, type Model } from 'mongoose';
 
 const TriggerSchema = new Schema(
   {
@@ -18,4 +18,7 @@ TriggerSchema.index(
 );
 
 export type TriggerDoc = InferSchemaType<typeof TriggerSchema>;
-export const Trigger = model('Trigger', TriggerSchema);
+type TriggerModel = Model<TriggerDoc>;
+export const Trigger: TriggerModel =
+  (mongoose.models.Trigger as TriggerModel | undefined) ??
+  mongoose.model<TriggerDoc>('Trigger', TriggerSchema);

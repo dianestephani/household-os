@@ -7,8 +7,18 @@ import routinesRouter from './routes/routines.js';
 import energyRouter from './routes/energy.js';
 import triggersRouter from './routes/triggers.js';
 import chatRouter from './routes/chat.js';
+import moodRouter from './routes/mood.js';
+import workoutsRouter from './routes/workouts.js';
+import patternsRouter from './routes/patterns.js';
+import checkinsRouter from './routes/checkins.js';
 import { generateTodayPlan } from './cron/morning-gen.js';
 import { ingestCalendarTriggers } from './cron/calendar-ingest.js';
+import {
+  generateEveningRetro,
+  generateMorningIntent,
+  generatePatternInterrupts,
+  generateWeeklyReview,
+} from './services/checkin-generators.js';
 import { publish } from './publisher/index.js';
 
 const url = process.env.MONGO_URL ?? 'mongodb://localhost:27017/household_os';
@@ -52,6 +62,10 @@ app.use('/api/routines', routinesRouter);
 app.use('/api/energy', energyRouter);
 app.use('/api/triggers', triggersRouter);
 app.use('/api/chat', chatRouter);
+app.use('/api/mood', moodRouter);
+app.use('/api/workouts', workoutsRouter);
+app.use('/api/patterns', patternsRouter);
+app.use('/api/checkins', checkinsRouter);
 
 cron.schedule('30 5 * * *', () => {
   console.log('[cron] ingesting calendar triggers');
@@ -63,6 +77,26 @@ cron.schedule('0 6 * * *', async () => {
   const { planId, created } = await generateTodayPlan(new Date());
   console.log(`[cron] plan ${planId} (created=${created})`);
   publish(planId);
+  // Pattern interrupts piggyback on morning-gen so they're ready by 7am.
+  await generatePatternInterrupts(new Date());
+});
+
+// 7:00 AM — morning intent prompt (one thing today + mood/energy)
+cron.schedule('0 7 * * *', () => {
+  console.log('[cron] morning intent check-in');
+  void generateMorningIntent(new Date());
+});
+
+// 9:00 PM — evening retro (Mon–Sat); Sunday gets weekly review instead
+cron.schedule('0 21 * * 0-6', () => {
+  const isSunday = new Date().getDay() === 0;
+  if (isSunday) {
+    console.log('[cron] weekly review check-in');
+    void generateWeeklyReview(new Date());
+  } else {
+    console.log('[cron] evening retro check-in');
+    void generateEveningRetro(new Date());
+  }
 });
 
 const port = Number(process.env.PORT ?? 3000);

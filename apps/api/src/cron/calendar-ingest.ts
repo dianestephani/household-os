@@ -17,7 +17,7 @@ const TITLE_RULES: KeywordRule[] = [
   { pattern: /house ?cleaner|cleaner visit/i, type: 'cleaner_visit' },
 ];
 
-function classifyEventTitle(title: string | null | undefined): TriggerType | null {
+export function classifyEventTitle(title: string | null | undefined): TriggerType | null {
   if (!title) return null;
   for (const rule of TITLE_RULES) {
     if (rule.pattern.test(title)) return rule.type;

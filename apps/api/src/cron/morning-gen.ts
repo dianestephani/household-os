@@ -1,6 +1,7 @@
 import { Routine } from '../db/models/Routine.js';
 import { TodayPlan } from '../db/models/TodayPlan.js';
 import { Trigger } from '../db/models/Trigger.js';
+import { DeferralEvent } from '../db/models/DeferralEvent.js';
 import { addDays, dayOfWeek, diffDays, parseYmd, ymd } from '../utils/dates.js';
 import { classifyDay } from '../utils/day-classify.js';
 import inventory from '@household-os/shared/inventory.json' with { type: 'json' };
@@ -23,8 +24,14 @@ async function dueRollingRoutines(today: Date): Promise<Candidate[]> {
     active: true,
   }).lean();
 
+  const skipLandscaper =
+    routines.some((r) => r.skip_if === 'landscaper_this_week') &&
+    (await landscaperThisWeek(today));
+
   const result: Candidate[] = [];
   for (const r of routines) {
+    if (r.skip_if === 'landscaper_this_week' && skipLandscaper) continue;
+
     const interval = r.scheduling?.interval_days ?? 1;
     const flex = r.scheduling?.flex_days ?? 0;
     const last = r.last_done ? new Date(r.last_done) : null;
@@ -267,6 +274,7 @@ export async function generateTodayPlan(
       publisher: existing.publisher ?? {},
     });
     await existing.save();
+    await recordOverflowDeferrals(dateStr, overflow);
     return { planId: existing.id, created: false };
   }
 
@@ -279,5 +287,20 @@ export async function generateTodayPlan(
     swap_pool,
     publisher: {},
   });
+  await recordOverflowDeferrals(dateStr, overflow);
   return { planId: plan.id, created: true };
+}
+
+async function recordOverflowDeferrals(dateStr: string, overflow: Candidate[]) {
+  if (overflow.length === 0) return;
+  await DeferralEvent.insertMany(
+    overflow.map((c) => ({
+      ts: new Date(),
+      date: dateStr,
+      routine_key: c.routine_key,
+      routine_name: c.name,
+      reason: 'over_budget',
+      source: 'auto',
+    })),
+  );
 }

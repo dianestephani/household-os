@@ -1,4 +1,4 @@
-import { Schema, model, type InferSchemaType } from 'mongoose';
+import mongoose, { Schema, type InferSchemaType, type Model } from 'mongoose';
 
 const SchedulingSchema = new Schema(
   {
@@ -31,4 +31,7 @@ const RoutineSchema = new Schema(
 );
 
 export type RoutineDoc = InferSchemaType<typeof RoutineSchema>;
-export const Routine = model('Routine', RoutineSchema);
+type RoutineModel = Model<RoutineDoc>;
+export const Routine: RoutineModel =
+  (mongoose.models.Routine as RoutineModel | undefined) ??
+  mongoose.model<RoutineDoc>('Routine', RoutineSchema);

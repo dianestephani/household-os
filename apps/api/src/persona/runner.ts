@@ -2,7 +2,23 @@ import Anthropic from '@anthropic-ai/sdk';
 import { personas } from '@household-os/shared/personas';
 import { getToolsForPersona, type ToolImpl } from './tools.js';
 
-const client = new Anthropic();
+/**
+ * Lightweight shape covering the bits of the SDK we actually use. Lets tests
+ * inject a fake without depending on the full Anthropic class.
+ */
+export interface AnthropicLike {
+  messages: {
+    create: (
+      body: Anthropic.MessageCreateParamsNonStreaming,
+    ) => Promise<Anthropic.Message>;
+  };
+}
+
+let _defaultClient: AnthropicLike | null = null;
+function getDefaultClient(): AnthropicLike {
+  if (!_defaultClient) _defaultClient = new Anthropic();
+  return _defaultClient;
+}
 
 const MAX_ITERATIONS = 8;
 
@@ -27,6 +43,7 @@ function safeStringify(v: unknown): string {
 export async function chat(
   personaName: string,
   messages: ChatMessage[],
+  client: AnthropicLike = getDefaultClient(),
 ): Promise<ChatResult> {
   const persona = personas[personaName];
   if (!persona) {

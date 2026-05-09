@@ -1,5 +1,20 @@
 export type EnergyLevel = 'low' | 'medium' | 'high';
 
+export type MoodLevel = 'good' | 'neutral' | 'down';
+
+export type DeferReasonCode =
+  | 'tired'
+  | 'not_in_mood'
+  | 'out_of_time'
+  | 'over_budget'
+  | 'manual_swap'
+  | 'energy_drop'
+  | 'other';
+
+export type WorkoutStatus = 'done' | 'skipped' | 'partial';
+
+export type WorkoutSlotKey = 'pt_tue' | 'pt_thu' | 'lift_flex' | 'ad_hoc';
+
 export type DayType =
   | 'day_off'
   | 'catering_day'
@@ -68,7 +83,12 @@ export interface PlanItem {
   completed_at?: Date | string | null;
 }
 
-export type DeferReason = 'energy_drop' | 'manual_swap' | 'over_budget';
+/**
+ * Subset of {@link DeferReasonCode} that the in-plan swap_pool tracks.
+ * Richer reasons (`tired`, `not_in_mood`, `out_of_time`) live on the
+ * persistent {@link DeferralEvent} record.
+ */
+export type DeferReason = DeferReasonCode;
 
 export interface SwapPoolItem {
   routine_key: string;
@@ -96,11 +116,108 @@ export interface TodayPlan {
   publisher: PublisherState;
 }
 
+export type WellbeingSource = 'voice' | 'dashboard' | 'shortcut' | 'cron-default';
+
 export interface EnergyLog {
   _id?: string;
   ts: Date | string;
   level: EnergyLevel;
-  source: 'voice' | 'dashboard' | 'shortcut' | 'cron-default';
+  source: WellbeingSource;
+}
+
+export interface MoodLog {
+  _id?: string;
+  ts: Date | string;
+  level: MoodLevel;
+  source: WellbeingSource;
+}
+
+export interface DeferralEvent {
+  _id?: string;
+  ts: Date | string;
+  date: string; // YYYY-MM-DD the routine was deferred FROM
+  routine_key: string;
+  routine_name: string;
+  reason: DeferReasonCode;
+  notes?: string;
+  source: 'auto' | 'user';
+}
+
+export interface WorkoutLog {
+  _id?: string;
+  ts: Date | string;
+  date: string; // YYYY-MM-DD
+  slot_key: WorkoutSlotKey;
+  status: WorkoutStatus;
+  mood?: MoodLevel;
+  energy?: EnergyLevel;
+  notes?: string;
+}
+
+export interface DeferralPattern {
+  routine_key: string;
+  routine_name: string;
+  count: number;
+  window_days: number;
+  reasons: Partial<Record<DeferReasonCode, number>>;
+  last_deferred_at: Date | string;
+}
+
+export interface WorkoutPattern {
+  window_days: number;
+  scheduled: number;
+  done: number;
+  skipped: number;
+  partial: number;
+  recent_streaks: { kind: 'done' | 'skipped'; length: number }[];
+}
+
+// ----- Check-ins -----
+
+export type CheckInType =
+  | 'morning_intent'
+  | 'evening_retro'
+  | 'weekly_review'
+  | 'pattern_interrupt';
+
+export type CheckInStatus = 'pending' | 'answered' | 'skipped' | 'expired';
+
+export type QuestionType = 'text' | 'choice' | 'mood' | 'energy';
+
+export interface CheckInQuestion {
+  /** Stable id used to track answers longitudinally — e.g. `one_thing_today`. */
+  id: string;
+  text: string;
+  type: QuestionType;
+  /** Required for `choice` questions. */
+  choices?: { value: string; label: string }[];
+  /** The user's response. Shape depends on `type`. */
+  answer?: string | null;
+  /**
+   * Optional side-effect to apply on answer. The service routes mood/energy
+   * answers into MoodLog/EnergyLog as well as storing them on the CheckIn.
+   */
+  side_effect?: 'log_mood' | 'log_energy';
+}
+
+export interface PatternInterruptContext {
+  kind: 'frequent_deferral' | 'missed_workouts';
+  routine_key?: string;
+  routine_name?: string;
+  count?: number;
+  window_days?: number;
+}
+
+export interface CheckIn {
+  _id?: string;
+  type: CheckInType;
+  /** When the prompt is intended for. Used for ordering + expiry. */
+  scheduled_for: Date | string;
+  status: CheckInStatus;
+  questions: CheckInQuestion[];
+  context?: PatternInterruptContext;
+  answered_at?: Date | string | null;
+  created_at: Date | string;
 }
 
 export type TriggerType =

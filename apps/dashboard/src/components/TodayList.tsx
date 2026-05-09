@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api.js';
-import type { TodayPlan } from '@household-os/shared/types';
+import DeferDialog from './DeferDialog.js';
+import type { DeferReasonCode, TodayPlan } from '@household-os/shared/types';
 
 interface Props {
   plan: TodayPlan;
@@ -9,7 +10,15 @@ interface Props {
 
 export default function TodayList({ plan, onChange }: Props) {
   const [showPool, setShowPool] = useState(false);
+  const [deferring, setDeferring] = useState<{ key: string; name: string } | null>(null);
   const used = plan.items.reduce((acc, it) => acc + (it.estimate_minutes ?? 0), 0);
+
+  async function confirmDefer(reason: DeferReasonCode, notes: string) {
+    if (!deferring) return;
+    const updated = await api.today.swap(deferring.key, undefined, reason, notes || undefined);
+    onChange(updated);
+    setDeferring(null);
+  }
 
   return (
     <div className="panel">
@@ -36,7 +45,7 @@ export default function TodayList({ plan, onChange }: Props) {
           </span>
           <button
             className="icon-btn"
-            onClick={async () => onChange(await api.today.swap(it.routine_key))}
+            onClick={() => setDeferring({ key: it.routine_key, name: it.name })}
           >
             defer
           </button>
@@ -66,6 +75,14 @@ export default function TodayList({ plan, onChange }: Props) {
               </div>
             ))}
         </div>
+      )}
+
+      {deferring && (
+        <DeferDialog
+          itemName={deferring.name}
+          onConfirm={confirmDefer}
+          onCancel={() => setDeferring(null)}
+        />
       )}
     </div>
   );
