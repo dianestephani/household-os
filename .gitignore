@@ -1,0 +1,19 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+npm-debug.log*
+
+# Google Calendar OAuth credentials (out-of-band)
+google-creds.json
+google-token.json
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# TS build info
+*.tsbuildinfo
