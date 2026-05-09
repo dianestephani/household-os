@@ -1,0 +1,48 @@
+# Render Blueprint — single-service deployment for the household-os API.
+#
+# Apply via the Render dashboard → "New +" → "Blueprint" → connect this repo.
+# All secret env vars (sync: false) get filled in via the Render UI on first deploy.
+#
+# MongoDB lives separately on Atlas (free tier — see HANDOFF.md §4).
+# The dashboard (apps/dashboard) stays local for now; add a static-site entry
+# here later if you want it on Render too.
+
+services:
+  - type: web
+    name: household-os-api
+    runtime: node
+    region: oregon
+    # Starter ($7/mo) keeps the process always-on so node-cron actually fires.
+    # The free tier sleeps after 15 min idle, which breaks every scheduled job
+    # (morning-gen, calendar-ingest, check-in generators, etc.).
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm -w @household-os/api start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: TZ
+        value: America/Los_Angeles
+      # Secrets filled in via Render UI:
+      - key: MONGO_URL
+        sync: false # mongodb+srv://...mongodb.net/household_os
+      - key: API_TOKEN
+        sync: false # long random string; share with the Alexa skill + dashboard
+      - key: ANTHROPIC_API_KEY
+        sync: false # sk-ant-...
+      - key: ALEXA_SKILL_ID
+        sync: false # amzn1.ask.skill.<UUID>
+      - key: ALEXA_CLIENT_ID
+        sync: false # amzn1.application-oa2-client.<id>  (only if you want push)
+      - key: ALEXA_CLIENT_SECRET
+        sync: false # amzn1.oa2-cs.v1.<secret>           (only if you want push)
+      - key: GOOGLE_CALENDAR_ID
+        value: primary # change if you create a dedicated household calendar
+      # Google Calendar OAuth files (google-creds.json, google-token.json) are
+      # gitignored. To enable calendar features in prod, paste their contents
+      # via Render's Secret Files feature, then set the *_PATH env vars below.
+      - key: GOOGLE_CALENDAR_CREDENTIALS_PATH
+        sync: false
+      - key: GOOGLE_CALENDAR_TOKEN_PATH
+        sync: false
