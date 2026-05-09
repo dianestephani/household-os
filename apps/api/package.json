@@ -15,7 +15,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.0",
+    "@household-os/alexa-skill": "*",
     "@household-os/shared": "*",
+    "ask-sdk-express-adapter": "^2.0.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "googleapis": "^144.0.0",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fuzzyMatch, type PlanItem } from './client.js';
+import { fuzzyMatch, relativeTime, type PlanItem } from './client.js';
 
 const items: PlanItem[] = [
   { routine_key: 'litter_scoop', name: 'Scoop both litter boxes', estimate_minutes: 8, energy: 'low', status: 'pending' },
@@ -34,5 +34,27 @@ describe('fuzzyMatch', () => {
 
   it('returns null on empty phrase', () => {
     expect(fuzzyMatch(items, '')).toBeNull();
+  });
+});
+
+describe('relativeTime', () => {
+  it('reports "just now" for recent timestamps', () => {
+    const ts = new Date(Date.now() - 10_000).toISOString();
+    expect(relativeTime(ts)).toBe('just now');
+  });
+
+  it('reports minutes for sub-hour gaps', () => {
+    const ts = new Date(Date.now() - 8 * 60_000).toISOString();
+    expect(relativeTime(ts)).toMatch(/^\d+ minutes? ago$/);
+  });
+
+  it('reports hours when between 1 and 24', () => {
+    const ts = new Date(Date.now() - 5 * 60 * 60_000).toISOString();
+    expect(relativeTime(ts)).toMatch(/^\d+ hours? ago$/);
+  });
+
+  it('reports days when over 24 hours', () => {
+    const ts = new Date(Date.now() - 3 * 24 * 60 * 60_000).toISOString();
+    expect(relativeTime(ts)).toMatch(/^\d+ days? ago$/);
   });
 });

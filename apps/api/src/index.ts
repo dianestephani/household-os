@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cron from 'node-cron';
+import { ExpressAdapter } from 'ask-sdk-express-adapter';
+import { skill as alexaSkill } from '@household-os/alexa-skill';
 import { connect } from './db/connection.js';
 import todayRouter from './routes/today.js';
 import routinesRouter from './routes/routines.js';
@@ -29,7 +31,6 @@ await connect(url);
 console.log(`[api] connected to mongo at ${url}`);
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
 
 app.use((req, res, next) => {
   res.setHeader('access-control-allow-origin', '*');
@@ -41,6 +42,17 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+/**
+ * Alexa custom-skill webhook. Mounted BEFORE express.json() because the SDK
+ * needs the raw body to verify Amazon's request signature. Verification is on
+ * by default; flip ALEXA_SKIP_VERIFY=1 only for local mock tests (never prod).
+ */
+const verifySignature = process.env.ALEXA_SKIP_VERIFY !== '1';
+const alexaAdapter = new ExpressAdapter(alexaSkill, verifySignature, verifySignature);
+app.post('/alexa', alexaAdapter.getRequestHandlers());
+
+app.use(express.json({ limit: '1mb' }));
 
 const requireToken = (req: Request, res: Response, next: NextFunction): void => {
   const expected = process.env.API_TOKEN;
