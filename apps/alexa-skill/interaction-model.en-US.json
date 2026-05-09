@@ -25,22 +25,17 @@
           "samples": [
             "mark {Task} done",
             "I finished {Task}",
-            "{Task} is done",
             "I just did {Task}"
           ]
         },
         {
           "name": "SwapTaskIntent",
-          "slots": [
-            { "name": "Task", "type": "AMAZON.SearchQuery" },
-            { "name": "Reason", "type": "DeferReason" }
-          ],
+          "slots": [{ "name": "Task", "type": "AMAZON.SearchQuery" }],
           "samples": [
             "swap {Task}",
             "defer {Task}",
             "skip {Task}",
-            "defer {Task} because I'm {Reason}",
-            "swap out {Task} I'm {Reason}"
+            "move {Task} to swap pool"
           ]
         },
         {
@@ -55,22 +50,22 @@
 
         {
           "name": "UpdateEnergyIntent",
-          "slots": [{ "name": "Level", "type": "EnergyLevel" }],
+          "slots": [{ "name": "EnergyLevel", "type": "EnergyLevel" }],
           "samples": [
-            "I'm {Level} energy",
-            "energy is {Level}",
-            "set energy to {Level}",
-            "I'm feeling {Level} energy"
+            "I'm {EnergyLevel} energy",
+            "energy is {EnergyLevel}",
+            "set energy to {EnergyLevel}",
+            "I'm feeling {EnergyLevel} energy"
           ]
         },
         {
           "name": "LogMoodIntent",
-          "slots": [{ "name": "Level", "type": "MoodLevel" }],
+          "slots": [{ "name": "MoodLevel", "type": "MoodLevel" }],
           "samples": [
-            "my mood is {Level}",
-            "I'm feeling {Level}",
-            "I feel {Level}",
-            "log mood {Level}"
+            "my mood is {MoodLevel}",
+            "I'm feeling {MoodLevel}",
+            "I feel {MoodLevel}",
+            "log mood {MoodLevel}"
           ]
         },
 
@@ -100,15 +95,14 @@
           "name": "AssessZoneIntent",
           "slots": [
             { "name": "Zone", "type": "Zone" },
-            { "name": "Level", "type": "ZoneLevel" },
-            { "name": "Notes", "type": "AMAZON.SearchQuery" }
+            { "name": "ZoneLevel", "type": "ZoneLevel" }
           ],
           "samples": [
-            "the {Zone} is {Level}",
-            "{Zone} is {Level}",
-            "{Zone} looks {Level}",
-            "{Zone} is {Level}, {Notes}",
-            "the {Zone} needs {Notes}"
+            "the {Zone} is {ZoneLevel}",
+            "{Zone} is {ZoneLevel}",
+            "{Zone} looks {ZoneLevel}",
+            "the {Zone} looks {ZoneLevel}",
+            "rate the {Zone} as {ZoneLevel}"
           ]
         },
 
@@ -128,17 +122,23 @@
             {
               "name": "OneThing",
               "type": "AMAZON.SearchQuery",
-              "samples": []
+              "samples": [
+                "I want to {OneThing}",
+                "I'd like to {OneThing}",
+                "to {OneThing}",
+                "today I want to {OneThing}",
+                "my one thing is {OneThing}"
+              ]
             },
             {
               "name": "Energy",
               "type": "EnergyLevel",
-              "samples": ["energy is {Energy}", "{Energy}"]
+              "samples": ["energy is {Energy}", "I'm {Energy}"]
             },
             {
               "name": "Mood",
               "type": "MoodLevel",
-              "samples": ["mood is {Mood}", "{Mood}"]
+              "samples": ["mood is {Mood}", "I'm feeling {Mood}"]
             }
           ],
           "samples": [
@@ -175,7 +175,7 @@
           "samples": [
             "ask household {Query}",
             "tell household ops {Query}",
-            "{Query}"
+            "household ops {Query}"
           ]
         }
       ],
@@ -221,15 +221,6 @@
             { "name": { "value": "done", "synonyms": ["completed", "did it", "finished"] } },
             { "name": { "value": "partial", "synonyms": ["half", "partial workout"] } },
             { "name": { "value": "skipped", "synonyms": ["missed", "no"] } }
-          ]
-        },
-        {
-          "name": "DeferReason",
-          "values": [
-            { "name": { "value": "tired" } },
-            { "name": { "value": "not_in_mood", "synonyms": ["not in the mood", "not feeling it"] } },
-            { "name": { "value": "out_of_time", "synonyms": ["out of time", "no time"] } },
-            { "name": { "value": "other" } }
           ]
         }
       ]

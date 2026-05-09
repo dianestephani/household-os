@@ -53,8 +53,7 @@ export const AssessZoneHandler: RequestHandler = {
   },
   async handle(input) {
     const zoneRaw = getSlotValue(input.requestEnvelope, 'Zone');
-    const levelRaw = getSlotValue(input.requestEnvelope, 'Level');
-    const notes = getSlotValue(input.requestEnvelope, 'Notes');
+    const levelRaw = getSlotValue(input.requestEnvelope, 'ZoneLevel');
     const zone = normalizeZone(zoneRaw);
     const level = normalizeLevel(levelRaw);
     if (!zone) {
@@ -67,11 +66,11 @@ export const AssessZoneHandler: RequestHandler = {
         .speak('How is it — fine, meh, or rough?')
         .getResponse();
     }
-    await apiClient.assessZone(zone, level, notes);
+    await apiClient.assessZone(zone, level);
     const speech =
       level === 'fine'
         ? `Got it — ${zone} is ${level}.`
-        : `Got it — ${zone} is ${level}. ${notes ? `"${notes}" ` : ''}I added a task.`;
+        : `Got it — ${zone} is ${level}. I added a task.`;
     return input.responseBuilder.speak(speech).getResponse();
   },
 };
