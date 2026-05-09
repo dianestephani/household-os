@@ -67,6 +67,31 @@ const requireToken = (req: Request, res: Response, next: NextFunction): void => 
   next();
 };
 
+app.get('/', (_req, res) => {
+  res.json({
+    service: 'household-os-api',
+    status: 'ok',
+    docs: 'https://github.com/dianestephani/household-os',
+    endpoints: {
+      health: '/health',
+      alexa_webhook: '/alexa',
+      api: [
+        '/api/today',
+        '/api/routines',
+        '/api/energy',
+        '/api/mood',
+        '/api/workouts',
+        '/api/zones',
+        '/api/checkins',
+        '/api/patterns',
+        '/api/triggers',
+        '/api/activity',
+        '/api/chat/:persona',
+      ],
+    },
+  });
+});
+
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
