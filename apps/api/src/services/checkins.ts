@@ -1,12 +1,15 @@
 import { CheckIn } from '../db/models/CheckIn.js';
 import { logEnergy } from './energy.js';
 import { logMood } from './mood.js';
+import { recordAssessment } from './zones.js';
 import type {
+  CheckInContext,
   CheckInQuestion,
   CheckInType,
   EnergyLevel,
   MoodLevel,
-  PatternInterruptContext,
+  Zone,
+  ZoneStateLevel,
 } from '@household-os/shared/types';
 
 /**
@@ -20,7 +23,7 @@ export async function createCheckIn(input: {
   type: CheckInType;
   scheduled_for: Date;
   questions: CheckInQuestion[];
-  context?: PatternInterruptContext;
+  context?: CheckInContext;
 }) {
   return CheckIn.create({
     type: input.type,
@@ -41,8 +44,9 @@ export async function listPendingCheckIns() {
   const order: Record<CheckInType, number> = {
     pattern_interrupt: 0,
     morning_intent: 1,
-    evening_retro: 2,
-    weekly_review: 3,
+    zone_assessment: 2,
+    evening_retro: 3,
+    weekly_review: 4,
   };
   const pending = await CheckIn.find({ status: 'pending' }).lean();
   return pending.sort((a, b) => {
@@ -76,6 +80,21 @@ export async function answerCheckIn(
       await logMood(value as MoodLevel, 'dashboard');
     } else if (q.side_effect === 'log_energy') {
       await logEnergy(value as EnergyLevel, 'dashboard');
+    }
+  }
+
+  if (checkin.type === 'zone_assessment' && checkin.context?.kind === 'zone_assessment') {
+    const level = checkin.questions.find((q) => q.id === 'zone_state')?.answer as
+      | ZoneStateLevel
+      | undefined;
+    const notes = checkin.questions.find((q) => q.id === 'zone_notes')?.answer ?? undefined;
+    if (level) {
+      await recordAssessment(
+        checkin.context.zone as Zone,
+        level,
+        notes ?? undefined,
+        checkin.id,
+      );
     }
   }
 

@@ -4,6 +4,11 @@ import { DeferralEvent } from '../db/models/DeferralEvent.js';
 import { ymd } from '../utils/dates.js';
 import { generateTodayPlan } from '../cron/morning-gen.js';
 import { publish } from '../publisher/index.js';
+import {
+  isAdHocKey,
+  idFromAdHocKey,
+  markAdHocTaskDone,
+} from './zones.js';
 import type {
   DeferReasonCode,
   EnergyLevel,
@@ -107,10 +112,14 @@ export async function markDone(itemKey: string) {
   item.completed_at = new Date();
   await plan.save();
 
-  await Routine.updateOne(
-    { key: itemKey },
-    { $set: { last_done: new Date() } },
-  );
+  if (isAdHocKey(itemKey)) {
+    await markAdHocTaskDone(idFromAdHocKey(itemKey));
+  } else {
+    await Routine.updateOne(
+      { key: itemKey },
+      { $set: { last_done: new Date() } },
+    );
+  }
 
   publish(plan.id);
   return plan;

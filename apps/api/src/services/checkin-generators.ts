@@ -2,6 +2,7 @@ import { CheckIn } from '../db/models/CheckIn.js';
 import { createCheckIn } from './checkins.js';
 import { frequentDeferrals, workoutSummary } from './patterns.js';
 import { todaysWorkout } from './workouts.js';
+import { pickNextZone } from './zones.js';
 import { ymd } from '../utils/dates.js';
 import type {
   CheckInQuestion,
@@ -235,6 +236,40 @@ export async function generatePatternInterrupts(now = new Date()) {
   }
 
   return created;
+}
+
+export async function generateZoneAssessment(now = new Date()) {
+  const existing = await CheckIn.findOne({
+    type: 'zone_assessment',
+    scheduled_for: { $gte: dayStart(now), $lt: dayEnd(now) },
+  }).lean();
+  if (existing) return existing;
+
+  const zone = await pickNextZone();
+  const questions: CheckInQuestion[] = [
+    {
+      id: 'zone_state',
+      text: `How is the ${zone === 'whole-house' ? 'house overall' : zone} looking?`,
+      type: 'choice',
+      choices: [
+        { value: 'fine', label: 'Fine' },
+        { value: 'meh', label: 'Meh' },
+        { value: 'rough', label: 'Rough' },
+      ],
+    },
+    {
+      id: 'zone_notes',
+      text: 'Anything specific that needs doing? (optional — gets auto-added)',
+      type: 'text',
+    },
+  ];
+
+  return createCheckIn({
+    type: 'zone_assessment',
+    scheduled_for: now,
+    questions,
+    context: { kind: 'zone_assessment', zone },
+  });
 }
 
 function dayStart(d: Date) {

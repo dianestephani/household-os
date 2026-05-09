@@ -11,6 +11,7 @@ import moodRouter from './routes/mood.js';
 import workoutsRouter from './routes/workouts.js';
 import patternsRouter from './routes/patterns.js';
 import checkinsRouter from './routes/checkins.js';
+import zonesRouter from './routes/zones.js';
 import { generateTodayPlan } from './cron/morning-gen.js';
 import { ingestCalendarTriggers } from './cron/calendar-ingest.js';
 import {
@@ -18,6 +19,7 @@ import {
   generateMorningIntent,
   generatePatternInterrupts,
   generateWeeklyReview,
+  generateZoneAssessment,
 } from './services/checkin-generators.js';
 import { publish } from './publisher/index.js';
 
@@ -66,6 +68,7 @@ app.use('/api/mood', moodRouter);
 app.use('/api/workouts', workoutsRouter);
 app.use('/api/patterns', patternsRouter);
 app.use('/api/checkins', checkinsRouter);
+app.use('/api/zones', zonesRouter);
 
 cron.schedule('30 5 * * *', () => {
   console.log('[cron] ingesting calendar triggers');
@@ -85,6 +88,12 @@ cron.schedule('0 6 * * *', async () => {
 cron.schedule('0 7 * * *', () => {
   console.log('[cron] morning intent check-in');
   void generateMorningIntent(new Date());
+});
+
+// 12:00 PM — daily zone-state rotation (one zone per day)
+cron.schedule('0 12 * * *', () => {
+  console.log('[cron] zone assessment check-in');
+  void generateZoneAssessment(new Date());
 });
 
 // 9:00 PM — evening retro (Mon–Sat); Sunday gets weekly review instead
