@@ -5,11 +5,19 @@ import EnergyButtons from './components/EnergyButtons.js';
 import MoodButtons from './components/MoodButtons.js';
 import WorkoutPanel from './components/WorkoutPanel.js';
 import CheckInBanner from './components/CheckInBanner.js';
+import ActivityFeed from './components/ActivityFeed.js';
 import ChatPanel from './components/ChatPanel.js';
 import RoutinesPage from './components/RoutinesPage.js';
 import type { TodayPlan } from '@household-os/shared/types';
 
-type View = 'today' | 'workouts' | 'household' | 'nutrition' | 'finance' | 'routines';
+type View =
+  | 'today'
+  | 'workouts'
+  | 'activity'
+  | 'household'
+  | 'nutrition'
+  | 'finance'
+  | 'routines';
 
 export default function App() {
   const [view, setView] = useState<View>('today');
@@ -42,6 +50,12 @@ export default function App() {
           onClick={() => setView('workouts')}
         >
           Workouts
+        </button>
+        <button
+          className={view === 'activity' ? 'active' : ''}
+          onClick={() => setView('activity')}
+        >
+          Activity
         </button>
         <button
           className={view === 'household' ? 'active' : ''}
@@ -86,6 +100,7 @@ export default function App() {
       {view === 'today' && !plan && !error && <div className="muted">Loading…</div>}
 
       {view === 'workouts' && <WorkoutPanel />}
+      {view === 'activity' && <ActivityFeed />}
 
       {view === 'household' && <ChatPanel persona="household" onUpdate={refresh} />}
       {view === 'nutrition' && <ChatPanel persona="nutrition" stub />}

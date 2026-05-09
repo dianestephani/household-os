@@ -201,5 +201,48 @@ You do NOT handle nutrition/groceries or finance — direct her to those persona
         properties: { days: { type: 'integer' } },
       },
     },
+    {
+      name: 'zone_state',
+      description:
+        'Latest assessment per zone (kitchen, bathrooms, common, bedroom, yard, whole-house). Returns level (fine/meh/rough) and notes for each.',
+      input_schema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+      name: 'recent_zone_assessments',
+      description:
+        'Recent zone-state assessments (default 14 days). Use to spot trends like "kitchen has been rough 3 weeks running".',
+      input_schema: {
+        type: 'object',
+        properties: { days: { type: 'integer' } },
+      },
+    },
+    {
+      name: 'list_open_zone_tasks',
+      description:
+        'Open ad-hoc tasks created from zone assessments. These appear in the day plan with severity-and-age priority.',
+      input_schema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+      name: 'cancel_zone_task',
+      description:
+        'Cancel an ad-hoc zone task (e.g. when Diane decides it is no longer relevant).',
+      input_schema: {
+        type: 'object',
+        properties: { task_id: { type: 'string' } },
+        required: ['task_id'],
+      },
+    },
+    {
+      name: 'recent_activity',
+      description:
+        "Unified chronological activity log: tasks completed/deferred/swapped/pulled, plan generation, mood/energy/workout/zone logs, check-in lifecycle, trigger adds. Use this to answer 'what have I been up to lately' without joining specialized collections. Optional `kind` filter narrows to one activity type.",
+      input_schema: {
+        type: 'object',
+        properties: {
+          days: { type: 'integer' },
+          kind: { type: 'string' },
+        },
+      },
+    },
   ],
 };

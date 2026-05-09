@@ -4,6 +4,12 @@ import { DeferralEvent } from '../db/models/DeferralEvent.js';
 import { ymd } from '../utils/dates.js';
 import { generateTodayPlan } from '../cron/morning-gen.js';
 import { publish } from '../publisher/index.js';
+import {
+  isAdHocKey,
+  idFromAdHocKey,
+  markAdHocTaskDone,
+} from './zones.js';
+import { logActivity } from './activity.js';
 import type {
   DeferReasonCode,
   EnergyLevel,
@@ -25,6 +31,7 @@ export async function getToday() {
 
 export async function regenerateToday() {
   const { planId } = await generateTodayPlan(new Date(), { force: true });
+  await logActivity('plan_regenerated', "Regenerated today's plan");
   publish(planId);
   return TodayPlan.findById(planId);
 }
@@ -62,6 +69,7 @@ export async function swapTask(
     source: 'user',
   });
 
+  let pulledInName: string | null = null;
   if (replacementKey) {
     const poolIdx = plan.swap_pool.findIndex(
       (p) => p.routine_key === replacementKey,
@@ -77,6 +85,7 @@ export async function swapTask(
         order: plan.items.length,
       });
       plan.swap_pool.splice(poolIdx, 1);
+      pulledInName = fromPool.name;
     } else {
       const r = await Routine.findOne({ key: replacementKey });
       if (r) {
@@ -88,11 +97,25 @@ export async function swapTask(
           status: 'pending',
           order: plan.items.length,
         });
+        pulledInName = r.name ?? r.key;
       }
     }
   }
 
   await plan.save();
+
+  if (pulledInName) {
+    await logActivity(
+      'task_swapped',
+      `Swapped "${removed.name}" out for "${pulledInName}"`,
+      { metadata: { from: removed.routine_key, to: replacementKey, reason } },
+    );
+  } else {
+    await logActivity('task_deferred', `Deferred "${removed.name}"`, {
+      metadata: { routine_key: removed.routine_key, reason },
+    });
+  }
+
   publish(plan.id);
   return plan;
 }
@@ -107,10 +130,18 @@ export async function markDone(itemKey: string) {
   item.completed_at = new Date();
   await plan.save();
 
-  await Routine.updateOne(
-    { key: itemKey },
-    { $set: { last_done: new Date() } },
-  );
+  if (isAdHocKey(itemKey)) {
+    await markAdHocTaskDone(idFromAdHocKey(itemKey));
+  } else {
+    await Routine.updateOne(
+      { key: itemKey },
+      { $set: { last_done: new Date() } },
+    );
+  }
+
+  await logActivity('task_done', `Marked "${item.name}" done`, {
+    metadata: { routine_key: itemKey, estimate_minutes: item.estimate_minutes },
+  });
 
   publish(plan.id);
   return plan;
@@ -134,6 +165,9 @@ export async function pullFromPool(itemKey: string) {
   plan.swap_pool.splice(idx, 1);
 
   await plan.save();
+  await logActivity('task_pulled', `Pulled "${item.name}" back into today`, {
+    metadata: { routine_key: item.routine_key },
+  });
   publish(plan.id);
   return plan;
 }

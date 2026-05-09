@@ -18,6 +18,14 @@ import {
   listPendingCheckIns,
   recentCheckIns,
 } from '../services/checkins.js';
+import {
+  cancelAdHocTask,
+  latestAssessmentByZone,
+  listOpenAdHocTasks,
+  listRecentAssessments,
+} from '../services/zones.js';
+import { recentActivity } from '../services/activity.js';
+import type { ActivityKind } from '@household-os/shared/types';
 import type {
   DeferReasonCode,
   EnergyLevel,
@@ -98,6 +106,22 @@ export const householdTools: Record<string, ToolImpl> = {
 
   recent_checkins: async (input) =>
     recentCheckIns((input.days as number | undefined) ?? 14),
+
+  zone_state: async () => latestAssessmentByZone(),
+
+  recent_zone_assessments: async (input) =>
+    listRecentAssessments((input.days as number | undefined) ?? 14),
+
+  list_open_zone_tasks: async () => listOpenAdHocTasks(),
+
+  cancel_zone_task: async (input) =>
+    cancelAdHocTask(input.task_id as string),
+
+  recent_activity: async (input) =>
+    recentActivity(
+      (input.days as number | undefined) ?? 7,
+      input.kind as ActivityKind | undefined,
+    ),
 };
 
 export const stubTools: Record<string, ToolImpl> = {

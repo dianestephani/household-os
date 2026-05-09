@@ -1,5 +1,6 @@
 import { WorkoutLog } from '../db/models/WorkoutLog.js';
 import { dayOfWeek, ymd } from '../utils/dates.js';
+import { logActivity } from './activity.js';
 import inventory from '@household-os/shared/inventory.json' with { type: 'json' };
 import type {
   EnergyLevel,
@@ -57,7 +58,7 @@ export async function logWorkout(input: {
   notes?: string;
 }) {
   const date = input.date ?? ymd(new Date());
-  return WorkoutLog.findOneAndUpdate(
+  const result = await WorkoutLog.findOneAndUpdate(
     { date, slot_key: input.slot_key },
     {
       $set: {
@@ -70,6 +71,12 @@ export async function logWorkout(input: {
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   ).lean();
+  await logActivity(
+    'workout_logged',
+    `Workout (${input.slot_key}): ${input.status}`,
+    { metadata: { slot_key: input.slot_key, status: input.status, date } },
+  );
+  return result;
 }
 
 export async function recentWorkouts(days = 14) {

@@ -24,6 +24,7 @@ const CheckInSchema = new Schema(
       routine_name: String,
       count: Number,
       window_days: Number,
+      zone: String,
     },
     answered_at: Date,
     created_at: { type: Date, default: () => new Date() },

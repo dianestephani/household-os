@@ -1,12 +1,16 @@
 import { CheckIn } from '../db/models/CheckIn.js';
 import { logEnergy } from './energy.js';
 import { logMood } from './mood.js';
+import { recordAssessment } from './zones.js';
+import { logActivity } from './activity.js';
 import type {
+  CheckInContext,
   CheckInQuestion,
   CheckInType,
   EnergyLevel,
   MoodLevel,
-  PatternInterruptContext,
+  Zone,
+  ZoneStateLevel,
 } from '@household-os/shared/types';
 
 /**
@@ -20,9 +24,9 @@ export async function createCheckIn(input: {
   type: CheckInType;
   scheduled_for: Date;
   questions: CheckInQuestion[];
-  context?: PatternInterruptContext;
+  context?: CheckInContext;
 }) {
-  return CheckIn.create({
+  const created = await CheckIn.create({
     type: input.type,
     scheduled_for: input.scheduled_for,
     status: 'pending',
@@ -30,6 +34,11 @@ export async function createCheckIn(input: {
     context: input.context,
     created_at: new Date(),
   });
+  await logActivity('check_in_created', `Check-in created: ${input.type}`, {
+    actor: 'cron',
+    metadata: { type: input.type, checkin_id: created.id },
+  });
+  return created;
 }
 
 /**
@@ -41,8 +50,9 @@ export async function listPendingCheckIns() {
   const order: Record<CheckInType, number> = {
     pattern_interrupt: 0,
     morning_intent: 1,
-    evening_retro: 2,
-    weekly_review: 3,
+    zone_assessment: 2,
+    evening_retro: 3,
+    weekly_review: 4,
   };
   const pending = await CheckIn.find({ status: 'pending' }).lean();
   return pending.sort((a, b) => {
@@ -79,9 +89,27 @@ export async function answerCheckIn(
     }
   }
 
+  if (checkin.type === 'zone_assessment' && checkin.context?.kind === 'zone_assessment') {
+    const level = checkin.questions.find((q) => q.id === 'zone_state')?.answer as
+      | ZoneStateLevel
+      | undefined;
+    const notes = checkin.questions.find((q) => q.id === 'zone_notes')?.answer ?? undefined;
+    if (level) {
+      await recordAssessment(
+        checkin.context.zone as Zone,
+        level,
+        notes ?? undefined,
+        checkin.id,
+      );
+    }
+  }
+
   checkin.status = 'answered';
   checkin.answered_at = new Date();
   await checkin.save();
+  await logActivity('check_in_answered', `Answered ${checkin.type} check-in`, {
+    metadata: { type: checkin.type, checkin_id: checkin.id },
+  });
   return checkin.toObject();
 }
 
@@ -91,6 +119,9 @@ export async function skipCheckIn(id: string) {
   checkin.status = 'skipped';
   checkin.answered_at = new Date();
   await checkin.save();
+  await logActivity('check_in_skipped', `Skipped ${checkin.type} check-in`, {
+    metadata: { type: checkin.type, checkin_id: checkin.id },
+  });
   return checkin.toObject();
 }
 

@@ -1,4 +1,5 @@
 import { Routine } from '../db/models/Routine.js';
+import { logActivity } from './activity.js';
 
 export async function listRoutines(filter: { category?: string; zone?: string } = {}) {
   const q: Record<string, unknown> = { active: true };
@@ -29,6 +30,9 @@ export async function patchRoutine(key: string, patch: Record<string, unknown>) 
     if (k in patch) safe[k] = patch[k];
   }
   await Routine.updateOne({ key }, { $set: safe });
+  await logActivity('routine_edited', `Edited routine: ${key}`, {
+    metadata: { key, fields: Object.keys(safe) },
+  });
   return Routine.findOne({ key }).lean();
 }
 

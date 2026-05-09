@@ -1,5 +1,6 @@
 import { Trigger } from '../db/models/Trigger.js';
 import { ymd } from '../utils/dates.js';
+import { logActivity } from './activity.js';
 import type { TriggerType } from '@household-os/shared/types';
 
 export async function listUpcomingTriggers() {
@@ -14,11 +15,15 @@ export async function addTrigger(input: {
   date: string;
   notes?: string;
 }) {
-  return Trigger.create({
+  const created = await Trigger.create({
     type: input.type,
     date: input.date,
     source: 'manual',
     ingested_at: new Date(),
     notes: input.notes,
   });
+  await logActivity('trigger_added', `Trigger: ${input.type} on ${input.date}`, {
+    metadata: { type: input.type, date: input.date, source: 'manual' },
+  });
+  return created;
 }

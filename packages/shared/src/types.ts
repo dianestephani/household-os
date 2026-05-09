@@ -172,13 +172,75 @@ export interface WorkoutPattern {
   recent_streaks: { kind: 'done' | 'skipped'; length: number }[];
 }
 
+// ----- Activity log -----
+
+export type ActivityKind =
+  | 'task_done'
+  | 'task_deferred'
+  | 'task_swapped'
+  | 'task_pulled'
+  | 'task_created'
+  | 'task_cancelled'
+  | 'plan_generated'
+  | 'plan_regenerated'
+  | 'energy_logged'
+  | 'mood_logged'
+  | 'workout_logged'
+  | 'zone_assessed'
+  | 'check_in_created'
+  | 'check_in_answered'
+  | 'check_in_skipped'
+  | 'trigger_added'
+  | 'routine_edited';
+
+export type ActivityActor = 'user' | 'system' | 'cron';
+
+export interface ActivityLogEntry {
+  _id?: string;
+  ts: Date | string;
+  kind: ActivityKind;
+  /** Human-readable summary for the timeline display. */
+  summary: string;
+  actor: ActivityActor;
+  /** Optional structured metadata for analytics / dashboards. */
+  metadata?: Record<string, unknown>;
+}
+
 // ----- Check-ins -----
 
 export type CheckInType =
   | 'morning_intent'
   | 'evening_retro'
   | 'weekly_review'
-  | 'pattern_interrupt';
+  | 'pattern_interrupt'
+  | 'zone_assessment';
+
+export type ZoneStateLevel = 'fine' | 'meh' | 'rough';
+
+export interface ZoneAssessment {
+  _id?: string;
+  ts: Date | string;
+  zone: Zone;
+  level: ZoneStateLevel;
+  notes?: string;
+  source_checkin_id?: string;
+}
+
+export type AdHocTaskStatus = 'open' | 'done' | 'cancelled';
+
+export interface AdHocTask {
+  _id?: string;
+  ts: Date | string;
+  zone: Zone;
+  name: string;
+  source: 'zone_assessment';
+  source_assessment_id?: string;
+  severity: ZoneStateLevel;
+  estimate_minutes: number;
+  energy: EnergyLevel;
+  status: AdHocTaskStatus;
+  done_at?: Date | string | null;
+}
 
 export type CheckInStatus = 'pending' | 'answered' | 'skipped' | 'expired';
 
@@ -208,6 +270,13 @@ export interface PatternInterruptContext {
   window_days?: number;
 }
 
+export interface ZoneAssessmentContext {
+  kind: 'zone_assessment';
+  zone: Zone;
+}
+
+export type CheckInContext = PatternInterruptContext | ZoneAssessmentContext;
+
 export interface CheckIn {
   _id?: string;
   type: CheckInType;
@@ -215,7 +284,7 @@ export interface CheckIn {
   scheduled_for: Date | string;
   status: CheckInStatus;
   questions: CheckInQuestion[];
-  context?: PatternInterruptContext;
+  context?: CheckInContext;
   answered_at?: Date | string | null;
   created_at: Date | string;
 }

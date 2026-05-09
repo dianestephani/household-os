@@ -2,6 +2,8 @@ import { CheckIn } from '../db/models/CheckIn.js';
 import { createCheckIn } from './checkins.js';
 import { frequentDeferrals, workoutSummary } from './patterns.js';
 import { todaysWorkout } from './workouts.js';
+import { pickNextZone } from './zones.js';
+import { pushCheckInCard } from './alexa-push.js';
 import { ymd } from '../utils/dates.js';
 import type {
   CheckInQuestion,
@@ -61,11 +63,13 @@ export async function generateMorningIntent(now = new Date()) {
       side_effect: 'log_mood',
     },
   ];
-  return createCheckIn({
+  const ck = await createCheckIn({
     type: 'morning_intent',
     scheduled_for: now,
     questions,
   });
+  await pushCheckInCard(ck);
+  return ck;
 }
 
 export async function generateEveningRetro(now = new Date()) {
@@ -158,37 +162,37 @@ export async function generatePatternInterrupts(now = new Date()) {
     }).lean();
     if (dupe) continue;
 
-    created.push(
-      await createCheckIn({
-        type: 'pattern_interrupt',
-        scheduled_for: now,
-        context: {
-          kind: 'frequent_deferral',
-          routine_key: d.routine_key,
-          routine_name: d.routine_name,
-          count: d.count,
-          window_days: d.window_days,
+    const ck = await createCheckIn({
+      type: 'pattern_interrupt',
+      scheduled_for: now,
+      context: {
+        kind: 'frequent_deferral',
+        routine_key: d.routine_key,
+        routine_name: d.routine_name,
+        count: d.count,
+        window_days: d.window_days,
+      },
+      questions: [
+        {
+          id: 'deferral_action',
+          text: `${d.routine_name} has been deferred ${d.count} times in the last ${d.window_days} days. What do you want to do?`,
+          type: 'choice',
+          choices: [
+            { value: 'push_through', label: 'Push through today' },
+            { value: 'swap_today', label: 'Swap something else out for it' },
+            { value: 'adjust_cadence', label: 'Adjust the cadence' },
+            { value: 'skip_intentional', label: 'Skipping on purpose — leave it' },
+          ],
         },
-        questions: [
-          {
-            id: 'deferral_action',
-            text: `${d.routine_name} has been deferred ${d.count} times in the last ${d.window_days} days. What do you want to do?`,
-            type: 'choice',
-            choices: [
-              { value: 'push_through', label: 'Push through today' },
-              { value: 'swap_today', label: 'Swap something else out for it' },
-              { value: 'adjust_cadence', label: 'Adjust the cadence' },
-              { value: 'skip_intentional', label: 'Skipping on purpose — leave it' },
-            ],
-          },
-          {
-            id: 'deferral_notes',
-            text: 'Notes (optional)',
-            type: 'text',
-          },
-        ],
-      }),
-    );
+        {
+          id: 'deferral_notes',
+          text: 'Notes (optional)',
+          type: 'text',
+        },
+      ],
+    });
+    await pushCheckInCard(ck);
+    created.push(ck);
   }
 
   // Workout interrupt: if today is a workout day and there's already a skipped
@@ -208,33 +212,67 @@ export async function generatePatternInterrupts(now = new Date()) {
       scheduled_for: { $gte: dayStart(now), $lt: dayEnd(now) },
     }).lean();
     if (!dupe) {
-      created.push(
-        await createCheckIn({
-          type: 'pattern_interrupt',
-          scheduled_for: now,
-          context: {
-            kind: 'missed_workouts',
-            count: lastSkippedStreak.length,
-            window_days: 7,
+      const ck = await createCheckIn({
+        type: 'pattern_interrupt',
+        scheduled_for: now,
+        context: {
+          kind: 'missed_workouts',
+          count: lastSkippedStreak.length,
+          window_days: 7,
+        },
+        questions: [
+          {
+            id: 'workout_intent',
+            text: `You've skipped ${lastSkippedStreak.length} workouts in a row. Today's slot: ${today.slot.name}. What's the plan?`,
+            type: 'choice',
+            choices: [
+              { value: 'commit', label: "I'll do it" },
+              { value: 'partial', label: 'Something partial' },
+              { value: 'rest', label: 'Skip on purpose — rest day' },
+            ],
           },
-          questions: [
-            {
-              id: 'workout_intent',
-              text: `You've skipped ${lastSkippedStreak.length} workouts in a row. Today's slot: ${today.slot.name}. What's the plan?`,
-              type: 'choice',
-              choices: [
-                { value: 'commit', label: "I'll do it" },
-                { value: 'partial', label: 'Something partial' },
-                { value: 'rest', label: 'Skip on purpose — rest day' },
-              ],
-            },
-          ],
-        }),
-      );
+        ],
+      });
+      await pushCheckInCard(ck);
+      created.push(ck);
     }
   }
 
   return created;
+}
+
+export async function generateZoneAssessment(now = new Date()) {
+  const existing = await CheckIn.findOne({
+    type: 'zone_assessment',
+    scheduled_for: { $gte: dayStart(now), $lt: dayEnd(now) },
+  }).lean();
+  if (existing) return existing;
+
+  const zone = await pickNextZone();
+  const questions: CheckInQuestion[] = [
+    {
+      id: 'zone_state',
+      text: `How is the ${zone === 'whole-house' ? 'house overall' : zone} looking?`,
+      type: 'choice',
+      choices: [
+        { value: 'fine', label: 'Fine' },
+        { value: 'meh', label: 'Meh' },
+        { value: 'rough', label: 'Rough' },
+      ],
+    },
+    {
+      id: 'zone_notes',
+      text: 'Anything specific that needs doing? (optional — gets auto-added)',
+      type: 'text',
+    },
+  ];
+
+  return createCheckIn({
+    type: 'zone_assessment',
+    scheduled_for: now,
+    questions,
+    context: { kind: 'zone_assessment', zone },
+  });
 }
 
 function dayStart(d: Date) {

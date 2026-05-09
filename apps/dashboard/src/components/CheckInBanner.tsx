@@ -7,6 +7,7 @@ const TYPE_LABEL: Record<CheckIn['type'], string> = {
   evening_retro: 'Evening retro',
   weekly_review: 'Weekly review',
   pattern_interrupt: 'Pattern interrupt',
+  zone_assessment: 'Zone check-in',
 };
 
 export default function CheckInBanner() {

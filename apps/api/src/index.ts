@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cron from 'node-cron';
+import { ExpressAdapter } from 'ask-sdk-express-adapter';
+import { skill as alexaSkill } from '@household-os/alexa-skill';
 import { connect } from './db/connection.js';
 import todayRouter from './routes/today.js';
 import routinesRouter from './routes/routines.js';
@@ -11,6 +13,8 @@ import moodRouter from './routes/mood.js';
 import workoutsRouter from './routes/workouts.js';
 import patternsRouter from './routes/patterns.js';
 import checkinsRouter from './routes/checkins.js';
+import zonesRouter from './routes/zones.js';
+import activityRouter from './routes/activity.js';
 import { generateTodayPlan } from './cron/morning-gen.js';
 import { ingestCalendarTriggers } from './cron/calendar-ingest.js';
 import {
@@ -18,6 +22,7 @@ import {
   generateMorningIntent,
   generatePatternInterrupts,
   generateWeeklyReview,
+  generateZoneAssessment,
 } from './services/checkin-generators.js';
 import { publish } from './publisher/index.js';
 
@@ -26,7 +31,6 @@ await connect(url);
 console.log(`[api] connected to mongo at ${url}`);
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
 
 app.use((req, res, next) => {
   res.setHeader('access-control-allow-origin', '*');
@@ -38,6 +42,17 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+/**
+ * Alexa custom-skill webhook. Mounted BEFORE express.json() because the SDK
+ * needs the raw body to verify Amazon's request signature. Verification is on
+ * by default; flip ALEXA_SKIP_VERIFY=1 only for local mock tests (never prod).
+ */
+const verifySignature = process.env.ALEXA_SKIP_VERIFY !== '1';
+const alexaAdapter = new ExpressAdapter(alexaSkill, verifySignature, verifySignature);
+app.post('/alexa', alexaAdapter.getRequestHandlers());
+
+app.use(express.json({ limit: '1mb' }));
 
 const requireToken = (req: Request, res: Response, next: NextFunction): void => {
   const expected = process.env.API_TOKEN;
@@ -66,6 +81,8 @@ app.use('/api/mood', moodRouter);
 app.use('/api/workouts', workoutsRouter);
 app.use('/api/patterns', patternsRouter);
 app.use('/api/checkins', checkinsRouter);
+app.use('/api/zones', zonesRouter);
+app.use('/api/activity', activityRouter);
 
 cron.schedule('30 5 * * *', () => {
   console.log('[cron] ingesting calendar triggers');
@@ -85,6 +102,12 @@ cron.schedule('0 6 * * *', async () => {
 cron.schedule('0 7 * * *', () => {
   console.log('[cron] morning intent check-in');
   void generateMorningIntent(new Date());
+});
+
+// 12:00 PM — daily zone-state rotation (one zone per day)
+cron.schedule('0 12 * * *', () => {
+  console.log('[cron] zone assessment check-in');
+  void generateZoneAssessment(new Date());
 });
 
 // 9:00 PM — evening retro (Mon–Sat); Sunday gets weekly review instead

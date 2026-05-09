@@ -1,11 +1,17 @@
 import { MoodLog } from '../db/models/MoodLog.js';
+import { logActivity } from './activity.js';
 import type { MoodLevel, WellbeingSource } from '@household-os/shared/types';
 
 export async function logMood(
   level: MoodLevel,
   source: WellbeingSource = 'dashboard',
 ) {
-  return MoodLog.create({ level, source, ts: new Date() });
+  const log = await MoodLog.create({ level, source, ts: new Date() });
+  await logActivity('mood_logged', `Mood: ${level}`, {
+    actor: source === 'cron-default' ? 'cron' : 'user',
+    metadata: { level, source },
+  });
+  return log;
 }
 
 export async function recentMoods(days = 14) {

@@ -2,10 +2,17 @@ import { Routine } from '../db/models/Routine.js';
 import { TodayPlan } from '../db/models/TodayPlan.js';
 import { Trigger } from '../db/models/Trigger.js';
 import { DeferralEvent } from '../db/models/DeferralEvent.js';
+import { AdHocTask } from '../db/models/AdHocTask.js';
 import { addDays, dayOfWeek, diffDays, parseYmd, ymd } from '../utils/dates.js';
 import { classifyDay } from '../utils/day-classify.js';
+import { adHocKeyFor } from '../services/zones.js';
+import { logActivity } from '../services/activity.js';
 import inventory from '@household-os/shared/inventory.json' with { type: 'json' };
-import type { DayType, EnergyLevel } from '@household-os/shared/types';
+import type {
+  DayType,
+  EnergyLevel,
+  ZoneStateLevel,
+} from '@household-os/shared/types';
 
 interface Candidate {
   routine_key: string;
@@ -126,6 +133,37 @@ async function landscaperThisWeek(today: Date): Promise<boolean> {
   return !!t;
 }
 
+/**
+ * Open AdHocTasks (zone-assessment-driven) become candidates with priority
+ * driven by severity AND age — older tasks climb the ladder so they don't rot.
+ *
+ * Priority math (lower = scheduled earlier in the plan):
+ *   priority = -(severity_weight + age_days * 2)
+ * `rough` starts at -25, `meh` starts at -10. Each day unaddressed adds -2.
+ */
+async function openAdHocTasks(today: Date): Promise<Candidate[]> {
+  const tasks = await AdHocTask.find({ status: 'open' }).lean();
+
+  const severityWeight: Record<ZoneStateLevel, number> = {
+    fine: 0,
+    meh: 10,
+    rough: 25,
+  };
+
+  return tasks.map((t) => {
+    const ageDays = Math.max(0, diffDays(today, new Date(t.ts)));
+    const sev = (t.severity ?? 'meh') as ZoneStateLevel;
+    const priority = -(severityWeight[sev] + ageDays * 2);
+    return {
+      routine_key: adHocKeyFor(String(t._id)),
+      name: t.name,
+      estimate_minutes: t.estimate_minutes ?? 15,
+      energy: (t.energy as EnergyLevel) ?? 'medium',
+      priority,
+    };
+  });
+}
+
 async function resolveTriggers(today: Date): Promise<Candidate[]> {
   const eventDriven = await Routine.find({
     'scheduling.type': 'event_driven',
@@ -241,6 +279,7 @@ export async function generateTodayPlan(
     ...(await todaysFixedRoutines(date)),
     ...(await currentZoneTaskIfNotDone(date)),
     ...(await resolveTriggers(date)),
+    ...(await openAdHocTasks(date)),
   ];
 
   const sorted = prioritize(candidates);
@@ -288,6 +327,20 @@ export async function generateTodayPlan(
     publisher: {},
   });
   await recordOverflowDeferrals(dateStr, overflow);
+  await logActivity(
+    'plan_generated',
+    `Generated plan for ${dateStr}: ${items.length} items, ${swap_pool.length} in swap pool`,
+    {
+      actor: 'cron',
+      metadata: {
+        date: dateStr,
+        day_type: dayType,
+        budget_minutes: budget,
+        item_count: items.length,
+        swap_pool_count: swap_pool.length,
+      },
+    },
+  );
   return { planId: plan.id, created: true };
 }
 
