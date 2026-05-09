@@ -4,7 +4,7 @@ import {
   getIntentName,
   getRequestType,
 } from 'ask-sdk-core';
-import { apiClient, fuzzyMatch, type DeferReason } from '../client.js';
+import { apiClient, fuzzyMatch } from '../client.js';
 
 export const TodayBriefHandler: RequestHandler = {
   canHandle(input) {
@@ -44,9 +44,6 @@ export const SwapTaskHandler: RequestHandler = {
   },
   async handle(input) {
     const phrase = getSlotValue(input.requestEnvelope, 'Task') ?? '';
-    const reason =
-      (getSlotValue(input.requestEnvelope, 'Reason') as DeferReason | undefined) ??
-      undefined;
     const plan = await apiClient.getToday();
     const match = fuzzyMatch(plan.items, phrase);
     if (!match) {
@@ -54,9 +51,9 @@ export const SwapTaskHandler: RequestHandler = {
         .speak(`I don't see "${phrase}" on today.`)
         .getResponse();
     }
-    await apiClient.swap(match.routine_key, reason);
+    await apiClient.swap(match.routine_key);
     return input.responseBuilder
-      .speak(`Deferred ${match.name}${reason ? `: ${reason.replace(/_/g, ' ')}` : ''}.`)
+      .speak(`Deferred ${match.name}.`)
       .getResponse();
   },
 };

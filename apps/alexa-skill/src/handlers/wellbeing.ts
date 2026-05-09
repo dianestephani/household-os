@@ -23,7 +23,7 @@ export const UpdateEnergyHandler: RequestHandler = {
     );
   },
   async handle(input) {
-    const level = getSlotValue(input.requestEnvelope, 'Level') as
+    const level = getSlotValue(input.requestEnvelope, 'EnergyLevel') as
       | EnergyLevel
       | undefined;
     if (!level || !VALID_ENERGY.includes(level)) {
@@ -62,7 +62,7 @@ export const LogMoodHandler: RequestHandler = {
     );
   },
   async handle(input) {
-    const level = getSlotValue(input.requestEnvelope, 'Level') as
+    const level = getSlotValue(input.requestEnvelope, 'MoodLevel') as
       | MoodLevel
       | undefined;
     if (!level || !VALID_MOOD.includes(level)) {
