@@ -57,10 +57,13 @@ You need: an Amazon Developer account (free), a publicly reachable HTTPS endpoin
 ngrok gives you a temporary HTTPS URL that forwards to localhost.
 
 ```bash
-brew install ngrok               # one-time
-ngrok config add-authtoken ...   # one-time, free account at ngrok.com
-ngrok http 3000                  # while the API is running
+brew install ngrok                            # one-time
+ngrok config add-authtoken <YOUR_AUTHTOKEN>   # one-time — paste the real token from your ngrok dashboard
+ngrok http 3000                               # run while the API is up
 ```
+
+> Don't paste the literal `<YOUR_AUTHTOKEN>` placeholder. Replace it with the long string from
+> [your ngrok dashboard](https://dashboard.ngrok.com/get-started/your-authtoken) (free account if you don't have one).
 
 Copy the `https://...ngrok-free.app` URL. Paste it into the skill's Endpoint field as `https://...ngrok-free.app/alexa`. Save and rebuild the model.
 
