@@ -1,0 +1,20 @@
+{
+  "name": "household-os",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm -w @household-os/api run dev",
+    "dev:dashboard": "npm -w @household-os/dashboard run dev",
+    "build:api": "npm -w @household-os/api run build",
+    "build:dashboard": "npm -w @household-os/dashboard run build",
+    "seed": "npm -w @household-os/api run seed",
+    "typecheck": "npm -ws --if-present run typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

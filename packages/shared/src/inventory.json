@@ -1,0 +1,53 @@
+{
+  "energy_budgets_minutes": {
+    "day_off": 150,
+    "catering_day": 60,
+    "weekday_default": 45,
+    "tue_thu_pt": 25
+  },
+
+  "rolling_routines": [
+    { "key": "litter_scoop",   "name": "Scoop both litter boxes",  "category": "pet",      "zone": "bathrooms", "interval_days": 1, "flex_days": 1, "estimate_minutes": 8,  "energy": "low" },
+    { "key": "floors_daily",   "name": "Sweep/vacuum pet zones",   "category": "cleaning", "zone": "common",    "interval_days": 1, "flex_days": 1, "estimate_minutes": 12, "energy": "low" },
+    { "key": "kitchen_reset",  "name": "Counter + sink reset",     "category": "cleaning", "zone": "kitchen",   "interval_days": 1, "flex_days": 1, "estimate_minutes": 8,  "energy": "low" },
+    { "key": "pet_food_water", "name": "Top off food/water",       "category": "pet",      "zone": "kitchen",   "interval_days": 1, "flex_days": 0, "estimate_minutes": 4,  "energy": "low" },
+    { "key": "litter_full",    "name": "Full litter change",       "category": "pet",      "zone": "bathrooms", "interval_days": 7, "flex_days": 2, "estimate_minutes": 20, "energy": "medium" },
+    { "key": "water_fountain", "name": "Clean cat water fountain", "category": "pet",      "zone": "kitchen",   "interval_days": 7, "flex_days": 3, "estimate_minutes": 10, "energy": "low" },
+    { "key": "yard_pickup",    "name": "Yard pickup",              "category": "pet",      "zone": "yard",      "interval_days": 7, "flex_days": 2, "estimate_minutes": 25, "energy": "medium", "skip_if": "landscaper_this_week" }
+  ],
+
+  "fixed_routines": [
+    { "key": "trash_prep",    "name": "Bins to curb + swap liners", "day": "tue", "time_window": "evening", "estimate_minutes": 20, "energy": "low" },
+    { "key": "trash_return",  "name": "Bring bins back",            "day": "wed", "time_window": "evening", "estimate_minutes": 5,  "energy": "low" },
+    { "key": "recycle_addon", "name": "Recycle bin out",            "day": "tue", "time_window": "evening", "estimate_minutes": 5,  "energy": "low", "biweekly": true }
+  ],
+
+  "zone_rotation_6wk": [
+    { "week": 1, "task": null,                                  "estimate_minutes": 0,  "energy": "low" },
+    { "week": 2, "task": "Kitchen surfaces + microwave",        "estimate_minutes": 25, "energy": "medium" },
+    { "week": 3, "task": "Bathroom sink + toilet wipe-down",    "estimate_minutes": 30, "energy": "medium" },
+    { "week": 4, "task": "Floors: vacuum + spot mop",           "estimate_minutes": 40, "energy": "medium" },
+    { "week": 5, "task": "Bedroom + common dust-down",          "estimate_minutes": 35, "energy": "medium" },
+    { "week": 6, "task": "Pre-cleaner declutter",               "estimate_minutes": 45, "energy": "high" }
+  ],
+
+  "as_needed_routines": [
+    { "key": "mop",               "name": "Mop floors",              "trigger": "user_flag", "estimate_minutes": 25, "energy": "medium" },
+    { "key": "laundromat_pet",    "name": "Laundromat: pet bedding", "trigger": "user_flag", "estimate_minutes": 90, "energy": "medium", "blocking": true },
+    { "key": "laundromat_airbnb", "name": "Laundromat: Airbnb",      "trigger": "user_flag", "estimate_minutes": 90, "energy": "medium", "blocking": true }
+  ],
+
+  "event_driven_routines": [
+    { "key": "airbnb_pre",  "name": "Airbnb pre-checkin clean",   "trigger": "airbnb_checkin_minus_1d",   "estimate_minutes": 60, "energy": "high",   "also_triggers": ["yard_pickup"] },
+    { "key": "airbnb_post", "name": "Airbnb post-checkout reset", "trigger": "airbnb_checkout_same_day",  "estimate_minutes": 45, "energy": "medium" },
+    { "key": "dogsit_pre",  "name": "Dogsit arrival prep",        "trigger": "dogsit_arrival_minus_1d",   "estimate_minutes": 20, "energy": "low",    "also_triggers": ["yard_pickup"] },
+    { "key": "dogsit_post", "name": "Dogsit departure cleanup",   "trigger": "dogsit_departure_same_day", "estimate_minutes": 20, "energy": "low" },
+    { "key": "landscaper",  "name": "Landscaper visit (FYI)",     "trigger": "landscaper_date",           "estimate_minutes": 0,  "energy": "low" }
+  ],
+
+  "protected_slots": [
+    { "key": "pt_tue",    "name": "PT sessions @ gym",  "day": "tue", "time": "morning", "type": "workout" },
+    { "key": "pt_thu",    "name": "PT sessions @ gym",  "day": "thu", "time": "morning", "type": "workout" },
+    { "key": "lift_flex", "name": "Lifting (flex day)", "day": "any_weekday",            "type": "workout", "count": 1 }
+  ]
+}

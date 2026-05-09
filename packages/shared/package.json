@@ -1,0 +1,23 @@
+{
+  "name": "@household-os/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./inventory.json": "./src/inventory.json",
+    "./personas/household": "./src/personas/household.ts",
+    "./personas/nutrition": "./src/personas/nutrition.ts",
+    "./personas/finance": "./src/personas/finance.ts",
+    "./personas": "./src/personas/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

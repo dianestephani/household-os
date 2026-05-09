@@ -1,0 +1,69 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "home ops",
+      "intents": [
+        { "name": "AMAZON.HelpIntent", "samples": [] },
+        { "name": "AMAZON.CancelIntent", "samples": [] },
+        { "name": "AMAZON.StopIntent", "samples": [] },
+        { "name": "AMAZON.FallbackIntent", "samples": [] },
+        {
+          "name": "TodayBriefIntent",
+          "slots": [],
+          "samples": [
+            "what's on today",
+            "what's the plan",
+            "today's brief",
+            "what do I need to do today"
+          ]
+        },
+        {
+          "name": "SwapTaskIntent",
+          "slots": [{ "name": "Task", "type": "AMAZON.SearchQuery" }],
+          "samples": [
+            "swap {Task}",
+            "defer {Task}",
+            "swap out {Task}"
+          ]
+        },
+        {
+          "name": "MarkDoneIntent",
+          "slots": [{ "name": "Task", "type": "AMAZON.SearchQuery" }],
+          "samples": [
+            "mark {Task} done",
+            "I finished {Task}",
+            "{Task} is done"
+          ]
+        },
+        {
+          "name": "UpdateEnergyIntent",
+          "slots": [{ "name": "Level", "type": "EnergyLevel" }],
+          "samples": [
+            "I'm {Level} energy",
+            "energy is {Level}",
+            "set energy to {Level}"
+          ]
+        },
+        {
+          "name": "AskHouseholdIntent",
+          "slots": [{ "name": "Query", "type": "AMAZON.SearchQuery" }],
+          "samples": [
+            "ask household {Query}",
+            "tell household ops {Query}",
+            "{Query}"
+          ]
+        }
+      ],
+      "types": [
+        {
+          "name": "EnergyLevel",
+          "values": [
+            { "name": { "value": "low" } },
+            { "name": { "value": "medium" } },
+            { "name": { "value": "high" } }
+          ]
+        }
+      ]
+    }
+  }
+}
