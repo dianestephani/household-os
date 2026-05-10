@@ -9,12 +9,16 @@ await connect(url);
 interface InventoryFields {
   outsourceable?: boolean;
   outsource_cost_estimate?: number;
+  budget_gated?: boolean;
+  cost_estimate?: number;
 }
 
 function pickOutsource(r: InventoryFields) {
   return {
     outsourceable: r.outsourceable ?? false,
     outsource_cost_estimate: r.outsource_cost_estimate ?? 0,
+    budget_gated: r.budget_gated ?? false,
+    cost_estimate: r.cost_estimate ?? 0,
   };
 }
 

@@ -28,6 +28,8 @@ const RoutineSchema = new Schema(
     active: { type: Boolean, default: true },
     outsourceable: { type: Boolean, default: false },
     outsource_cost_estimate: { type: Number, default: 0 },
+    budget_gated: { type: Boolean, default: false },
+    cost_estimate: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

@@ -1146,7 +1146,54 @@ Also clears any existing `TodayPlan` doc so the next morning-gen builds fresh ag
 
 **One thing flagged but not fixed:** `regular_cleaning` (21d, $380 outsourced) got bucketed on 2026-05-10 by the deterministic spread, but Diane has a real `cleaner_visit` trigger on file from 2026-04-25, which would put the actual next visit on **2026-05-16**. If a future Claude wants to anchor `regular_cleaning` to the real cleaner schedule rather than the arbitrary spread, it's a one-line `last_done` override.
 
-## 36. Updated route cheat sheet (current as of this Part B)
+## 37. Merge from second HANDOFF / second-instance memory (2026-05-10)
+
+A parallel Claude instance was working out of `/Users/dianestephani/household-os/` (separate copy of the codebase, never actually built code there) and accumulating project memory under the `/Users/dianestephani/` working-directory key. That memory + that copy of HANDOFF.md have richer design specs than this repo's HANDOFF Part A. The user asked me to merge in the necessary items so this session has the full picture.
+
+### What was merged into this repo
+
+- **Memory files** copied into [/Users/dianestephani/.claude/projects/-Users-dianestephani-Documents-Projects-Personal-Projects-household-os/memory/](file:///Users/dianestephani/.claude/projects/-Users-dianestephani-Documents-Projects-Personal-Projects-household-os/memory/):
+  - `beauty_maintenance.md` — haircut/head spa/nails/wax/self-tan/massage cadences, trigger-based rather than strict
+  - `budget_gated_services.md` — cross-cutting "check budget first" pattern (head spa $250/6wk, massage aspirational, housecleaner-bump)
+  - `dietary_constraints.md` — no seafood, won't handle raw meat, high protein, TJ's pre-cooked chicken
+  - `household_context.md` — duplicates some of §1 but adds the "any routine system must use flexible windows, not fixed days" constraint
+  - `workout_routine.md` — Tue/Thu self-workouts run **BEFORE** PT client sessions (~7:45–8:45 AM); never schedule self-workouts after client sessions
+  - `workout_execution_pattern.md` — programming is solved, *execution* is the gap; night-before commit + 15-min fallback + weekly tracking (not daily streaks)
+  - `energy_budgets.md` — day off 120–180 min, catering ≤60 min, weekday ~45 min default, laundromat fully blocking
+  - `hyperfixate_burnout.md` — feedback memory: prefer project-shaped work, watch for approaching burnout, suggest scope cuts rather than pushing through
+  - `shopping_and_home_tools.md` — Costco/TJ's/QFC, no Prime, Echo devices, RocketMoney + Calendar (some overlap with the existing `reference_finance_tools` memory)
+- **Type system**: added `'beauty'` to `Category`, `'self'` to `Zone`, and optional `budget_gated: boolean` + `cost_estimate: number` fields on `Routine` (distinct from `outsource_cost_estimate` — see comments in [types.ts](packages/shared/src/types.ts)).
+- **Mongoose schema**: matching `budget_gated` + `cost_estimate` defaults on the Routine model.
+- **Seed**: `pickOutsource()` in [seed.ts](apps/api/src/seed.ts) passes the new fields through.
+- **Inventory**: 8 new rolling routines under category `beauty`, zone `self`, in [inventory.json](packages/shared/src/inventory.json):
+  - `haircut` (63d, budget_gated)
+  - `head_spa` (42d, budget_gated, $250)
+  - `self_tan` (7d) + `exfoliate_prep` (7d, intended to land the day before — see "deferred" below)
+  - `brazilian_wax` (35d)
+  - `cuticle_care` (3d)
+  - `nails_apply` (14d — placeholder until nail rotation lands)
+  - `massage` (28d, budget_gated, aspirational)
+
+### Deliberately NOT built (deferred — design specs live in the other repo's HANDOFF §12.5/§12.6)
+
+These are bigger redesigns. They're documented in detail at `/Users/dianestephani/household-os/HANDOFF.md` (sections 12.5 and 12.6). Don't re-derive them from scratch — open that file first.
+
+1. **`soft_trigger` scheduling type** — for routines that are time-flexible reminders, not hard cadences (haircut "if you can't brush it," massage "if your body feels rough"). All beauty routines were degraded to `rolling` for now. The next time we touch the scheduling system, add this type and migrate the soft items to it.
+2. **`NailState` collection + nail rotation logic** — tracks `current_type` (`dip` / `gel` / `polish` / `bare`), `consecutive_dip_count`, history with duration-per-application. After 2 consecutive dips suggests gel/polish for a "health break." Dynamic `interval_days` per type via `expected_durations_days`. See §12.6 of the other HANDOFF for the route sketch.
+3. **Workout module v2** — `WorkoutDay` (per-day record with commitment + outcome + sleep + energy) + `WorkoutWeek` (weekly aggregate, *not* daily streaks) + evening check-in cron at 8 PM with Alexa AM/Later/Skip buttons + morning behavior + `fallback_15min` + sleep-pattern learning after ~6 weeks of data. The existing `services/workouts.ts` just logs status; the proper redesign would be a new `apps/workout/` module per §12.5.
+4. **`prep_dependency` on routines** — `self_tan` should soft-require `exfoliate_prep` the day before. Currently both are independent rolling routines; the dependency isn't enforced. Modest service-side feature to add when convenient.
+5. **`beauty_appointment` trigger type** — for booked services on the calendar (head spa, massage). Would let cadence reset cleanly when she actually books one.
+6. **Beauty dashboard tile** — nail state + current type + days since applied + suggestion if any; upcoming beauty soft-triggers; head spa countdown; weeks-since-massage. Would slot next to the Today plan, similar to `CalendarDayPanel`.
+
+### A note on the parallel HANDOFF file at `/Users/dianestephani/household-os/HANDOFF.md`
+
+That file (1097 lines) is the second instance's design doc. Section structure is mostly identical to Part A of this file but the second-instance one has §12.5 (Workout module) and §12.6 (Nail rotation logic) that ours doesn't — those are the design specs referenced above. It also has v1 design notes mentioning `category: 'beauty'`, `zone: 'self'`, `trigger: 'beauty_appointment'` in the original §6/§7/§8/§11 — meaning the second instance always had beauty in scope, while our Part A treated it as out-of-scope-v1.
+
+If you (Claude) ever need to compare designs, prefer Part B of *this* file (which reflects shipped code) over the second-instance design doc. Use the second-instance doc only for §12.5 / §12.6 design recovery.
+
+---
+
+## 36. Route cheat sheet (current as of this Part B)
 
 | Endpoint | Method | Purpose |
 |---|---|---|

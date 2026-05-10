@@ -27,7 +27,8 @@ export type Category =
   | 'trash'
   | 'airbnb'
   | 'dogsit'
-  | 'personal';
+  | 'personal'
+  | 'beauty';
 
 export type Zone =
   | 'kitchen'
@@ -35,7 +36,8 @@ export type Zone =
   | 'common'
   | 'bedroom'
   | 'yard'
-  | 'whole-house';
+  | 'whole-house'
+  | 'self';
 
 export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 
@@ -77,6 +79,20 @@ export interface Routine {
   outsourceable?: boolean;
   /** Typical local-market cost per occurrence in USD. */
   outsource_cost_estimate?: number;
+  /**
+   * Whether suggesting this routine should consult the Finance persona first.
+   * Use for booked services Diane wants on a cadence but only when finances
+   * allow (head spa, massage, housecleaner-cadence bump). See the
+   * `budget_gated_services` memory.
+   */
+  budget_gated?: boolean;
+  /**
+   * Typical out-of-pocket cost per occurrence in USD, distinct from
+   * `outsource_cost_estimate` which means "cost to outsource a thing I do
+   * myself." `cost_estimate` is for things she always pays for (head spa,
+   * haircut, massage). Used by budget-gated suggestion logic.
+   */
+  cost_estimate?: number;
 }
 
 // ----- Finance -----
@@ -530,6 +546,8 @@ export interface InventoryRollingRoutine {
   skip_if?: string;
   outsourceable?: boolean;
   outsource_cost_estimate?: number;
+  budget_gated?: boolean;
+  cost_estimate?: number;
 }
 
 export interface InventoryFixedRoutine {

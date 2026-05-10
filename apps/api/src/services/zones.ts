@@ -37,6 +37,9 @@ const ZONE_LABEL: Record<Zone, string> = {
   bedroom: 'bedroom',
   yard: 'yard',
   'whole-house': 'whole house',
+  // 'self' is for beauty routines; zone assessments don't apply there, but the
+  // map has to be exhaustive over the Zone union.
+  self: 'self-care',
 };
 
 function defaultTaskName(zone: Zone, severity: ZoneStateLevel): string {
