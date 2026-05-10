@@ -21,6 +21,7 @@ import type {
   ContextRelatedPersona,
   DayView,
   FilingStatus,
+  MoodLog,
   ScheduleRangeResponse,
   FinancialProfile,
   OutsourceableSummary,
@@ -112,10 +113,11 @@ export const api = {
   },
   mood: {
     set: (level: MoodLevel) =>
-      request<unknown>('/mood', {
+      request<MoodLog>('/mood', {
         method: 'POST',
         body: JSON.stringify({ level, source: 'dashboard' }),
       }),
+    recent: (days = 14) => request<MoodLog[]>(`/mood?days=${days}`),
   },
   workouts: {
     today: () =>
