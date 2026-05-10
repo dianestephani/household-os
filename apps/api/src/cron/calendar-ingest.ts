@@ -14,7 +14,7 @@ const TITLE_RULES: KeywordRule[] = [
   { pattern: /dogsit.*(arrival|drop[- ]?off)/i, type: 'dogsit_arrival' },
   { pattern: /dogsit.*(departure|pick[- ]?up)/i, type: 'dogsit_departure' },
   { pattern: /landscaper|lawn|yard service/i, type: 'landscaper' },
-  { pattern: /house ?cleaner|cleaner visit/i, type: 'cleaner_visit' },
+  { pattern: /house ?clean(ing|er)|cleaner visit/i, type: 'cleaner_visit' },
 ];
 
 export function classifyEventTitle(title: string | null | undefined): TriggerType | null {

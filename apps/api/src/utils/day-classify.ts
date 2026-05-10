@@ -13,8 +13,20 @@ export async function classifyDay(d: Date): Promise<DayType> {
 
   for (const ev of events) {
     const title = (ev.summary ?? '').toLowerCase();
-    if (title.includes('catering')) hasCatering = true;
-    if (title.match(/\b(pt|physical therapy|gym)\b/)) {
+    const description = (ev.description ?? '').toLowerCase();
+    // Catering: match "catering" anywhere, or "landmark" (covers
+    // "landmarkeventco" too) in either title or description.
+    if (
+      title.includes('catering') ||
+      title.includes('landmark') ||
+      description.includes('catering') ||
+      description.includes('landmark')
+    ) {
+      hasCatering = true;
+    }
+    // PT/gym: title-only match (description matching "session" would over-fire
+    // on non-workout events like "brainstorming session").
+    if (title.match(/\b(pt|physical therapy|gym|session)\b/)) {
       const startStr = ev.start?.dateTime;
       if (startStr) {
         const h = new Date(startStr).getHours();

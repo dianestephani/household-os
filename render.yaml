@@ -46,3 +46,19 @@ services:
         sync: false
       - key: GOOGLE_CALENDAR_TOKEN_PATH
         sync: false
+
+  # Static site for the React dashboard. Free tier — no monthly cost,
+  # no sleep, unlimited bandwidth on Render Static Sites.
+  #
+  # VITE_* env vars are baked into the bundle at build time; changing them
+  # requires a rebuild (which Render does automatically on push).
+  - type: web
+    runtime: static
+    name: household-os-dashboard
+    buildCommand: npm install && npm -w @household-os/dashboard run build
+    staticPublishPath: ./apps/dashboard/dist
+    envVars:
+      - key: VITE_API_BASE
+        sync: false # https://household-os-api-st3u.onrender.com/api
+      - key: VITE_API_TOKEN
+        sync: false # leave blank unless API_TOKEN is set on the API service

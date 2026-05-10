@@ -8,6 +8,7 @@ import CheckInBanner from './components/CheckInBanner.js';
 import ActivityFeed from './components/ActivityFeed.js';
 import ChatPanel from './components/ChatPanel.js';
 import RoutinesPage from './components/RoutinesPage.js';
+import HowToGuide from './components/HowToGuide.js';
 import type { TodayPlan } from '@household-os/shared/types';
 
 type View =
@@ -17,7 +18,8 @@ type View =
   | 'household'
   | 'nutrition'
   | 'finance'
-  | 'routines';
+  | 'routines'
+  | 'guide';
 
 export default function App() {
   const [view, setView] = useState<View>('today');
@@ -81,6 +83,14 @@ export default function App() {
         >
           Routines
         </button>
+        <button
+          className={view === 'guide' ? 'active' : ''}
+          onClick={() => setView('guide')}
+          title="How-to guide for everything Household OS can do"
+          style={{ marginLeft: 'auto' }}
+        >
+          ❔ Guide
+        </button>
       </div>
 
       {error && (
@@ -106,6 +116,7 @@ export default function App() {
       {view === 'nutrition' && <ChatPanel persona="nutrition" stub />}
       {view === 'finance' && <ChatPanel persona="finance" stub />}
       {view === 'routines' && <RoutinesPage />}
+      {view === 'guide' && <HowToGuide />}
     </div>
   );
 }

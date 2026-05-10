@@ -29,6 +29,8 @@ describe('classifyEventTitle', () => {
   it('matches cleaner visit', () => {
     expect(classifyEventTitle('Housecleaner')).toBe('cleaner_visit');
     expect(classifyEventTitle('Cleaner visit')).toBe('cleaner_visit');
+    expect(classifyEventTitle('Housecleaning')).toBe('cleaner_visit');
+    expect(classifyEventTitle('House cleaning')).toBe('cleaner_visit');
   });
 
   it('returns null for non-matching titles', () => {
