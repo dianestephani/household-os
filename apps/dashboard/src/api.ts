@@ -47,10 +47,10 @@ const BASE = import.meta.env.VITE_API_BASE ?? '/api';
  */
 function currentToken(): string {
   try {
-    const session = sessionStorage.getItem('household-os.session');
+    const session = localStorage.getItem('household-os.session');
     if (session) return session;
   } catch {
-    /* sessionStorage unavailable */
+    /* localStorage unavailable */
   }
   return LEGACY_TOKEN;
 }

@@ -1212,9 +1212,9 @@ Added when Diane wanted the live demo link gated so randos couldn't browse her p
 - [apps/dashboard/src/App.tsx](apps/dashboard/src/App.tsx) — gates everything on `AUTH_ENABLED && !session` returning `<LoginScreen>`. Sign-out button in the header beside the theme toggle, shows the signed-in email as tooltip.
 - [apps/dashboard/src/api.ts](apps/dashboard/src/api.ts) — `currentToken()` reads from `sessionStorage` first, falls back to `VITE_API_TOKEN` for envs without sign-in configured.
 
-### UX choice: sessionStorage, not localStorage
+### UX choice: localStorage + 30-day JWT (revised 2026-05-10 PM)
 
-The user asked for "login every time I click the link" behavior. `sessionStorage` clears when the tab closes, which gives that without us needing aggressive short JWT expiries or refresh-token plumbing. JWT itself is 24h so a long-lived tab doesn't get bounced mid-session.
+Originally built with `sessionStorage` and a 24h JWT — Diane asked for "log in every time I click the link." But after iOS testing she ran into Google's 2FA flow requiring a trusted device on every fresh sign-in, which is annoying without the iPad handy. Reversed to `localStorage` + 30-day JWT so the session sticks across tabs and browser restarts. Sign-out still clears it explicitly. Future Claude: don't switch this back unless she explicitly asks — see `feedback_chat_interface_decision.md`-adjacent rationale (she changed her mind on a UX detail and the new behavior is what she actually wants).
 
 ### Env vars (new)
 

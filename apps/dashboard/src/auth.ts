@@ -3,9 +3,9 @@
  * VITE_GOOGLE_OAUTH_CLIENT_ID is set at build time; otherwise the dashboard
  * goes straight through (useful for local dev that hasn't configured OAuth).
  *
- * Session token is stored in `sessionStorage` so it clears when the tab
- * closes — matching the "I have to log in every time I click the demo link"
- * UX requirement.
+ * Session token is stored in `localStorage` so it persists across tabs +
+ * browser restarts. Backend JWT expiry (~30 days) bounds how long any one
+ * sign-in is valid; sign out clears the local copy explicitly.
  */
 
 const SESSION_KEY = 'household-os.session';
@@ -27,14 +27,14 @@ export interface AuthSession {
 
 export function readSession(): AuthSession | null {
   try {
-    const token = sessionStorage.getItem(SESSION_KEY);
-    const email = sessionStorage.getItem(EMAIL_KEY);
+    const token = localStorage.getItem(SESSION_KEY);
+    const email = localStorage.getItem(EMAIL_KEY);
     if (!token || !email) return null;
     return {
       token,
       email,
-      name: sessionStorage.getItem(NAME_KEY) ?? undefined,
-      picture: sessionStorage.getItem(PICTURE_KEY) ?? undefined,
+      name: localStorage.getItem(NAME_KEY) ?? undefined,
+      picture: localStorage.getItem(PICTURE_KEY) ?? undefined,
     };
   } catch {
     return null;
@@ -43,22 +43,22 @@ export function readSession(): AuthSession | null {
 
 export function writeSession(s: AuthSession): void {
   try {
-    sessionStorage.setItem(SESSION_KEY, s.token);
-    sessionStorage.setItem(EMAIL_KEY, s.email);
-    if (s.name) sessionStorage.setItem(NAME_KEY, s.name);
-    if (s.picture) sessionStorage.setItem(PICTURE_KEY, s.picture);
+    localStorage.setItem(SESSION_KEY, s.token);
+    localStorage.setItem(EMAIL_KEY, s.email);
+    if (s.name) localStorage.setItem(NAME_KEY, s.name);
+    if (s.picture) localStorage.setItem(PICTURE_KEY, s.picture);
   } catch {
-    /* sessionStorage unavailable */
+    /* localStorage unavailable */
   }
 }
 
 export function clearSession(): void {
   try {
-    sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(EMAIL_KEY);
-    sessionStorage.removeItem(NAME_KEY);
-    sessionStorage.removeItem(PICTURE_KEY);
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(EMAIL_KEY);
+    localStorage.removeItem(NAME_KEY);
+    localStorage.removeItem(PICTURE_KEY);
   } catch {
-    /* sessionStorage unavailable */
+    /* localStorage unavailable */
   }
 }
