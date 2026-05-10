@@ -32,9 +32,11 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | **Check-in system** (morning intent / evening retro / weekly review / pattern interrupts / zone assessments) | [apps/api/src/services/checkins.ts](apps/api/src/services/checkins.ts), [apps/api/src/services/checkin-generators.ts](apps/api/src/services/checkin-generators.ts) |
 | **Pattern detection** (frequent deferrals, missed workout streaks) | [apps/api/src/services/patterns.ts](apps/api/src/services/patterns.ts) |
 | **Persistent activity log** (unified timeline, all events) | [apps/api/src/services/activity.ts](apps/api/src/services/activity.ts) |
-| **Persona chat** (Household Ops via Claude Opus 4.7 + tool use + prompt caching; Nutrition + Finance stubs) | [apps/api/src/persona/](apps/api/src/persona/), [packages/shared/src/personas/](packages/shared/src/personas/) |
+| **Finance module** (gross-income profile, 2025 federal/FICA/state tax estimator, outsourceable monthly cost rollup, greedy-fit affordability report, RocketMoney free-text breakdown) | [apps/api/src/services/finance.ts](apps/api/src/services/finance.ts), [apps/api/src/routes/finance.ts](apps/api/src/routes/finance.ts), [apps/dashboard/src/components/FinancePanel.tsx](apps/dashboard/src/components/FinancePanel.tsx) |
+| **Context journal** (shared narrative log for both personas; free-form text + structured `dogsit_count` / `energy` / `mood` / `blocked_activities` / `tags` / `related_persona`) | [apps/api/src/services/context.ts](apps/api/src/services/context.ts), [apps/api/src/routes/context.ts](apps/api/src/routes/context.ts), [apps/dashboard/src/components/JournalPanel.tsx](apps/dashboard/src/components/JournalPanel.tsx) |
+| **Persona chat** (Household Ops + Finance both live via Claude Opus 4.7 with tool use + prompt caching; Nutrition is the only remaining stub) | [apps/api/src/persona/](apps/api/src/persona/), [packages/shared/src/personas/](packages/shared/src/personas/) |
 | **Alexa skill** (15 voice intents + multi-turn morning check-in + proactive app cards) | [apps/alexa-skill/](apps/alexa-skill/) |
-| **Dashboard** (Today, Workouts, Activity, persona tabs, Routines editor, How-To Guide) | [apps/dashboard/](apps/dashboard/) |
+| **Dashboard** (Today + context strip, Workouts, Activity, Household Ops chat, Finance, Routines editor, Journal, How-To Guide) | [apps/dashboard/](apps/dashboard/) |
 
 ## Quick start (local)
 
@@ -49,7 +51,7 @@ cp .env.example .env
 # 3. local mongo
 brew services start mongodb-community
 
-# 4. seed the 18 routines from inventory.json
+# 4. seed the 49 routines from inventory.json
 npm run seed
 
 # 5. API + dashboard in two shells
@@ -62,11 +64,19 @@ Open <http://localhost:5173>. The Today tab is the landing page. The **❔ Guide
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 122 tests
+npm test                 # all workspaces — currently 158 tests (148 API + 10 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 
-API tests use a separate `household_os_test` database on local Mongo (set via `MONGO_TEST_URL` if you want to override).
+API tests use a separate `household_os_test` database on local Mongo (set via `MONGO_TEST_URL` if you want to override). The setup file in [apps/api/test/setup.ts](apps/api/test/setup.ts) wipes all collections between every test, so each spec starts from a clean DB.
+
+Coverage spans:
+
+- **Services** — finance (profile + tax estimator + outsourceable + affordability), context journal, today/swap/defer/pull, zones (assessments + ad-hoc tasks), checkins, mood/energy, workouts, patterns, activity log
+- **Cron** — morning-gen (rolling + fixed + zone rotation + event-driven + skip_if + ad-hoc), calendar-ingest, deferral edge cases
+- **Persona wiring** — every tool declared in the persona schemas has a matching implementation in [apps/api/src/persona/tools.ts](apps/api/src/persona/tools.ts) (catches schema/impl drift)
+- **Activity-log fan-out** — every action site that should log an event does
+- **Alexa client** — token-fallback, base-URL resolution, header construction
 
 ## Voice / Alexa
 
@@ -100,7 +110,7 @@ Render hosts the API (Express + cron + Alexa webhook). MongoDB lives separately 
    - Click **Apply**. Render builds + deploys (~3-5 minutes).
 
 3. **Seed the production database**
-   - Locally: `MONGO_URL='<your atlas string>' npm run seed` → `seeded 18 routines`.
+   - Locally: `MONGO_URL='<your atlas string>' npm run seed` → `seeded 49 routines`.
    - Or run `npm run seed` from the Render Shell.
 
 4. **Repoint Alexa**

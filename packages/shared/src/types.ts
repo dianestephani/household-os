@@ -259,7 +259,8 @@ export type ActivityKind =
   | 'check_in_answered'
   | 'check_in_skipped'
   | 'trigger_added'
-  | 'routine_edited';
+  | 'routine_edited'
+  | 'context_logged';
 
 export type ActivityActor = 'user' | 'system' | 'cron';
 
@@ -272,6 +273,54 @@ export interface ActivityLogEntry {
   actor: ActivityActor;
   /** Optional structured metadata for analytics / dashboards. */
   metadata?: Record<string, unknown>;
+}
+
+// ----- Context journal -----
+
+/**
+ * Append-only narrative journal shared by both personas. Lets Diane (or a
+ * persona on her behalf) drop qualitative context — "5 dogs today, exhausted,
+ * couldn't leave the house" — that the system can reason about later.
+ *
+ * Structured fields are optional but encouraged: they make the entries
+ * queryable for patterns (e.g. "high dogsit_count days correlate with low
+ * energy and skipped workouts") rather than just LLM-readable prose.
+ */
+export type ContextRelatedPersona = 'household' | 'finance' | 'both';
+
+export type ContextSource = 'voice' | 'dashboard' | 'persona' | 'api';
+
+export interface ContextEntry {
+  _id?: string;
+  ts: Date | string;
+  /** Required free-form narrative — the truth of record. */
+  text: string;
+  /** Free-form descriptive labels (e.g. ["dogsit-stress", "weather"]). */
+  tags?: string[];
+  energy?: EnergyLevel;
+  mood?: MoodLevel;
+  /** How many guest dogs are present (excluding Diane's own 2). */
+  dogsit_count?: number;
+  /**
+   * Activities the user said she couldn't / didn't do because of context.
+   * Free-form strings (e.g. "workout", "errands", "leave_house").
+   */
+  blocked_activities?: string[];
+  /** Which persona this entry is most relevant to. Default 'both'. */
+  related_persona?: ContextRelatedPersona;
+  source: ContextSource;
+}
+
+/** Input shape used by the service / API / personas to add an entry. */
+export interface ContextEntryInput {
+  text: string;
+  tags?: string[];
+  energy?: EnergyLevel;
+  mood?: MoodLevel;
+  dogsit_count?: number;
+  blocked_activities?: string[];
+  related_persona?: ContextRelatedPersona;
+  source?: ContextSource;
 }
 
 // ----- Check-ins -----

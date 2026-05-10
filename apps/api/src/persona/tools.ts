@@ -32,8 +32,10 @@ import {
   listOutsourceable,
   setFinancialProfile,
 } from '../services/finance.js';
+import { addContext, recentContext } from '../services/context.js';
 import type { ActivityKind, FilingStatus } from '@household-os/shared/types';
 import type {
+  ContextRelatedPersona,
   DeferReasonCode,
   EnergyLevel,
   MoodLevel,
@@ -129,6 +131,25 @@ export const householdTools: Record<string, ToolImpl> = {
       (input.days as number | undefined) ?? 7,
       input.kind as ActivityKind | undefined,
     ),
+
+  log_context: async (input) =>
+    addContext({
+      text: input.text as string,
+      tags: input.tags as string[] | undefined,
+      energy: input.energy as EnergyLevel | undefined,
+      mood: input.mood as MoodLevel | undefined,
+      dogsit_count: input.dogsit_count as number | undefined,
+      blocked_activities: input.blocked_activities as string[] | undefined,
+      related_persona:
+        (input.related_persona as ContextRelatedPersona | undefined) ?? 'household',
+      source: 'persona',
+    }),
+
+  recent_context: async (input) =>
+    recentContext(
+      (input.days as number | undefined) ?? 7,
+      (input.persona as ContextRelatedPersona | undefined) ?? 'household',
+    ),
 };
 
 export const financeTools: Record<string, ToolImpl> = {
@@ -167,6 +188,25 @@ export const financeTools: Record<string, ToolImpl> = {
         | number
         | undefined,
     }),
+
+  log_context: async (input) =>
+    addContext({
+      text: input.text as string,
+      tags: input.tags as string[] | undefined,
+      energy: input.energy as EnergyLevel | undefined,
+      mood: input.mood as MoodLevel | undefined,
+      dogsit_count: input.dogsit_count as number | undefined,
+      blocked_activities: input.blocked_activities as string[] | undefined,
+      related_persona:
+        (input.related_persona as ContextRelatedPersona | undefined) ?? 'finance',
+      source: 'persona',
+    }),
+
+  recent_context: async (input) =>
+    recentContext(
+      (input.days as number | undefined) ?? 14,
+      (input.persona as ContextRelatedPersona | undefined) ?? 'finance',
+    ),
 };
 
 export const stubTools: Record<string, ToolImpl> = {

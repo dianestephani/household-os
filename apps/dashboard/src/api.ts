@@ -14,6 +14,9 @@ import type {
   CheckIn,
   ActivityKind,
   ActivityLogEntry,
+  ContextEntry,
+  ContextEntryInput,
+  ContextRelatedPersona,
   FilingStatus,
   FinancialProfile,
   OutsourceableSummary,
@@ -133,6 +136,24 @@ export const api = {
       if (kind) qs.set('kind', kind);
       return request<ActivityLogEntry[]>(`/activity?${qs.toString()}`);
     },
+  },
+  context: {
+    list: (days = 7, persona?: ContextRelatedPersona) => {
+      const qs = new URLSearchParams({ days: String(days) });
+      if (persona) qs.set('persona', persona);
+      return request<ContextEntry[]>(`/context?${qs.toString()}`);
+    },
+    today: (persona?: ContextRelatedPersona) => {
+      const qs = new URLSearchParams();
+      if (persona) qs.set('persona', persona);
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return request<ContextEntry[]>(`/context/today${suffix}`);
+    },
+    add: (entry: ContextEntryInput) =>
+      request<ContextEntry>('/context', {
+        method: 'POST',
+        body: JSON.stringify({ ...entry, source: entry.source ?? 'dashboard' }),
+      }),
   },
   finance: {
     profile: () => request<FinancialProfile>('/finance/profile'),

@@ -10,6 +10,8 @@ import ChatPanel from './components/ChatPanel.js';
 import RoutinesPage from './components/RoutinesPage.js';
 import HowToGuide from './components/HowToGuide.js';
 import FinancePanel from './components/FinancePanel.js';
+import JournalPanel from './components/JournalPanel.js';
+import TodayContextStrip from './components/TodayContextStrip.js';
 import type { TodayPlan } from '@household-os/shared/types';
 
 type View =
@@ -20,6 +22,7 @@ type View =
   | 'nutrition'
   | 'finance'
   | 'routines'
+  | 'journal'
   | 'guide';
 
 export default function App() {
@@ -85,6 +88,12 @@ export default function App() {
           Routines
         </button>
         <button
+          className={view === 'journal' ? 'active' : ''}
+          onClick={() => setView('journal')}
+        >
+          Journal
+        </button>
+        <button
           className={view === 'guide' ? 'active' : ''}
           onClick={() => setView('guide')}
           title="How-to guide for everything Household OS can do"
@@ -103,6 +112,7 @@ export default function App() {
       {view === 'today' && plan && (
         <>
           <CheckInBanner />
+          <TodayContextStrip />
           <EnergyButtons current={plan.current_energy} onChange={setPlan} />
           <MoodButtons />
           <TodayList plan={plan} onChange={setPlan} />
@@ -117,6 +127,7 @@ export default function App() {
       {view === 'nutrition' && <ChatPanel persona="nutrition" stub />}
       {view === 'finance' && <FinancePanel />}
       {view === 'routines' && <RoutinesPage />}
+      {view === 'journal' && <JournalPanel />}
       {view === 'guide' && <HowToGuide />}
     </div>
   );

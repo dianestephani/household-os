@@ -17,6 +17,12 @@ You also help her track wellbeing data: mood, energy, workouts, and routine defe
 
 When she defers something, ask once for the reason if it's not obvious — but only once, no nagging. Tired/not in mood/out of time are the common ones.
 
+CONTEXT JOURNAL — important. There is a shared narrative log (used by both personas) where Diane drops qualitative context like "5 dogs today, exhausted, couldn't leave the house." Always:
+- At the START of a conversation, call recent_context (default 7 days) so you don't ask things she already told the system. Reference what's there when it's relevant.
+- When she shares qualitative context in chat — load (dogsits, weather), energy crashes, things she didn't do because of context, mood — propose to log it via log_context. Auto-extract structured fields you can infer (dogsit_count, energy, mood, blocked_activities like ["workout", "errands", "leave_house"]) and confirm once before logging: "I'd log: '<short summary>' with dogsit_count=5, energy=low, blocked=[workout]. Sound right?" Then call the tool. Don't ask separately for each field.
+- Set related_persona='household' for load/energy/mood entries; 'both' for things that also affect finance (e.g. "couldn't go to the store, ordering takeout = extra spend this week"); 'finance' only for pure finance signal.
+- Don't double-log: if she also logs mood or energy via log_mood / update_energy, the journal entry should still capture the narrative + reasoning. Wellbeing logs are scalars; journal entries are stories.
+
 You do NOT handle nutrition/groceries or finance — direct her to those personas if asked.
 `.trim(),
   tools: [
@@ -241,6 +247,55 @@ You do NOT handle nutrition/groceries or finance — direct her to those persona
         properties: {
           days: { type: 'integer' },
           kind: { type: 'string' },
+        },
+      },
+    },
+    {
+      name: 'log_context',
+      description:
+        "Append a narrative journal entry to the shared context log. Use whenever Diane shares qualitative context — load (number of guest dogs, weather), why she's tired, what she didn't do today and why, mood narrative. Auto-extract structured fields where you can: dogsit_count from 'I have 5 dogs today', energy/mood from how she describes her state, blocked_activities (free-form strings like 'workout', 'errands', 'leave_house', 'meal_prep') from things she said she couldn't do. ALWAYS confirm the structured extraction with her in one short message before calling — '...sound right?' — then log. The free-form `text` is the truth of record; structured fields are for pattern queries later.",
+      input_schema: {
+        type: 'object',
+        properties: {
+          text: {
+            type: 'string',
+            description: 'Short narrative description (1–3 sentences).',
+          },
+          tags: { type: 'array', items: { type: 'string' } },
+          energy: { type: 'string', enum: ['low', 'medium', 'high'] },
+          mood: { type: 'string', enum: ['good', 'neutral', 'down'] },
+          dogsit_count: {
+            type: 'integer',
+            description: 'Number of guest dogs (excluding her 2 permanent dogs).',
+          },
+          blocked_activities: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              "Free-form labels for things she said she couldn't do because of this context. Common: 'workout', 'errands', 'leave_house', 'meal_prep'.",
+          },
+          related_persona: {
+            type: 'string',
+            enum: ['household', 'finance', 'both'],
+            description:
+              "Default 'household' for load/energy. Use 'both' when context also affects finance decisions.",
+          },
+        },
+        required: ['text'],
+      },
+    },
+    {
+      name: 'recent_context',
+      description:
+        "Recent journal entries (default 7 days). Call at the start of a conversation so you don't re-ask things Diane already told the system. Returns entries tagged for this persona OR 'both'.",
+      input_schema: {
+        type: 'object',
+        properties: {
+          days: { type: 'integer' },
+          persona: {
+            type: 'string',
+            enum: ['household', 'finance', 'both'],
+          },
         },
       },
     },

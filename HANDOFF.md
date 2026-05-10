@@ -772,3 +772,252 @@ After step 7, the system is genuinely useful. Steps 8–11 are quality-of-life o
 ---
 
 End of handoff. Start with §15 step 1.
+
+---
+
+# Part B — Post-v1 update (current as of 2026-05-09)
+
+> **Reading instructions for a fresh Claude instance:** §1–§17 above is the original v1 design doc. Everything in this Part B reflects what has actually been built and changed since the v1 scaffold. When the design doc and this section disagree, **trust this section** — the design doc is historical. Diane wants you to be fully caught up before you write any code. Don't re-do the original §15 build order; it's done.
+
+## 18. State of the system
+
+The v1 plan is shipped and the system is running. The API is on Render (Starter $7/mo); MongoDB lives on Atlas free tier; the dashboard is also on Render as a free static site; the Alexa skill is mounted on the API at `POST /alexa` via `ask-sdk-express-adapter`. There's no separate Lambda. Google Calendar OAuth is wired and working. 158 tests pass green; typecheck is clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).
+
+The for-end-user reference is the **in-app Guide tab** (Dashboard → ❔ Guide); this HANDOFF is just for engineers/Claude.
+
+## 19. Personas — current truth
+
+The original §11 plan said Household Ops would be the only live persona, with Nutrition and Finance as stubs. That's no longer true:
+
+| Persona | Status | Why it matters |
+|---|---|---|
+| **Household Ops** | Live | Same as v1 |
+| **Finance** | Live (full tools) | Helps Diane decide what to outsource and answer "can I afford X" |
+| **Nutrition** | Still stub | Diane explicitly deprioritized; "Diane is starting with Household Ops; nutrition comes later" is the canned reply |
+
+Both live personas use Claude Opus 4.7 (`claude-opus-4-7`) with prompt caching on system prompt + tool definitions. Both have `log_context` and `recent_context` tools and call `recent_context` at the start of every conversation (see §22).
+
+## 20. Finance subsystem (was a stub in v1; now real)
+
+**Why it exists:** Diane has a hyperfixate-burnout pattern with side projects. She needs gentle pressure to outsource the right things at the right time, not silently take on too much. The system pushes back on outsourcing decisions that don't fit her discretionary, and surfaces affordability data instead of guessing.
+
+### Data model — `FinancialProfile` (singleton, key: 'self')
+
+```ts
+interface FinancialProfile {
+  key: 'self';
+  monthly_gross_income: number;        // pre-tax, all jobs combined
+  monthly_tax_estimate: number;        // estimated monthly withholding
+  monthly_fixed_expenses: number;      // rent + insurance + subscriptions etc.
+  state?: string;                      // two-letter, e.g. WA — drives state tax
+  filing_status?: 'single' | 'married_jointly' | 'head_of_household';
+  monthly_extra_withholding?: number;  // total $/mo across all paychecks
+  notes?: string;
+  expense_breakdown?: string;          // free-form RocketMoney paste
+  updated_at: Date;
+}
+```
+
+Discretionary = `gross − tax − fixed`, clamped at zero. Diane is single-filer, WA (no state tax), gross ~$4–6k/mo, $25–50 extra withholding per paycheck per job (multiple jobs).
+
+### Tax estimator (`estimateMonthlyTax`)
+
+Pure compute — does not persist. Uses 2025 federal brackets per filing status, FICA (SS 6.2% capped at $168,600 wage base + Medicare 1.45%), and a state effective-rate lookup table that includes WA/FL/NV/etc. as 0%, plus rough rates for ~15 other common states. Returns `{ federal, fica, state_tax, extra, total, effective_rate, notes }`. The notes string flags "ballpark only — not a substitute for actual tax software" and warns when state isn't in the lookup table. Exposed as both `POST /api/finance/estimate-tax` (route, no persistence) and the persona tool `estimate_tax`.
+
+### Outsourceable summary + affordability report
+
+`listOutsourceable()` walks every routine where `outsourceable: true && active: true`, multiplies `outsource_cost_estimate` by `monthly_occurrences` (computed from `scheduling.interval_days` for rolling, or `7/30` / `14/30` for fixed weekly/biweekly), and returns the items sorted by `monthly_cost` desc plus a total.
+
+`affordabilityReport()` runs a greedy largest-first split: walks the sorted items and keeps adding to `fits_within_discretionary` while there's discretionary headroom; everything else lands in `exceeds_discretionary`. Returns the profile, computed discretionary, both lists, and a one-line rationale ("at $130/mo discretionary, you could cover 1 item (~$128.57/mo).").
+
+### Persona system prompt (key behaviors)
+
+The Finance persona is **not** RocketMoney — it explicitly redirects raw transaction questions there. It always calls `get_financial_profile` first (so it sees the latest numbers AND the `expense_breakdown` text), then `estimate_tax` if asked about take-home, then `affordability_report` for "can I afford X?" style questions. It cross-references the free-form expense breakdown when answering about specific categories ("you said groceries are about $X/mo there; the system has biweekly groceries at $Y/mo if outsourced").
+
+It also reminds her exactly once per conversation about 1099 self-employment tax (~25–30%) when she mentions side-gig income. Tone is casual; no moralizing about spending.
+
+## 21. New routines added since v1 (49 total in inventory.json)
+
+The v1 inventory had ~18 routines. Diane and I have iterated heavily; current count is 49 (40 rolling, 3 fixed, 2 as_needed, 5 event-driven, plus the 6-week zone rotation and 3 protected workout slots).
+
+Headline additions since v1:
+
+- **Bathrooms / kitchen / bedroom rotations** — toilet_deep, shower_scrub, mirror_glass, fridge_cleanout, pantry_check, oven_clean, sheets_wash, bedroom_dust, under_bed_vacuum, closet_declutter
+- **Pet care** — nail_trims (35d, outsourceable $30), dog_bath, monthly_meds, dish_disinfect (7d), pet_brushing (7d), pet_bedding_wash (14d), crate_gate_wipe (14d) — Diane has 2 dogs + 2 cats permanent and dogsits up to 5+ guest dogs at once (peak observed: 7)
+- **Vehicle maintenance** — oil_change (120d), registration_renewal (365d), car_inspection (365d), tire_rotation (180d)
+- **Personal** — groceries_biweekly ($175 outsourceable), meal_prep_weekly ($70 outsourceable), personal_laundry
+- **Whole-house cleaning** — regular_cleaning (21d, outsourceable $380 — actual quote from her cleaner), floor_specialty (90d quarterly, outsourceable $300)
+- **Air quality / dirt control** (added when Diane flagged "I have an ALEN BreatheSmart Flex with the filter overdue") — air_purifier_filter (180d), hvac_filter (50d), vacuum_filter_clean (30d), upholstery_vacuum (14d), entry_mat_shake (3d). The air purifier filter shows up immediately as overdue because seeded routines have `last_done = null` and morning-gen treats `daysSince = Infinity` as overdue.
+- **Yard pickup** — was outsourced at $86/mo; was previously folded into airbnb_pre's `also_triggers`
+
+The seed script ([apps/api/src/seed.ts](apps/api/src/seed.ts)) does `Routine.deleteMany({})` then `insertMany(all)`. Re-seeding **wipes `last_done` history** — fine for early dev but watch out once Diane has weeks of completion data. Eventually we should switch to upsert-by-key.
+
+## 22. Context journal (new subsystem — shared by both personas)
+
+This was added because the personas could only read scalar signals (mood log, energy log, today plan) — there was nowhere for qualitative "today is rough because X" context to land, and no way for Diane to feed new information into Finance mid-conversation that affects future affordability reasoning.
+
+### Data model — `ContextEntry`
+
+Append-only log:
+
+```ts
+interface ContextEntry {
+  ts: Date;
+  text: string;                              // required, 1–3 sentences
+  tags?: string[];                           // free-form labels
+  energy?: 'low' | 'medium' | 'high';
+  mood?: 'good' | 'neutral' | 'down';
+  dogsit_count?: number;                     // guest dogs (excluding her 2)
+  blocked_activities?: string[];             // free-form: 'workout', 'errands', 'leave_house', etc.
+  related_persona?: 'household' | 'finance' | 'both';   // default 'both'
+  source: 'voice' | 'dashboard' | 'persona' | 'api';
+}
+```
+
+Free text is the truth of record; structured fields are for pattern queries later.
+
+### Service ([apps/api/src/services/context.ts](apps/api/src/services/context.ts))
+
+- `addContext(input)` — validates non-empty text, strips empty arrays, writes the entry, fires a `context_logged` ActivityLog entry (actor=`system` if `source='persona'`, else `user`)
+- `recentContext(days, persona?)` — newest-first; persona filter returns matching persona OR `'both'`
+- `todaysContext(persona?)` — entries from local-midnight onward
+
+### Routes
+
+- `GET /api/context?days=7&persona=…`
+- `GET /api/context/today?persona=…`
+- `POST /api/context` — body validates `text` is required
+
+### Persona integration (both household + finance)
+
+Both personas have `log_context` and `recent_context` as tools. The system prompts instruct them to:
+
+1. **Call `recent_context` at the start of every conversation** — household defaults to 7-day window, finance to 14-day. So Diane never has to re-explain context she already shared.
+2. **When she shares qualitative context in chat, propose to log it.** Auto-extract structured fields (`dogsit_count` from "5 dogs," `energy`/`mood` from how she describes her state, `blocked_activities` from things she says she couldn't do). Confirm once: *"I'd log: '<short summary>' with dogsit_count=5, energy=low, blocked=[workout]. Sound right?"* — then call the tool. Don't ask field-by-field.
+3. **`related_persona` defaults**: household persona uses `household`, finance uses `finance`, both can set `'both'` for cross-cutting context (e.g. chaos week → ordering takeout = extra spend).
+4. **Don't double-log scalars vs narratives.** `log_mood` and `update_energy` are still the right primitives for plain mood/energy data; the journal captures the *story* + reasoning.
+
+### Dashboard
+
+Two surfaces:
+
+- **Journal tab** ([apps/dashboard/src/components/JournalPanel.tsx](apps/dashboard/src/components/JournalPanel.tsx)) — full panel with free-text entry, toggleable structured-fields card (energy / mood / dogsit_count / blocked-activity chips / tags / persona selector), recent-entries list with day-window selector
+- **Today context strip** ([apps/dashboard/src/components/TodayContextStrip.tsx](apps/dashboard/src/components/TodayContextStrip.tsx)) — read-only inline strip on the Today view that surfaces today's entries above the plan; auto-hides when empty
+
+The first seeded entry (2026-05-09) is in the DB: 7 dogs, exhausted, blocked=[workout, leave_house, errands], related_persona=both.
+
+## 23. Tax + finance UI (new tab)
+
+[apps/dashboard/src/components/FinancePanel.tsx](apps/dashboard/src/components/FinancePanel.tsx) shows three sections:
+
+1. **Monthly profile** — gross income, state, filing_status, monthly extra withholding, monthly tax estimate (with **"Estimate tax from gross + state"** button that calls `POST /api/finance/estimate-tax` and auto-fills the field; displays the federal/FICA/state/extra/total/effective-rate breakdown card), monthly fixed expenses, optional notes. Shows the running breakdown: `Gross → Tax → Net → Fixed → Discretionary`.
+2. **RocketMoney context (free-form)** — `expense_breakdown` paste field; persona reads this verbatim.
+3. **Outsourceable routines table** — sortable table of every outsourceable routine (cost/visit, occurrences/mo, $/mo total) with check marks on the items that fit within current discretionary.
+
+There's also a Finance ChatPanel inline at the bottom for free-form persona chat.
+
+## 24. Inventory cadences worth knowing
+
+| Routine | Cadence | Outsource $ |
+|---|---|---|
+| `regular_cleaning` | 21d (every 6 weeks) | $380 actual |
+| `groceries_biweekly` | 14d | $175 |
+| `meal_prep_weekly` | 7d | $70 |
+| `floor_specialty` | 90d (quarterly) | $300 |
+| `yard_pickup` | 30d, `skip_if: landscaper_this_week` | $86 actual |
+| `nail_trims` | 35d | $30 |
+| `air_purifier_filter` | 180d | (not outsourced) |
+| `hvac_filter` | 50d | (not outsourced) |
+| `vacuum_filter_clean` | 30d | (not outsourced) |
+| `pet_brushing` | 7d (was 3d, Diane bumped to weekly) | (not outsourced) |
+| `dish_disinfect` | 7d | (not outsourced) |
+| `crate_gate_wipe` | 14d | (not outsourced) |
+| `upholstery_vacuum` | 14d | (not outsourced) |
+| `entry_mat_shake` | 3d | (not outsourced) |
+| `pet_bedding_wash` | 14d | (not outsourced) |
+
+Trash bins: `trash_prep` (Tue evening), `trash_return` (Wed evening), `recycle_addon` (Tue evening, biweekly).
+
+`laundromat_pet` was removed from `as_needed` and replaced by the rolling `pet_bedding_wash` (Diane's volume warrants a real cadence).
+
+## 25. Tests — coverage map
+
+158 total: 148 API + 10 alexa-skill, all passing.
+
+API test files of note:
+- [`services/finance.test.ts`](apps/api/src/services/finance.test.ts) (17) — profile CRUD + singleton, discretionary math, estimateMonthlyTax (WA no-state, extra-withholding linearity, CA > WA, unknown-state flag, zero-income), listOutsourceable cadence math, affordabilityReport greedy split + zero-discretionary rationale
+- [`services/context.test.ts`](apps/api/src/services/context.test.ts) (10) — minimal entry + defaults, structured fields, empty-array stripping, validation, activity-log side effect, persona filter incl. `'both'` semantics, days window, today-only
+- [`persona/tools.test.ts`](apps/api/src/persona/tools.test.ts) (10) — **schema/impl drift detector**: every tool declared in [packages/shared/src/personas/](packages/shared/src/personas/) has a runtime impl; smoke-tests for `log_context` (default related_persona per persona, source=persona, structured-field passthrough), `recent_context` (default-persona filtering), `estimate_tax` (component math)
+- [`services/activity-wiring.test.ts`](apps/api/src/services/activity-wiring.test.ts) (12) — every action site that should write an ActivityLog entry does (markDone, swap with/without replacement, pull, energy/mood/workout/zone-assessment/cancel/trigger/routine-edit). `context_logged` is covered in context.test.ts directly.
+- [`persona/runner.test.ts`](apps/api/src/persona/runner.test.ts) (4) — stub short-circuit, plain-text return, tool loop, unknown persona handling
+
+## 26. Operational / deployment notes
+
+- **Render**: API is on Starter ($7/mo always-on — free tier sleeps and breaks cron). Dashboard is on the static-site free tier. MongoDB on Atlas M0 free.
+- **Atlas Network Access**: `0.0.0.0/0` is allowed (Render IPs aren't fixed). The connection string MUST end with `/household_os?…` — leaving the DB name off lands writes in `test` and Render reads from `household_os` and you wonder why it's empty (this happened in early deploy).
+- **Atlas TLS**: an early deploy hit `ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR` until `0.0.0.0/0` was added.
+- **Alexa skill API base URL**: the skill internally calls `http://localhost:${process.env.PORT ?? '3000'}/api` and uses `HOUSEHOLD_API_TOKEN ?? API_TOKEN` — see [apps/alexa-skill/src/client.ts](apps/alexa-skill/src/client.ts). This is because Render uses dynamic `PORT` and the skill is mounted on the same Express server.
+- **Google Calendar OAuth**: web-app type, redirect `http://localhost:53682/`. The one-time auth helper is `npm -w @household-os/api run google-auth`. Path resolution uses `import.meta.url` because npm-workspace cwd is `apps/api/`, not the repo root.
+- **Test environment isolation**: [apps/api/src/utils/google-calendar.ts](apps/api/src/utils/google-calendar.ts) has `if (process.env.NODE_ENV === 'test') return [];` guards on `listEvents` and `upsertEvent` — without them, tests on Tuesday would actually classify the day as `tue_thu_pt` because they'd hit the real calendar.
+- **Mongoose `OverwriteModelError`**: every model export uses the defensive pattern `mongoose.models.X ?? mongoose.model('X', schema)` — multiple test files import the same models in the same process.
+- **Git signing**: Diane's commits use SSH-based signing (`~/.ssh/id_ed25519.pub`) after GPG passphrase issues. Don't try GPG.
+- **First-time Mongo bootstrap on a clean DB**: `npm run seed` writes 49 routines. The dashboard expects routines to exist; running with an empty DB shows an empty Today plan.
+
+## 27. Skill API additions (cheat sheet)
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/today` | GET | Current TodayPlan |
+| `/api/today/regenerate` | POST | Force re-gen (also runs from cron at 6am) |
+| `/api/today/swap` | POST | Move item to swap_pool, optionally pull a replacement |
+| `/api/today/mark-done` | POST | |
+| `/api/today/pull-from-pool` | POST | |
+| `/api/routines` | GET / PATCH `:key` | |
+| `/api/energy` | POST | log + suggestion |
+| `/api/mood` | POST | |
+| `/api/workouts/today`, `/api/workouts` | GET / POST | |
+| `/api/zones`, `/api/zones/assess`, `/api/zones/tasks` | various | |
+| `/api/checkins/pending`, `/api/checkins/:id/answer`, `…/skip` | various | |
+| `/api/triggers` | GET / POST | |
+| `/api/patterns/deferrals`, `/api/patterns/workouts` | GET | |
+| `/api/activity` | GET | unified timeline |
+| **`/api/finance/profile`** | **GET / PATCH** | new |
+| **`/api/finance/outsourceable`** | **GET** | new |
+| **`/api/finance/affordability`** | **GET** | new |
+| **`/api/finance/estimate-tax`** | **POST** | new (pure compute) |
+| **`/api/context`** | **GET / POST** | new (journal) |
+| **`/api/context/today`** | **GET** | new |
+| `/api/chat/:persona` | POST | Claude chat (household / finance / nutrition) |
+| `/alexa` | POST | Alexa webhook (raw body, signature-verified) |
+
+## 28. Memory + design principles in active use
+
+There are five memories Claude carries across sessions for this project (in `~/.claude/projects/.../memory/`):
+
+1. **`user_adhd_energy.md`** — Diane has ADHD, fluctuating energy, fluid-but-structured workflow. The system has to absorb that.
+2. **`reference_finance_tools.md`** — RocketMoney is primary, Credit Karma is secondary. CSV import is the realistic ingestion path. The system **does not** replicate transaction-level finance tracking.
+3. **`project_accountability_design.md`** — System should provide gentle pushback on repeated deferrals / skipped workouts. Silent accommodation is a failure mode. Pressure must be data-driven, not arbitrary.
+4. **`project_data_learning_principle.md`** — Every feature should generate detailed data and feed that data back into better predictions. Default to *more* structured fields, not less. Reconcile estimates against reality (per-routine `estimate_minutes`, `outsource_cost_estimate`) over time. This is why the journal has structured fields alongside free text.
+5. (memory index `MEMORY.md`)
+
+If you (Claude) do work on this project: respect these — they're the substrate the user has explicitly told us to operate on.
+
+## 29. Known gaps / open work (don't build unprompted)
+
+- **Weather signal** — Diane flagged that weather is a load multiplier (tracked-dirt risk), but there's no weather ingestion. A daily WA forecast pull could bump entry/floor routines on bad-weather days. Not built.
+- **Dogsit volume as a covariate** — `dogsit_pre` / `dogsit_post` events don't currently capture *how many* guest dogs. The journal entry now does (`dogsit_count`); eventually that should flow into trigger metadata so cleaning load can be modeled per dogsit.
+- **Estimate vs reality reconciliation** — `estimate_minutes` and `outsource_cost_estimate` are seed values; once enough completion logs exist they should auto-tune. Not yet.
+- **Completion-time mood/energy capture** — `markDone` records timestamp only. We could optionally capture actual minutes, mood/energy, and a "felt easier/harder than usual" flag. Not yet.
+- **Patterns-from-EnergyLog** — original §17 open question; still open.
+- **RocketMoney CSV import** — Diane currently pastes a free-form summary. Structured CSV ingestion is realistic but not built; expect 1099 + W-2 commingled rows.
+- **Multi-user** — single-user via shared bearer token. Original §17 open question; still open.
+
+## 30. How a fresh Claude should pick up
+
+1. Read this whole HANDOFF (Part A for design, Part B for current truth).
+2. `git status` + `git log --oneline -20` to see what's been touched recently.
+3. `npm test` should be green (158 tests). `npm run typecheck` should be clean.
+4. Ask Diane what she wants to work on. Default to small, contained changes — she has the hyperfixate-burnout pattern noted in §1, so don't propose multi-week refactors unprompted.
+5. If she shares qualitative context in conversation, log it via the journal (the Household Ops persona has the `log_context` tool — but Claude-the-engineer can also `POST /api/context` directly). Don't lose context to a session boundary.
+6. The end-user reference is the **Dashboard → ❔ Guide tab**. If Diane asks "how do I X" and the answer is in there, point her at it before re-explaining.
+

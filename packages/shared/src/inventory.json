@@ -42,7 +42,17 @@
 
     { "key": "regular_cleaning",     "name": "Regular housecleaning (whole-house)", "category": "cleaning", "zone": "whole-house", "interval_days": 21,  "flex_days": 3,  "estimate_minutes": 210, "energy": "high", "outsourceable": true, "outsource_cost_estimate": 380 },
 
-    { "key": "floor_specialty",      "name": "Specialty floor cleaning (rug + hardwood)", "category": "cleaning", "zone": "whole-house", "interval_days": 90,  "flex_days": 14, "estimate_minutes": 30, "energy": "low", "outsourceable": true, "outsource_cost_estimate": 300 }
+    { "key": "floor_specialty",      "name": "Specialty floor cleaning (rug + hardwood)", "category": "cleaning", "zone": "whole-house", "interval_days": 90,  "flex_days": 14, "estimate_minutes": 30, "energy": "low", "outsourceable": true, "outsource_cost_estimate": 300 },
+
+    { "key": "air_purifier_filter",  "name": "Replace ALEN BreatheSmart Flex filter",     "category": "pet",      "zone": "whole-house", "interval_days": 180, "flex_days": 30, "estimate_minutes": 10, "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "hvac_filter",          "name": "Replace HVAC filter",                       "category": "cleaning", "zone": "whole-house", "interval_days": 50,  "flex_days": 7,  "estimate_minutes": 10, "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "vacuum_filter_clean",  "name": "Clean vacuum filter + canister",            "category": "cleaning", "zone": "whole-house", "interval_days": 30,  "flex_days": 5,  "estimate_minutes": 10, "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "pet_brushing",         "name": "Brush pets (shed control)",                 "category": "pet",      "zone": "whole-house", "interval_days": 7,   "flex_days": 2,  "estimate_minutes": 15, "energy": "medium", "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "dish_disinfect",       "name": "Pet bowls disinfect/wash",                  "category": "pet",      "zone": "kitchen",     "interval_days": 7,   "flex_days": 2,  "estimate_minutes": 10, "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "crate_gate_wipe",      "name": "Crate + gate wipe-down",                    "category": "pet",      "zone": "whole-house", "interval_days": 14,  "flex_days": 3,  "estimate_minutes": 20, "energy": "medium", "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "upholstery_vacuum",    "name": "Upholstery + furniture vacuum",             "category": "cleaning", "zone": "common",      "interval_days": 14,  "flex_days": 3,  "estimate_minutes": 20, "energy": "medium", "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "entry_mat_shake",      "name": "Entry mats: shake/sweep",                   "category": "cleaning", "zone": "common",      "interval_days": 3,   "flex_days": 1,  "estimate_minutes": 5,  "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "pet_bedding_wash",     "name": "Pet bedding wash (laundromat)",             "category": "pet",      "zone": "whole-house", "interval_days": 14,  "flex_days": 3,  "estimate_minutes": 90, "energy": "medium", "outsourceable": false, "outsource_cost_estimate": 0 }
   ],
 
   "fixed_routines": [
@@ -62,7 +72,6 @@
 
   "as_needed_routines": [
     { "key": "mop",               "name": "Mop floors",              "trigger": "user_flag", "estimate_minutes": 25, "energy": "medium",                     "outsourceable": false, "outsource_cost_estimate": 0 },
-    { "key": "laundromat_pet",    "name": "Laundromat: pet bedding", "trigger": "user_flag", "estimate_minutes": 90, "energy": "medium", "blocking": true,  "outsourceable": false, "outsource_cost_estimate": 0 },
     { "key": "laundromat_airbnb", "name": "Laundromat: Airbnb",      "trigger": "user_flag", "estimate_minutes": 90, "energy": "medium", "blocking": true,  "outsourceable": false, "outsource_cost_estimate": 0 }
   ],
 
