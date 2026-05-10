@@ -1212,9 +1212,9 @@ Added when Diane wanted the live demo link gated so randos couldn't browse her p
 - [apps/dashboard/src/App.tsx](apps/dashboard/src/App.tsx) — gates everything on `AUTH_ENABLED && !session` returning `<LoginScreen>`. Sign-out button in the header beside the theme toggle, shows the signed-in email as tooltip.
 - [apps/dashboard/src/api.ts](apps/dashboard/src/api.ts) — `currentToken()` reads from `sessionStorage` first, falls back to `VITE_API_TOKEN` for envs without sign-in configured.
 
-### UX choice: sessionStorage, not localStorage
+### UX choice: localStorage + 30-day JWT (revised 2026-05-10 PM)
 
-The user asked for "login every time I click the link" behavior. `sessionStorage` clears when the tab closes, which gives that without us needing aggressive short JWT expiries or refresh-token plumbing. JWT itself is 24h so a long-lived tab doesn't get bounced mid-session.
+Originally built with `sessionStorage` and a 24h JWT — Diane asked for "log in every time I click the link." But after iOS testing she ran into Google's 2FA flow requiring a trusted device on every fresh sign-in, which is annoying without the iPad handy. Reversed to `localStorage` + 30-day JWT so the session sticks across tabs and browser restarts. Sign-out still clears it explicitly. Future Claude: don't switch this back unless she explicitly asks — see `feedback_chat_interface_decision.md`-adjacent rationale (she changed her mind on a UX detail and the new behavior is what she actually wants).
 
 ### Env vars (new)
 
@@ -1386,6 +1386,53 @@ Two gaps surfaced in a coverage audit and got filled:
 - **Dashboard components** — no React testing infrastructure in this repo. If we ever introduce Vitest + Testing Library, `EnergyButtons` energy-cancel-modal bug fix + `MoodButtons` prefill behavior would be the first regression candidates.
 
 Total: **231 tests** across 30 files (221 API + 10 alexa-skill).
+
+---
+
+## 43. Tab persistence + date-aware Workouts / Activity / Journal (2026-05-10 PM)
+
+Diane asked for two things that turned out related: the refresh button shouldn't dump her back to Today, and every section should support scrolling through dates the way the Today view's DayPanel already does.
+
+### Tab persistence
+
+[App.tsx](apps/dashboard/src/App.tsx): `view` state now reads from `localStorage` via `readSavedView()` and mirrors every `setView()` call back to `localStorage.setItem('household-os.view', ...)`. The setter wrapper writes-then-sets so we can't accidentally skip persistence. Refresh button preserved (still `window.location.reload()`) — useState initializer picks the saved view on the way back up.
+
+### Shared `DayNavigator`
+
+Extracted from the inline implementation in [DayPanel.tsx](apps/dashboard/src/components/DayPanel.tsx) into [DayNavigator.tsx](apps/dashboard/src/components/DayNavigator.tsx). Pure presentational — parent owns the date state. Exports the helpers (`localToday`, `formatHeader`, `shiftDate`) since other panels use them for headers + bucket keys. Four consumers as of now: DayPanel, WorkoutPanel, ActivityFeed, JournalPanel.
+
+### Workout date navigation
+
+- **Backend**: `todaysWorkout(date)` already took an optional date param; added route `GET /api/workouts/by-date/:date` that calls through. Strict `YYYY-MM-DD` regex.
+- **Frontend** ([WorkoutPanel.tsx](apps/dashboard/src/components/WorkoutPanel.tsx)) gets a DayNavigator at the top. Three regimes:
+  - **Today**: full mutable — done/partial/skipped buttons surface if no log exists yet.
+  - **Past with log**: read-only "Logged: done · <notes>".
+  - **Past or future, no log**: read-only "Not logged. Logging is only enabled for today." (the slot still shows if the day-of-week has one — e.g. future Tuesday shows `pt_tue` so you know what's planned).
+- The pattern summary + history list below the date-aware section are *unchanged* — they still show 14-day rolling state. Clicking a history row jumps the navigator to that date (small UX nicety).
+- New api method: `api.workouts.byDate(date)`.
+
+### Activity + Journal Range/Single-day toggle
+
+Both feeds now have a pill toggle: **Range** (existing rolling-window behavior — 3/7/14/30 days bucketed by day) or **Single day** (DayNavigator + just that day's entries). Defaults to Range so the panel-open experience matches what users already know.
+
+**Backend addenda — symmetric `onDate` helpers** so single-day mode hits a real per-day query instead of fetching a wide window and filtering client-side:
+
+- [activity.ts](apps/api/src/services/activity.ts) → `activityOnDate(dateStr, kind?)`. Returns `[]` on malformed date.
+- [context.ts](apps/api/src/services/context.ts) → `contextOnDate(dateStr, persona?)`. Same null-safety + same persona-OR-both filter as `recentContext`.
+- Routes [routes/activity.ts](apps/api/src/routes/activity.ts) and [routes/context.ts](apps/api/src/routes/context.ts) gained a `?date=YYYY-MM-DD` query param that takes precedence over `?days=N` when present. Strict regex on date.
+- Dashboard api methods: `api.activity.onDate(date, kind?)` and `api.context.onDate(date, persona?)`.
+
+### Tests
+
+- [activity.test.ts](apps/api/src/services/activity.test.ts) → 3 new for `activityOnDate`: local-day window correctness, malformed date returns [], kind filter still works.
+- [context.test.ts](apps/api/src/services/context.test.ts) → 3 new for `contextOnDate`: local-day window correctness, malformed date returns [], persona filter still applies.
+- [workouts.test.ts](apps/api/src/services/workouts.test.ts) → 4 new for `todaysWorkout(date)`: returns scheduled slot + null log for a non-today date with no log; finds an existing log for the (date, slot) pair; doesn't leak another day's log into the lookup; returns `{slot: null, log: null}` on weekends. This is the path the new `/by-date/:date` route exercises.
+
+Total now: **241 tests** across 30 files (231 API + 10 alexa-skill).
+
+### Deliberate design choice: keep Range as default in Activity + Journal
+
+Pure single-day filtering feels quiet on days with no activity, while the rolling-window view answers "what have I been up to lately" — the more common use case for those tabs. The DayNavigator is a deliberate opt-in for forensic "what did I do on April 30" queries, not the default lens.
 
 ---
 

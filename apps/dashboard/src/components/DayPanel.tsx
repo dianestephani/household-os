@@ -6,6 +6,7 @@ import MoodButtons from './MoodButtons.js';
 import CheckInBanner from './CheckInBanner.js';
 import CalendarDayPanel from './CalendarDayPanel.js';
 import TodayContextStrip from './TodayContextStrip.js';
+import DayNavigator, { localToday } from './DayNavigator.js';
 import type {
   CalendarEvent,
   CalendarTask,
@@ -16,35 +17,10 @@ import type {
   TodayPlan,
 } from '@household-os/shared/types';
 
-const HEADER_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: 'long',
-  month: 'long',
-  day: 'numeric',
-});
-
 const TIME_FMT = new Intl.DateTimeFormat(undefined, {
   hour: 'numeric',
   minute: '2-digit',
 });
-
-function localToday(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function formatHeader(dateStr: string): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  if (!y || !m || !d) return dateStr;
-  return HEADER_FMT.format(new Date(y, m - 1, d));
-}
-
-function shiftDate(dateStr: string, deltaDays: number): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  if (!y || !m || !d) return dateStr;
-  const date = new Date(y, m - 1, d);
-  date.setDate(date.getDate() + deltaDays);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
 
 export default function DayPanel({
   initialPlan,
@@ -89,12 +65,7 @@ export default function DayPanel({
 
   return (
     <>
-      <DayNavigator
-        date={date}
-        onChange={setDate}
-        onJumpToToday={() => setDate(todayKey)}
-        isToday={isToday}
-      />
+      <DayNavigator date={date} onChange={setDate} />
 
       {error && (
         <div className="panel" style={{ borderColor: 'var(--bad)' }}>
@@ -172,93 +143,6 @@ export default function DayPanel({
         </>
       )}
     </>
-  );
-}
-
-function DayNavigator({
-  date,
-  onChange,
-  onJumpToToday,
-  isToday,
-}: {
-  date: string;
-  onChange: (date: string) => void;
-  onJumpToToday: () => void;
-  isToday: boolean;
-}) {
-  return (
-    <div
-      className="panel"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '0.5rem',
-        flexWrap: 'wrap',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <button
-          type="button"
-          data-variant="ghost"
-          onClick={() => onChange(shiftDate(date, -1))}
-          aria-label="Previous day"
-          style={{
-            padding: '0.4rem 0.75rem',
-            border: '1px solid var(--border)',
-            borderRadius: '6px',
-            background: 'var(--panel)',
-            color: 'var(--text)',
-          }}
-        >
-          ◀
-        </button>
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => onChange(e.target.value)}
-          style={{ padding: '0.4rem' }}
-        />
-        <button
-          type="button"
-          data-variant="ghost"
-          onClick={() => onChange(shiftDate(date, 1))}
-          aria-label="Next day"
-          style={{
-            padding: '0.4rem 0.75rem',
-            border: '1px solid var(--border)',
-            borderRadius: '6px',
-            background: 'var(--panel)',
-            color: 'var(--text)',
-          }}
-        >
-          ▶
-        </button>
-      </div>
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline' }}>
-        <strong style={{ fontSize: '1.05rem' }}>{formatHeader(date)}</strong>
-        {!isToday && (
-          <button
-            type="button"
-            data-variant="ghost"
-            onClick={onJumpToToday}
-            className="muted"
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--border)',
-              borderRadius: '999px',
-              padding: '0.25rem 0.7rem',
-              fontSize: '0.78rem',
-              fontWeight: 600,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-            }}
-          >
-            Today
-          </button>
-        )}
-      </div>
-    </div>
   );
 }
 

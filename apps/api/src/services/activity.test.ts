@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ActivityLog } from '../db/models/ActivityLog.js';
-import { logActivity, recentActivity } from './activity.js';
+import { activityOnDate, logActivity, recentActivity } from './activity.js';
 
 describe('logActivity / recentActivity', () => {
   it('writes an entry with default actor=user', async () => {
@@ -55,5 +55,38 @@ describe('logActivity / recentActivity', () => {
     await expect(
       logActivity('task_done', 'x'.repeat(2)),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('activityOnDate', () => {
+  it('returns only entries that fall within the local-day window', async () => {
+    const today = new Date();
+    const yKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    await logActivity('task_done', 'today entry');
+    // Place one explicitly in the past
+    await ActivityLog.create({
+      ts: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2),
+      kind: 'task_done',
+      summary: 'two days ago',
+      actor: 'user',
+    });
+
+    const list = await activityOnDate(yKey);
+    expect(list.map((e) => e.summary)).toEqual(['today entry']);
+  });
+
+  it('returns [] for a malformed date string', async () => {
+    expect(await activityOnDate('not-a-date')).toEqual([]);
+    expect(await activityOnDate('')).toEqual([]);
+  });
+
+  it('respects the kind filter', async () => {
+    const today = new Date();
+    const yKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    await logActivity('task_done', 'a');
+    await logActivity('task_deferred', 'b');
+    const filtered = await activityOnDate(yKey, 'task_done');
+    expect(filtered.length).toBe(1);
+    expect(filtered[0]?.kind).toBe('task_done');
   });
 });

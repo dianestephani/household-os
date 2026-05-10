@@ -32,8 +32,45 @@ type View =
   | 'journal'
   | 'guide';
 
+const VIEWS: readonly View[] = [
+  'today',
+  'schedule',
+  'workouts',
+  'activity',
+  'household',
+  'nutrition',
+  'finance',
+  'routines',
+  'journal',
+  'guide',
+] as const;
+
+const VIEW_KEY = 'household-os.view';
+
+function readSavedView(): View {
+  try {
+    const v = localStorage.getItem(VIEW_KEY);
+    if (v && (VIEWS as readonly string[]).includes(v)) return v as View;
+  } catch {
+    /* localStorage unavailable */
+  }
+  return 'today';
+}
+
+function writeSavedView(view: View): void {
+  try {
+    localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    /* localStorage unavailable */
+  }
+}
+
 export default function App() {
-  const [view, setView] = useState<View>('today');
+  const [view, setViewRaw] = useState<View>(readSavedView);
+  const setView = (v: View) => {
+    writeSavedView(v);
+    setViewRaw(v);
+  };
   const [plan, setPlan] = useState<TodayPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<AuthSession | null>(() =>
@@ -74,6 +111,15 @@ export default function App() {
       <header className="app-header">
         <h1>Household OS</h1>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => window.location.reload()}
+            title="Refresh — re-fetch all data"
+            aria-label="Refresh"
+          >
+            ↻ Refresh
+          </button>
           {session && (
             <button
               type="button"

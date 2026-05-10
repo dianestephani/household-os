@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { WorkoutLog } from '../db/models/WorkoutLog.js';
-import { logWorkout, recentWorkouts, todaysSlot } from './workouts.js';
+import {
+  logWorkout,
+  recentWorkouts,
+  todaysSlot,
+  todaysWorkout,
+} from './workouts.js';
 import { ymd } from '../utils/dates.js';
 
 describe('todaysSlot', () => {
@@ -23,6 +28,48 @@ describe('todaysSlot', () => {
   it('returns null on weekends', () => {
     expect(todaysSlot(new Date(2026, 4, 9))).toBeNull();  // Sat
     expect(todaysSlot(new Date(2026, 4, 10))).toBeNull(); // Sun
+  });
+});
+
+describe('todaysWorkout(date) — what the /by-date/:date route uses', () => {
+  it('returns the scheduled slot and a null log for a non-today date with no recorded workout', async () => {
+    const tue = new Date(2026, 4, 12);
+    const result = await todaysWorkout(tue);
+    expect(result.slot?.slot_key).toBe('pt_tue');
+    expect(result.log).toBeNull();
+  });
+
+  it('finds an existing WorkoutLog for the given date + slot pair', async () => {
+    const tue = new Date(2026, 4, 12);
+    await logWorkout({
+      slot_key: 'pt_tue',
+      status: 'done',
+      date: ymd(tue),
+      notes: 'pre-session lift',
+    });
+    const result = await todaysWorkout(tue);
+    expect(result.log?.status).toBe('done');
+    expect(result.log?.notes).toBe('pre-session lift');
+  });
+
+  it("does not return another day's log when querying a specific date", async () => {
+    const tue = new Date(2026, 4, 12);
+    const thu = new Date(2026, 4, 14);
+    await logWorkout({
+      slot_key: 'pt_tue',
+      status: 'done',
+      date: ymd(tue),
+    });
+    // Tue's log shouldn't leak into Thu's lookup
+    const thuResult = await todaysWorkout(thu);
+    expect(thuResult.log).toBeNull();
+  });
+
+  it('returns { slot: null, log: null } on weekends', async () => {
+    const sat = new Date(2026, 4, 9);
+    const result = await todaysWorkout(sat);
+    expect(result.slot).toBeNull();
+    expect(result.log).toBeNull();
   });
 });
 

@@ -23,7 +23,7 @@ describe('signSession / verifySession', () => {
     expect(session.email).toBe('diane.stephani@gmail.com');
     expect(typeof session.iat).toBe('number');
     expect(typeof session.exp).toBe('number');
-    expect(session.exp! - session.iat!).toBe(24 * 60 * 60);
+    expect(session.exp! - session.iat!).toBe(30 * 24 * 60 * 60);
   });
 
   it('rejects a tampered token', () => {

@@ -32,7 +32,7 @@ export interface Session {
   exp?: number;
 }
 
-const SESSION_EXPIRY_SECONDS = 24 * 60 * 60; // 24h — sessionStorage in the browser usually clears first anyway
+const SESSION_EXPIRY_SECONDS = 30 * 24 * 60 * 60; // 30 days — paired with localStorage in the browser so a sign-in sticks across tabs + restarts
 
 let cachedOAuthClient: OAuth2Client | null = null;
 

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   addContext,
+  contextOnDate,
   recentContext,
   todaysContext,
 } from '../services/context.js';
@@ -12,8 +13,18 @@ import type {
 const router: Router = Router();
 
 router.get('/', async (req, res) => {
-  const days = Number(req.query.days ?? 7);
   const persona = req.query.persona as ContextRelatedPersona | undefined;
+  // Single-day mode wins if both `date` and `days` are provided.
+  const date = typeof req.query.date === 'string' ? req.query.date : undefined;
+  if (date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+      return;
+    }
+    res.json(await contextOnDate(date, persona));
+    return;
+  }
+  const days = Number(req.query.days ?? 7);
   res.json(await recentContext(Number.isFinite(days) ? days : 7, persona));
 });
 
