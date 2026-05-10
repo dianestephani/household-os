@@ -69,6 +69,40 @@ export interface Routine {
   also_triggers?: string[];
   last_done?: Date | string | null;
   active: boolean;
+  /**
+   * Whether this routine is something Diane could plausibly outsource (cleaner,
+   * pet sitter, lawn service, wash-and-fold, Airbnb cleaner, etc.). Default
+   * false; system seeds reasonable defaults from the inventory.
+   */
+  outsourceable?: boolean;
+  /** Typical local-market cost per occurrence in USD. */
+  outsource_cost_estimate?: number;
+}
+
+// ----- Finance -----
+
+export interface FinancialProfile {
+  _id?: string;
+  /** Singleton key — only one profile per system. */
+  key: 'self';
+  monthly_income: number;
+  monthly_fixed_expenses: number;
+  /** Any extra notes Diane wants to keep alongside the numbers. */
+  notes?: string;
+  updated_at: Date | string;
+}
+
+export interface OutsourceableSummaryItem {
+  routine_key: string;
+  routine_name: string;
+  cost_per_occurrence: number;
+  occurrences_per_month: number;
+  monthly_cost: number;
+}
+
+export interface OutsourceableSummary {
+  total_monthly_cost: number;
+  items: OutsourceableSummaryItem[];
 }
 
 export type ItemStatus = 'pending' | 'in_progress' | 'done' | 'deferred';
@@ -325,6 +359,8 @@ export interface InventoryRollingRoutine {
   estimate_minutes: number;
   energy: EnergyLevel;
   skip_if?: string;
+  outsourceable?: boolean;
+  outsource_cost_estimate?: number;
 }
 
 export interface InventoryFixedRoutine {
@@ -335,6 +371,8 @@ export interface InventoryFixedRoutine {
   estimate_minutes: number;
   energy: EnergyLevel;
   biweekly?: boolean;
+  outsourceable?: boolean;
+  outsource_cost_estimate?: number;
 }
 
 export interface InventoryZoneWeek {
@@ -351,6 +389,8 @@ export interface InventoryAsNeeded {
   estimate_minutes: number;
   energy: EnergyLevel;
   blocking?: boolean;
+  outsourceable?: boolean;
+  outsource_cost_estimate?: number;
 }
 
 export interface InventoryEventDriven {
@@ -360,6 +400,8 @@ export interface InventoryEventDriven {
   estimate_minutes: number;
   energy: EnergyLevel;
   also_triggers?: string[];
+  outsourceable?: boolean;
+  outsource_cost_estimate?: number;
 }
 
 export interface InventoryProtectedSlot {

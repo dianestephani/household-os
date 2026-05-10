@@ -6,6 +6,18 @@ import inventory from '@household-os/shared/inventory.json' with { type: 'json' 
 const url = process.env.MONGO_URL ?? 'mongodb://localhost:27017/household_os';
 await connect(url);
 
+interface InventoryFields {
+  outsourceable?: boolean;
+  outsource_cost_estimate?: number;
+}
+
+function pickOutsource(r: InventoryFields) {
+  return {
+    outsourceable: r.outsourceable ?? false,
+    outsource_cost_estimate: r.outsource_cost_estimate ?? 0,
+  };
+}
+
 const all = [
   ...inventory.rolling_routines.map((r) => ({
     key: r.key,
@@ -21,6 +33,7 @@ const all = [
     energy: r.energy,
     skip_if: (r as { skip_if?: string }).skip_if,
     active: true,
+    ...pickOutsource(r),
   })),
   ...inventory.fixed_routines.map((r) => ({
     key: r.key,
@@ -35,6 +48,7 @@ const all = [
     estimate_minutes: r.estimate_minutes,
     energy: r.energy,
     active: true,
+    ...pickOutsource(r),
   })),
   ...inventory.as_needed_routines.map((r) => ({
     key: r.key,
@@ -45,6 +59,7 @@ const all = [
     estimate_minutes: r.estimate_minutes,
     energy: r.energy,
     active: true,
+    ...pickOutsource(r),
   })),
   ...inventory.event_driven_routines.map((r) => ({
     key: r.key,
@@ -60,6 +75,7 @@ const all = [
     energy: r.energy,
     also_triggers: (r as { also_triggers?: string[] }).also_triggers,
     active: true,
+    ...pickOutsource(r),
   })),
 ];
 
