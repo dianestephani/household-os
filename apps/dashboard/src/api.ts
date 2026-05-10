@@ -18,6 +18,7 @@ import type {
   ContextEntry,
   ContextEntryInput,
   ContextRelatedPersona,
+  DayView,
   FilingStatus,
   ScheduleRangeResponse,
   FinancialProfile,
@@ -161,6 +162,9 @@ export const api = {
   schedule: {
     range: (days = 7) =>
       request<ScheduleRangeResponse>(`/schedule?days=${days}`),
+  },
+  day: {
+    get: (date: string) => request<DayView>(`/day/${date}`),
   },
   context: {
     list: (days = 7, persona?: ContextRelatedPersona) => {

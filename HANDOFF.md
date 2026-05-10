@@ -1234,6 +1234,39 @@ The user asked for "login every time I click the link" behavior. `sessionStorage
 
 ---
 
+## 39. Day navigator (Today tab is date-aware)
+
+Diane wanted to scroll through different days from the homepage to plan around what's coming. Built on top of the existing `scheduleRange` so the forecast is exactly what the Schedule tab uses for week/month — no second source of truth.
+
+### Backend
+
+- [apps/api/src/services/day.ts](apps/api/src/services/day.ts) — `getDayView(dateStr)` returns `{ date, is_today, is_past, is_future, plan, forecast, events, context }`. Three regimes:
+  - **Today**: auto-creates a TodayPlan via `generateTodayPlan(new Date())` if none exists. `forecast: []` because the plan is the source of truth.
+  - **Past**: returns the stored TodayPlan if any (else null). `forecast: []` deliberately — the rolling-routine `last_done` math reflects current state, so synthesizing a forecast for a past date would be wrong. We could reconstruct historical state from DeferralEvents + completion timestamps but that's a real project; not worth it for a navigator UX.
+  - **Future**: `plan: null`, `forecast: scheduleRange(date, 1).days[0].routines_due`.
+- Calendar events are always included via `scheduleRange` (which itself short-circuits to `[]` in NODE_ENV=test or when OAuth isn't configured).
+- Context entries are filtered by `ts ∈ [startOfDay, startOfDay+1]`.
+- Route: `GET /api/day/:date` with a strict `YYYY-MM-DD` regex on the param.
+
+### Frontend ([DayPanel.tsx](apps/dashboard/src/components/DayPanel.tsx))
+
+Replaces what was an inline today-only stack inside [App.tsx](apps/dashboard/src/App.tsx). Composes:
+
+- `DayNavigator` strip — ◀ / native `<input type="date" />` / ▶ buttons + a "Today" pill that appears when off-today.
+- For **today**: full mutable UI (CheckInBanner, CalendarDayPanel, TodayContextStrip, EnergyButtons, MoodButtons, TodayList) — the components Diane was already using. State sync between DayPanel and App.tsx via the `initialPlan` prop + `onPlanChange` callback so external mutations still flow through.
+- For **past with a stored plan**: read-only `PastPlanPanel` showing items with completed-status strikethrough and any deferred items in a small swap-pool footer.
+- For **past with no plan**: "No plan recorded — morning-gen didn't run that day."
+- For **future**: `ForecastPanel` showing `ScheduleRoutineDue[]` rows with the same source badges (Rolling/Fixed/Zone/Event) and cadence notes the Schedule tab uses.
+- Calendar events + context are always rendered when present, in compact `DayEventsPanel` / `DayContextPanel` sub-components for non-today (or the existing `CalendarDayPanel` / `TodayContextStrip` reused for today, since those have richer behavior on the live day).
+
+Mutations are deliberately scoped to today only. `swap_task`, `mark_done`, `pull_from_pool` only render when `is_today === true` — the past view is historical record, the future view is read-only forecast. If Diane later wants cross-day task movement ("shift this from Tue to Wed"), that's a separate feature and would need a new route.
+
+### Tests
+
+7 in [apps/api/src/services/day.test.ts](apps/api/src/services/day.test.ts): today auto-creates plan + suppresses forecast; today returns existing plan if one is stored; past returns stored plan with completion status preserved; past returns null when nothing was stored; future synthesizes forecast (with rolling-routine bucketing); context entries filtered correctly by local-day window; calendar disconnected in test mode → empty events.
+
+---
+
 ## 36. Route cheat sheet (current as of this Part B)
 
 | Endpoint | Method | Purpose |

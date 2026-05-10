@@ -323,6 +323,30 @@ export interface CalendarDayResponse {
   open_in_calendar_url: string;
 }
 
+// ----- Day view (single-day navigator on the Today tab) -----
+
+/**
+ * Bundle the dashboard needs to render any single day. Today and past days
+ * carry a real `plan` (today is auto-created if missing); future days carry a
+ * `forecast` of what would be due. Calendar events + context entries are
+ * always included if available.
+ */
+export interface DayView {
+  /** YYYY-MM-DD, local. */
+  date: string;
+  is_today: boolean;
+  is_past: boolean;
+  is_future: boolean;
+  /** The stored TodayPlan for that date, if any. Null for future days and for
+   *  past days where morning-gen never ran. */
+  plan: TodayPlan | null;
+  /** What would be due that day, when no real plan exists (future). Empty for
+   *  today/past — those use `plan` instead. */
+  forecast: ScheduleRoutineDue[];
+  events: CalendarEvent[];
+  context: ContextEntry[];
+}
+
 // ----- Schedule preview (week / month look-ahead) -----
 
 /**

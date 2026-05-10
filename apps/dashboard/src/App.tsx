@@ -1,18 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
-import TodayList from './components/TodayList.js';
-import EnergyButtons from './components/EnergyButtons.js';
-import MoodButtons from './components/MoodButtons.js';
 import WorkoutPanel from './components/WorkoutPanel.js';
-import CheckInBanner from './components/CheckInBanner.js';
 import ActivityFeed from './components/ActivityFeed.js';
 import PersonaLauncher from './components/PersonaLauncher.js';
 import RoutinesPage from './components/RoutinesPage.js';
 import HowToGuide from './components/HowToGuide.js';
 import FinancePanel from './components/FinancePanel.js';
 import JournalPanel from './components/JournalPanel.js';
-import TodayContextStrip from './components/TodayContextStrip.js';
-import CalendarDayPanel from './components/CalendarDayPanel.js';
+import DayPanel from './components/DayPanel.js';
 import SchedulePanel from './components/SchedulePanel.js';
 import ThemeToggle from './components/ThemeToggle.js';
 import LoginScreen from './components/LoginScreen.js';
@@ -161,17 +156,9 @@ export default function App() {
         </div>
       )}
 
-      {view === 'today' && plan && (
-        <>
-          <CheckInBanner />
-          <CalendarDayPanel />
-          <TodayContextStrip />
-          <EnergyButtons current={plan.current_energy} onChange={setPlan} />
-          <MoodButtons />
-          <TodayList plan={plan} onChange={setPlan} />
-        </>
+      {view === 'today' && (
+        <DayPanel initialPlan={plan} onPlanChange={setPlan} />
       )}
-      {view === 'today' && !plan && !error && <div className="muted">Loading…</div>}
 
       {view === 'schedule' && <SchedulePanel />}
       {view === 'workouts' && <WorkoutPanel />}
