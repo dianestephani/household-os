@@ -190,8 +190,45 @@ export default function HowToGuide() {
           accommodating.
         </p>
         <p>
-          Nutrition and Finance tabs are stubbed for v1. Asking them anything just returns a
-          "this persona is coming later" message — they don't burn API calls.
+          The Nutrition tab is still stubbed for v1. Asking it anything just returns a
+          "this persona is coming later" message. The Finance tab is now real — see below.
+        </p>
+      </Section>
+
+      <Section title="Finance tab">
+        <p>
+          Narrow scope: <strong>which household tasks can I afford to outsource right now?</strong>{' '}
+          The system stores a single monthly profile (income + fixed expenses → discretionary)
+          and per-routine outsourcing cost estimates. RocketMoney stays your transaction-level
+          dashboard — this doesn't replicate that.
+        </p>
+        <ul>
+          <li>
+            <strong>Profile editor</strong> at the top: monthly income, monthly fixed expenses,
+            optional notes. Update when reality shifts (quarterly is fine).
+          </li>
+          <li>
+            <strong>Discretionary</strong> = income − fixed. That's the budget the system uses
+            for affordability decisions.
+          </li>
+          <li>
+            <strong>Outsourceable routines table:</strong> every routine flagged{' '}
+            <Cmd>outsourceable</Cmd>, with per-occurrence cost, computed monthly cadence, and
+            monthly cost. A ✓ means it fits within your discretionary if you started with the
+            most expensive item first.
+          </li>
+          <li>
+            <strong>Persona chat:</strong> ask "what could I outsource for under $200/month?",
+            "is a biweekly cleaner viable?", "is the Airbnb pre-clean worth outsourcing if I
+            host once a month?". The persona has tools to query both your profile and the
+            outsourceable list.
+          </li>
+        </ul>
+        <p>
+          Defaults are seeded from the inventory based on typical local-market rates; edit any
+          per-routine cost via the persona chat ("set yard pickup to $40 per visit") or via the
+          API. RocketMoney CSV import is on the future-iterations list per HANDOFF.md §17 if
+          you ever want categorized transaction history inside the system.
         </p>
       </Section>
 

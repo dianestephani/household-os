@@ -9,6 +9,7 @@ import ActivityFeed from './components/ActivityFeed.js';
 import ChatPanel from './components/ChatPanel.js';
 import RoutinesPage from './components/RoutinesPage.js';
 import HowToGuide from './components/HowToGuide.js';
+import FinancePanel from './components/FinancePanel.js';
 import type { TodayPlan } from '@household-os/shared/types';
 
 type View =
@@ -114,7 +115,7 @@ export default function App() {
 
       {view === 'household' && <ChatPanel persona="household" onUpdate={refresh} />}
       {view === 'nutrition' && <ChatPanel persona="nutrition" stub />}
-      {view === 'finance' && <ChatPanel persona="finance" stub />}
+      {view === 'finance' && <FinancePanel />}
       {view === 'routines' && <RoutinesPage />}
       {view === 'guide' && <HowToGuide />}
     </div>

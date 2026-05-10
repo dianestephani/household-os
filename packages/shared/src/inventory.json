@@ -7,19 +7,46 @@
   },
 
   "rolling_routines": [
-    { "key": "litter_scoop",   "name": "Scoop both litter boxes",  "category": "pet",      "zone": "bathrooms", "interval_days": 1, "flex_days": 1, "estimate_minutes": 8,  "energy": "low" },
-    { "key": "floors_daily",   "name": "Sweep/vacuum pet zones",   "category": "cleaning", "zone": "common",    "interval_days": 1, "flex_days": 1, "estimate_minutes": 12, "energy": "low" },
-    { "key": "kitchen_reset",  "name": "Counter + sink reset",     "category": "cleaning", "zone": "kitchen",   "interval_days": 1, "flex_days": 1, "estimate_minutes": 8,  "energy": "low" },
-    { "key": "pet_food_water", "name": "Top off food/water",       "category": "pet",      "zone": "kitchen",   "interval_days": 1, "flex_days": 0, "estimate_minutes": 4,  "energy": "low" },
-    { "key": "litter_full",    "name": "Full litter change",       "category": "pet",      "zone": "bathrooms", "interval_days": 7, "flex_days": 2, "estimate_minutes": 20, "energy": "medium" },
-    { "key": "water_fountain", "name": "Clean cat water fountain", "category": "pet",      "zone": "kitchen",   "interval_days": 7, "flex_days": 3, "estimate_minutes": 10, "energy": "low" },
-    { "key": "yard_pickup",    "name": "Yard pickup",              "category": "pet",      "zone": "yard",      "interval_days": 7, "flex_days": 2, "estimate_minutes": 25, "energy": "medium", "skip_if": "landscaper_this_week" }
+    { "key": "litter_scoop",   "name": "Scoop both litter boxes",  "category": "pet",      "zone": "bathrooms", "interval_days": 1, "flex_days": 1, "estimate_minutes": 8,  "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "floors_daily",   "name": "Sweep/vacuum pet zones",   "category": "cleaning", "zone": "common",    "interval_days": 1, "flex_days": 1, "estimate_minutes": 12, "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0  },
+    { "key": "kitchen_reset",  "name": "Counter + sink reset",     "category": "cleaning", "zone": "kitchen",   "interval_days": 1, "flex_days": 1, "estimate_minutes": 8,  "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0  },
+    { "key": "pet_food_water", "name": "Top off food/water",       "category": "pet",      "zone": "kitchen",   "interval_days": 1, "flex_days": 0, "estimate_minutes": 4,  "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "litter_full",    "name": "Full litter change",       "category": "pet",      "zone": "bathrooms", "interval_days": 7, "flex_days": 2, "estimate_minutes": 20, "energy": "medium", "outsourceable": false, "outsource_cost_estimate": 0  },
+    { "key": "water_fountain", "name": "Clean cat water fountain", "category": "pet",      "zone": "kitchen",   "interval_days": 7, "flex_days": 3, "estimate_minutes": 10, "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "yard_pickup",    "name": "Yard pickup",              "category": "pet",      "zone": "yard",      "interval_days": 30, "flex_days": 5, "estimate_minutes": 25, "energy": "medium", "skip_if": "landscaper_this_week", "outsourceable": true, "outsource_cost_estimate": 86 },
+
+    { "key": "toilet_deep",      "name": "Toilet deep clean (bowl + base + behind)", "category": "cleaning", "zone": "bathrooms", "interval_days": 14,  "flex_days": 3,  "estimate_minutes": 15, "energy": "low",    "outsourceable": true,  "outsource_cost_estimate": 15 },
+    { "key": "shower_scrub",     "name": "Shower / tub scrub",                       "category": "cleaning", "zone": "bathrooms", "interval_days": 30,  "flex_days": 5,  "estimate_minutes": 30, "energy": "medium", "outsourceable": true,  "outsource_cost_estimate": 30 },
+    { "key": "mirror_glass",     "name": "Mirror + glass polish",                    "category": "cleaning", "zone": "bathrooms", "interval_days": 7,   "flex_days": 2,  "estimate_minutes": 5,  "energy": "low",    "outsourceable": true,  "outsource_cost_estimate": 5  },
+
+    { "key": "fridge_cleanout",  "name": "Fridge clean-out (toss expired + wipe)",   "category": "cleaning", "zone": "kitchen",   "interval_days": 30,  "flex_days": 5,  "estimate_minutes": 20, "energy": "medium", "outsourceable": false, "outsource_cost_estimate": 0  },
+    { "key": "pantry_check",     "name": "Pantry organize + expired check",          "category": "cleaning", "zone": "kitchen",   "interval_days": 60,  "flex_days": 7,  "estimate_minutes": 30, "energy": "medium", "outsourceable": false, "outsource_cost_estimate": 0  },
+    { "key": "oven_clean",       "name": "Oven deep clean",                          "category": "cleaning", "zone": "kitchen",   "interval_days": 90,  "flex_days": 14, "estimate_minutes": 45, "energy": "medium", "outsourceable": true,  "outsource_cost_estimate": 100 },
+
+    { "key": "sheets_wash",      "name": "Sheets + pillowcase wash",                 "category": "personal", "zone": "bedroom",   "interval_days": 14,  "flex_days": 3,  "estimate_minutes": 10, "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0  },
+    { "key": "bedroom_dust",     "name": "Dust ceiling fan + nightstands",           "category": "cleaning", "zone": "bedroom",   "interval_days": 30,  "flex_days": 5,  "estimate_minutes": 15, "energy": "low",    "outsourceable": true,  "outsource_cost_estimate": 15 },
+    { "key": "under_bed_vacuum", "name": "Vacuum under bed",                         "category": "cleaning", "zone": "bedroom",   "interval_days": 30,  "flex_days": 5,  "estimate_minutes": 10, "energy": "medium", "outsourceable": true,  "outsource_cost_estimate": 10 },
+    { "key": "closet_declutter", "name": "Closet / drawer declutter",                "category": "personal", "zone": "bedroom",   "interval_days": 180, "flex_days": 14, "estimate_minutes": 60, "energy": "high",   "outsourceable": false, "outsource_cost_estimate": 0  },
+
+    { "key": "nail_trims",       "name": "Pet nail trims",                           "category": "pet",      "zone": "whole-house", "interval_days": 35, "flex_days": 5, "estimate_minutes": 15, "energy": "medium", "outsourceable": true,  "outsource_cost_estimate": 25 },
+    { "key": "dog_bath",         "name": "Dog bath + brushing",                      "category": "pet",      "zone": "whole-house", "interval_days": 35, "flex_days": 5, "estimate_minutes": 30, "energy": "medium", "outsourceable": true,  "outsource_cost_estimate": 75 },
+    { "key": "monthly_meds",     "name": "Pet monthly meds (heartworm + flea/tick)", "category": "pet",      "zone": "whole-house", "interval_days": 30, "flex_days": 2, "estimate_minutes": 5,  "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0  },
+
+    { "key": "groceries_weekly",     "name": "Weekly grocery run",       "category": "personal", "zone": "whole-house", "interval_days": 7,   "flex_days": 1,  "estimate_minutes": 60,  "energy": "medium", "outsourceable": true,  "outsource_cost_estimate": 20 },
+    { "key": "meal_prep_weekly",     "name": "Weekly meal prep",         "category": "personal", "zone": "kitchen",     "interval_days": 7,   "flex_days": 1,  "estimate_minutes": 120, "energy": "high",   "outsourceable": true,  "outsource_cost_estimate": 70 },
+    { "key": "personal_laundry",     "name": "Personal laundry",         "category": "personal", "zone": "whole-house", "interval_days": 7,   "flex_days": 1,  "estimate_minutes": 10,  "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0  },
+    { "key": "oil_change",           "name": "Oil change",               "category": "personal", "zone": "whole-house", "interval_days": 120, "flex_days": 14, "estimate_minutes": 30,  "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0  },
+    { "key": "registration_renewal", "name": "Car registration renewal", "category": "personal", "zone": "whole-house", "interval_days": 365, "flex_days": 14, "estimate_minutes": 15,  "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0  },
+    { "key": "car_inspection",       "name": "Car inspection",           "category": "personal", "zone": "whole-house", "interval_days": 365, "flex_days": 14, "estimate_minutes": 30,  "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0  },
+    { "key": "tire_rotation",        "name": "Tire rotation",            "category": "personal", "zone": "whole-house", "interval_days": 180, "flex_days": 14, "estimate_minutes": 30,  "energy": "low",    "outsourceable": false, "outsource_cost_estimate": 0  },
+
+    { "key": "regular_cleaning",     "name": "Regular housecleaning (whole-house)", "category": "cleaning", "zone": "whole-house", "interval_days": 21, "flex_days": 3, "estimate_minutes": 210, "energy": "high", "outsourceable": true, "outsource_cost_estimate": 380 }
   ],
 
   "fixed_routines": [
-    { "key": "trash_prep",    "name": "Bins to curb + swap liners", "day": "tue", "time_window": "evening", "estimate_minutes": 20, "energy": "low" },
-    { "key": "trash_return",  "name": "Bring bins back",            "day": "wed", "time_window": "evening", "estimate_minutes": 5,  "energy": "low" },
-    { "key": "recycle_addon", "name": "Recycle bin out",            "day": "tue", "time_window": "evening", "estimate_minutes": 5,  "energy": "low", "biweekly": true }
+    { "key": "trash_prep",    "name": "Bins to curb + swap liners", "day": "tue", "time_window": "evening", "estimate_minutes": 20, "energy": "low",  "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "trash_return",  "name": "Bring bins back",            "day": "wed", "time_window": "evening", "estimate_minutes": 5,  "energy": "low",  "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "recycle_addon", "name": "Recycle bin out",            "day": "tue", "time_window": "evening", "estimate_minutes": 5,  "energy": "low",  "biweekly": true, "outsourceable": false, "outsource_cost_estimate": 0 }
   ],
 
   "zone_rotation_6wk": [
@@ -32,17 +59,17 @@
   ],
 
   "as_needed_routines": [
-    { "key": "mop",               "name": "Mop floors",              "trigger": "user_flag", "estimate_minutes": 25, "energy": "medium" },
-    { "key": "laundromat_pet",    "name": "Laundromat: pet bedding", "trigger": "user_flag", "estimate_minutes": 90, "energy": "medium", "blocking": true },
-    { "key": "laundromat_airbnb", "name": "Laundromat: Airbnb",      "trigger": "user_flag", "estimate_minutes": 90, "energy": "medium", "blocking": true }
+    { "key": "mop",               "name": "Mop floors",              "trigger": "user_flag", "estimate_minutes": 25, "energy": "medium",                     "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "laundromat_pet",    "name": "Laundromat: pet bedding", "trigger": "user_flag", "estimate_minutes": 90, "energy": "medium", "blocking": true,  "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "laundromat_airbnb", "name": "Laundromat: Airbnb",      "trigger": "user_flag", "estimate_minutes": 90, "energy": "medium", "blocking": true,  "outsourceable": false, "outsource_cost_estimate": 0 }
   ],
 
   "event_driven_routines": [
-    { "key": "airbnb_pre",  "name": "Airbnb pre-checkin clean",   "trigger": "airbnb_checkin_minus_1d",   "estimate_minutes": 60, "energy": "high",   "also_triggers": ["yard_pickup"] },
-    { "key": "airbnb_post", "name": "Airbnb post-checkout reset", "trigger": "airbnb_checkout_same_day",  "estimate_minutes": 45, "energy": "medium" },
-    { "key": "dogsit_pre",  "name": "Dogsit arrival prep",        "trigger": "dogsit_arrival_minus_1d",   "estimate_minutes": 20, "energy": "low",    "also_triggers": ["yard_pickup"] },
-    { "key": "dogsit_post", "name": "Dogsit departure cleanup",   "trigger": "dogsit_departure_same_day", "estimate_minutes": 20, "energy": "low" },
-    { "key": "landscaper",  "name": "Landscaper visit (FYI)",     "trigger": "landscaper_date",           "estimate_minutes": 0,  "energy": "low" }
+    { "key": "airbnb_pre",  "name": "Airbnb pre-checkin clean",   "trigger": "airbnb_checkin_minus_1d",   "estimate_minutes": 60, "energy": "high",   "also_triggers": ["yard_pickup"], "outsourceable": true,  "outsource_cost_estimate": 380 },
+    { "key": "airbnb_post", "name": "Airbnb post-checkout reset", "trigger": "airbnb_checkout_same_day",  "estimate_minutes": 45, "energy": "medium",                                  "outsourceable": true,  "outsource_cost_estimate": 380 },
+    { "key": "dogsit_pre",  "name": "Dogsit arrival prep",        "trigger": "dogsit_arrival_minus_1d",   "estimate_minutes": 20, "energy": "low",    "also_triggers": ["yard_pickup"], "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "dogsit_post", "name": "Dogsit departure cleanup",   "trigger": "dogsit_departure_same_day", "estimate_minutes": 20, "energy": "low",                                     "outsourceable": false, "outsource_cost_estimate": 0 },
+    { "key": "landscaper",  "name": "Landscaper visit (FYI)",     "trigger": "landscaper_date",           "estimate_minutes": 0,  "energy": "low",                                     "outsourceable": false, "outsource_cost_estimate": 0 }
   ],
 
   "protected_slots": [

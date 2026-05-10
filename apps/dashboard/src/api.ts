@@ -14,7 +14,18 @@ import type {
   CheckIn,
   ActivityKind,
   ActivityLogEntry,
+  FinancialProfile,
+  OutsourceableSummary,
 } from '@household-os/shared/types';
+
+export interface AffordabilityReport {
+  profile: FinancialProfile;
+  discretionary_monthly: number;
+  outsourceable: OutsourceableSummary;
+  fits_within_discretionary: OutsourceableSummary['items'];
+  exceeds_discretionary: OutsourceableSummary['items'];
+  rationale: string;
+}
 
 const TOKEN = import.meta.env.VITE_API_TOKEN ?? '';
 const BASE = import.meta.env.VITE_API_BASE ?? '/api';
@@ -120,6 +131,16 @@ export const api = {
       if (kind) qs.set('kind', kind);
       return request<ActivityLogEntry[]>(`/activity?${qs.toString()}`);
     },
+  },
+  finance: {
+    profile: () => request<FinancialProfile>('/finance/profile'),
+    setProfile: (patch: Partial<FinancialProfile>) =>
+      request<FinancialProfile>('/finance/profile', {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      }),
+    outsourceable: () => request<OutsourceableSummary>('/finance/outsourceable'),
+    affordability: () => request<AffordabilityReport>('/finance/affordability'),
   },
   chat: (
     persona: string,

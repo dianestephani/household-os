@@ -25,6 +25,12 @@ import {
   listRecentAssessments,
 } from '../services/zones.js';
 import { recentActivity } from '../services/activity.js';
+import {
+  affordabilityReport,
+  getFinancialProfile,
+  listOutsourceable,
+  setFinancialProfile,
+} from '../services/finance.js';
 import type { ActivityKind } from '@household-os/shared/types';
 import type {
   DeferReasonCode,
@@ -124,14 +130,38 @@ export const householdTools: Record<string, ToolImpl> = {
     ),
 };
 
+export const financeTools: Record<string, ToolImpl> = {
+  get_financial_profile: async () => getFinancialProfile(),
+
+  set_financial_profile: async (input) =>
+    setFinancialProfile({
+      monthly_income: input.monthly_income as number | undefined,
+      monthly_fixed_expenses: input.monthly_fixed_expenses as number | undefined,
+      notes: input.notes as string | undefined,
+    }),
+
+  list_outsourceable_routines: async () => listOutsourceable(),
+
+  affordability_report: async () => affordabilityReport(),
+
+  edit_routine_outsourcing: async (input) =>
+    patchRoutine(input.routine_key as string, {
+      outsourceable: input.outsourceable as boolean | undefined,
+      outsource_cost_estimate: input.outsource_cost_estimate as
+        | number
+        | undefined,
+    }),
+};
+
 export const stubTools: Record<string, ToolImpl> = {
   not_implemented: async () => ({
     message:
-      "This persona isn't built yet. Diane is starting with Household Ops; nutrition and finance come later.",
+      "This persona isn't built yet. Diane is starting with Household Ops; nutrition comes later.",
   }),
 };
 
 export function getToolsForPersona(name: string): Record<string, ToolImpl> {
   if (name === 'household') return householdTools;
+  if (name === 'finance') return financeTools;
   return stubTools;
 }

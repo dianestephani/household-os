@@ -44,12 +44,9 @@ describe('chat — stub personas short-circuit', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('returns canned reply for finance without calling Claude', async () => {
-    const { client, create } = makeClient([]);
-    const res = await chat('finance', [{ role: 'user', content: 'budget?' }], client);
-    expect(res.reply).toMatch(/stub mode/i);
-    expect(create).not.toHaveBeenCalled();
-  });
+  // Finance is no longer a stub — it has real tools (get_financial_profile,
+  // affordability_report, etc.). Its tool-loop behavior is covered by the
+  // finance service tests.
 });
 
 describe('chat — household persona', () => {

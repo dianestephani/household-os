@@ -26,6 +26,8 @@ const RoutineSchema = new Schema(
     also_triggers: [String],
     last_done: Date,
     active: { type: Boolean, default: true },
+    outsourceable: { type: Boolean, default: false },
+    outsource_cost_estimate: { type: Number, default: 0 },
   },
   { timestamps: true },
 );
