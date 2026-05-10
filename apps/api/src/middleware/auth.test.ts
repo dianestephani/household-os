@@ -55,7 +55,7 @@ describe('requireToken middleware', () => {
 
   it('accepts a valid session JWT when Google auth is configured', () => {
     process.env.GOOGLE_OAUTH_CLIENT_ID = 'fake-client-id';
-    const token = signSession('diane@onemoregame.com');
+    const token = signSession('diane.stephani@gmail.com');
     const next = vi.fn() as unknown as NextFunction;
     const res = makeRes();
     requireToken(makeReq(`Bearer ${token}`), res, next);
@@ -75,7 +75,7 @@ describe('requireToken middleware', () => {
   it('accepts EITHER API_TOKEN or a valid JWT when both are configured', () => {
     process.env.API_TOKEN = 'legacy-token';
     process.env.GOOGLE_OAUTH_CLIENT_ID = 'fake-client-id';
-    const token = signSession('diane@onemoregame.com');
+    const token = signSession('diane.stephani@gmail.com');
 
     const nextA = vi.fn() as unknown as NextFunction;
     requireToken(makeReq('Bearer legacy-token'), makeRes(), nextA);

@@ -9,7 +9,7 @@ const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
   process.env.JWT_SECRET = 'a-very-long-test-secret-string';
-  process.env.AUTH_ALLOWED_EMAIL = 'diane@onemoregame.com';
+  process.env.AUTH_ALLOWED_EMAIL = 'diane.stephani@gmail.com';
 });
 
 afterEach(() => {
@@ -18,22 +18,22 @@ afterEach(() => {
 
 describe('signSession / verifySession', () => {
   it('round-trips an email through the signed session', () => {
-    const token = signSession('diane@onemoregame.com');
+    const token = signSession('diane.stephani@gmail.com');
     const session = verifySession(token);
-    expect(session.email).toBe('diane@onemoregame.com');
+    expect(session.email).toBe('diane.stephani@gmail.com');
     expect(typeof session.iat).toBe('number');
     expect(typeof session.exp).toBe('number');
     expect(session.exp! - session.iat!).toBe(24 * 60 * 60);
   });
 
   it('rejects a tampered token', () => {
-    const token = signSession('diane@onemoregame.com');
+    const token = signSession('diane.stephani@gmail.com');
     const tampered = token.slice(0, -2) + 'xx';
     expect(() => verifySession(tampered)).toThrow();
   });
 
   it('rejects a token signed with a different secret', () => {
-    const token = signSession('diane@onemoregame.com');
+    const token = signSession('diane.stephani@gmail.com');
     process.env.JWT_SECRET = 'a-different-secret-also-long';
     expect(() => verifySession(token)).toThrow();
   });
@@ -51,26 +51,26 @@ describe('signSession / verifySession', () => {
 
 describe('isAllowedEmail', () => {
   it('matches the only allowlisted email', () => {
-    expect(isAllowedEmail('diane@onemoregame.com')).toBe(true);
+    expect(isAllowedEmail('diane.stephani@gmail.com')).toBe(true);
   });
 
   it('is case-insensitive on both sides', () => {
-    process.env.AUTH_ALLOWED_EMAIL = 'Diane@OneMoreGame.com';
-    expect(isAllowedEmail('diane@onemoregame.com')).toBe(true);
-    expect(isAllowedEmail('DIANE@ONEMOREGAME.COM')).toBe(true);
+    process.env.AUTH_ALLOWED_EMAIL = 'Diane.Stephani@Gmail.com';
+    expect(isAllowedEmail('diane.stephani@gmail.com')).toBe(true);
+    expect(isAllowedEmail('DIANE.STEPHANI@GMAIL.COM')).toBe(true);
   });
 
   it('supports comma-separated multi-allowlist', () => {
-    process.env.AUTH_ALLOWED_EMAIL = 'diane@onemoregame.com, hire@me.io';
-    expect(isAllowedEmail('diane@onemoregame.com')).toBe(true);
+    process.env.AUTH_ALLOWED_EMAIL = 'diane.stephani@gmail.com, hire@me.io';
+    expect(isAllowedEmail('diane.stephani@gmail.com')).toBe(true);
     expect(isAllowedEmail('hire@me.io')).toBe(true);
     expect(isAllowedEmail('stranger@example.com')).toBe(false);
   });
 
   it('rejects anyone if the allowlist is empty / unset', () => {
     delete process.env.AUTH_ALLOWED_EMAIL;
-    expect(isAllowedEmail('diane@onemoregame.com')).toBe(false);
+    expect(isAllowedEmail('diane.stephani@gmail.com')).toBe(false);
     process.env.AUTH_ALLOWED_EMAIL = '   ';
-    expect(isAllowedEmail('diane@onemoregame.com')).toBe(false);
+    expect(isAllowedEmail('diane.stephani@gmail.com')).toBe(false);
   });
 });

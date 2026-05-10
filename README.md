@@ -116,7 +116,7 @@ You need a *separate* OAuth 2.0 Client from the one used by Google Calendar — 
 5. Save. Copy the Client ID.
 6. Set it as `GOOGLE_OAUTH_CLIENT_ID` on the API service and `VITE_GOOGLE_OAUTH_CLIENT_ID` on the dashboard (Render → Environment for each service). Locally, put both in their respective `.env` files.
 7. Also set:
-   - `AUTH_ALLOWED_EMAIL=diane@onemoregame.com` (comma-separated if you want to allow a second account)
+   - `AUTH_ALLOWED_EMAIL=diane.stephani@gmail.com` (the personal Gmail Diane uses for the Google OAuth flow — *not* the OMG work email. Comma-separated if you want to allow a second account.)
    - `JWT_SECRET=$(openssl rand -hex 32)` — must be at least 16 chars
 
 That's it — redeploy and the dashboard will gate on Google sign-in.
