@@ -1426,9 +1426,9 @@ Both feeds now have a pill toggle: **Range** (existing rolling-window behavior �
 
 - [activity.test.ts](apps/api/src/services/activity.test.ts) → 3 new for `activityOnDate`: local-day window correctness, malformed date returns [], kind filter still works.
 - [context.test.ts](apps/api/src/services/context.test.ts) → 3 new for `contextOnDate`: local-day window correctness, malformed date returns [], persona filter still applies.
-- Workout-by-date route → covered indirectly through the existing `todaysWorkout(date)` service tests; the route is a thin wrapper with a strict regex guard.
+- [workouts.test.ts](apps/api/src/services/workouts.test.ts) → 4 new for `todaysWorkout(date)`: returns scheduled slot + null log for a non-today date with no log; finds an existing log for the (date, slot) pair; doesn't leak another day's log into the lookup; returns `{slot: null, log: null}` on weekends. This is the path the new `/by-date/:date` route exercises.
 
-Total now: **237 tests** across 30 files (227 API + 10 alexa-skill).
+Total now: **241 tests** across 30 files (231 API + 10 alexa-skill).
 
 ### Deliberate design choice: keep Range as default in Activity + Journal
 
