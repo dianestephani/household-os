@@ -36,3 +36,18 @@ export async function recentActivity(days = 14, kind?: ActivityKind) {
   if (kind) q.kind = kind;
   return ActivityLog.find(q).sort({ ts: -1 }).limit(500).lean();
 }
+
+/**
+ * Activity entries that occurred during the local-midnight window of a given
+ * YYYY-MM-DD date. Powers the "what did I do on this day" view in the
+ * dashboard's day-navigated activity feed.
+ */
+export async function activityOnDate(dateStr: string, kind?: ActivityKind) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return [];
+  const start = new Date(y, m - 1, d);
+  const end = new Date(y, m - 1, d + 1);
+  const q: Record<string, unknown> = { ts: { $gte: start, $lt: end } };
+  if (kind) q.kind = kind;
+  return ActivityLog.find(q).sort({ ts: -1 }).limit(500).lean();
+}

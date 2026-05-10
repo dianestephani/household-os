@@ -4,6 +4,7 @@ import {
   recentWorkouts,
   todaysWorkout,
 } from '../services/workouts.js';
+import { parseYmd } from '../utils/dates.js';
 import type {
   EnergyLevel,
   MoodLevel,
@@ -23,6 +24,15 @@ router.get('/', async (req, res) => {
 
 router.get('/today', async (_req, res) => {
   res.json(await todaysWorkout());
+});
+
+router.get('/by-date/:date', async (req, res) => {
+  const date = req.params.date;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+    return;
+  }
+  res.json(await todaysWorkout(parseYmd(date)));
 });
 
 router.post('/', async (req, res) => {

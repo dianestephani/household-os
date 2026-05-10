@@ -125,6 +125,11 @@ export const api = {
         slot: { slot_key: WorkoutSlotKey; name: string; type: string } | null;
         log: WorkoutLog | null;
       }>('/workouts/today'),
+    byDate: (date: string) =>
+      request<{
+        slot: { slot_key: WorkoutSlotKey; name: string; type: string } | null;
+        log: WorkoutLog | null;
+      }>(`/workouts/by-date/${date}`),
     list: (days = 14) => request<WorkoutLog[]>(`/workouts?days=${days}`),
     log: (input: {
       slot_key: WorkoutSlotKey;
@@ -158,6 +163,11 @@ export const api = {
       if (kind) qs.set('kind', kind);
       return request<ActivityLogEntry[]>(`/activity?${qs.toString()}`);
     },
+    onDate: (date: string, kind?: ActivityKind) => {
+      const qs = new URLSearchParams({ date });
+      if (kind) qs.set('kind', kind);
+      return request<ActivityLogEntry[]>(`/activity?${qs.toString()}`);
+    },
   },
   calendar: {
     today: () => request<CalendarDayResponse>('/calendar/today'),
@@ -187,6 +197,11 @@ export const api = {
   context: {
     list: (days = 7, persona?: ContextRelatedPersona) => {
       const qs = new URLSearchParams({ days: String(days) });
+      if (persona) qs.set('persona', persona);
+      return request<ContextEntry[]>(`/context?${qs.toString()}`);
+    },
+    onDate: (date: string, persona?: ContextRelatedPersona) => {
+      const qs = new URLSearchParams({ date });
       if (persona) qs.set('persona', persona);
       return request<ContextEntry[]>(`/context?${qs.toString()}`);
     },

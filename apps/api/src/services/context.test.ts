@@ -3,6 +3,7 @@ import { ContextEntry } from '../db/models/ContextEntry.js';
 import { ActivityLog } from '../db/models/ActivityLog.js';
 import {
   addContext,
+  contextOnDate,
   recentContext,
   todaysContext,
 } from './context.js';
@@ -117,5 +118,35 @@ describe('todaysContext', () => {
     await addContext({ text: 'today' });
     const today = await todaysContext();
     expect(today.map((e) => e.text)).toEqual(['today']);
+  });
+});
+
+describe('contextOnDate', () => {
+  it('returns only entries within the local-day window', async () => {
+    const today = new Date();
+    const yKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    await ContextEntry.create({
+      ts: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2),
+      text: 'two days ago',
+      related_persona: 'both',
+      source: 'api',
+    });
+    await addContext({ text: 'today' });
+    const list = await contextOnDate(yKey);
+    expect(list.map((e) => e.text)).toEqual(['today']);
+  });
+
+  it('returns [] for a malformed date string', async () => {
+    expect(await contextOnDate('not-a-date')).toEqual([]);
+    expect(await contextOnDate('')).toEqual([]);
+  });
+
+  it('persona filter still applies in single-day mode', async () => {
+    const today = new Date();
+    const yKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    await addContext({ text: 'household-only', related_persona: 'household' });
+    await addContext({ text: 'finance-only', related_persona: 'finance' });
+    const finance = await contextOnDate(yKey, 'finance');
+    expect(finance.map((e) => e.text).sort()).toEqual(['finance-only']);
   });
 });

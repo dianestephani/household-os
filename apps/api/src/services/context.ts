@@ -87,6 +87,26 @@ export async function todaysContext(
   return docs as unknown as ContextEntryType[];
 }
 
+/**
+ * Entries that fall within a specific local-day window. Powers the per-day
+ * filter in the dashboard's journal navigator.
+ */
+export async function contextOnDate(
+  dateStr: string,
+  persona?: ContextRelatedPersona,
+): Promise<ContextEntryType[]> {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return [];
+  const start = new Date(y, m - 1, d);
+  const end = new Date(y, m - 1, d + 1);
+  const q: Record<string, unknown> = { ts: { $gte: start, $lt: end } };
+  if (persona && persona !== 'both') {
+    q.related_persona = { $in: [persona, 'both'] };
+  }
+  const docs = await ContextEntry.find(q).sort({ ts: -1 }).lean();
+  return docs as unknown as ContextEntryType[];
+}
+
 function summarize(text: string): string {
   const oneLine = text.replace(/\s+/g, ' ').trim();
   return oneLine.length <= 80 ? `Logged context: "${oneLine}"` : `Logged context: "${oneLine.slice(0, 77)}…"`;

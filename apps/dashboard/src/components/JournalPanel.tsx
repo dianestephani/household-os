@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import DayNavigator, { formatHeader, localToday } from './DayNavigator.js';
 import type {
   ContextEntry,
   ContextRelatedPersona,
@@ -16,9 +17,13 @@ const COMMON_BLOCKED = [
   'sleep',
 ];
 
+type Mode = 'range' | 'day';
+
 export default function JournalPanel() {
   const [entries, setEntries] = useState<ContextEntry[]>([]);
+  const [mode, setMode] = useState<Mode>('range');
   const [days, setDays] = useState(14);
+  const [date, setDate] = useState(localToday());
   const [text, setText] = useState('');
   const [showStructured, setShowStructured] = useState(false);
   const [tagsInput, setTagsInput] = useState('');
@@ -29,13 +34,17 @@ export default function JournalPanel() {
   const [persona, setPersona] = useState<ContextRelatedPersona>('both');
   const [busy, setBusy] = useState(false);
 
-  async function refresh(d = days) {
-    setEntries(await api.context.list(d));
+  async function refresh() {
+    if (mode === 'day') {
+      setEntries(await api.context.onDate(date));
+    } else {
+      setEntries(await api.context.list(days));
+    }
   }
 
   useEffect(() => {
-    void refresh(days);
-  }, [days]);
+    void refresh();
+  }, [mode, days, date]);
 
   function toggleBlocked(name: string) {
     const next = new Set(blockedSet);
@@ -218,23 +227,64 @@ export default function JournalPanel() {
       </div>
 
       <div className="panel">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <strong>Recent entries</strong>
-          <span className="muted">last</span>
-          <select
-            value={days}
-            onChange={(e) => setDays(Number(e.target.value))}
-            style={{ padding: '0.2rem' }}
-          >
-            <option value={7}>7 days</option>
-            <option value={14}>14 days</option>
-            <option value={30}>30 days</option>
-            <option value={90}>90 days</option>
-          </select>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <strong style={{ flex: 1 }}>Entries</strong>
+          <div style={{ display: 'flex', gap: '0.3rem' }}>
+            {(['range', 'day'] as Mode[]).map((m) => {
+              const active = m === mode;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  style={{
+                    padding: '0.3rem 0.75rem',
+                    borderRadius: '999px',
+                    border: '1px solid var(--border)',
+                    background: active ? 'var(--accent)' : 'var(--panel)',
+                    color: active ? 'var(--accent-fg)' : 'var(--text)',
+                    fontSize: '0.82rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  {m === 'range' ? 'Range' : 'Single day'}
+                </button>
+              );
+            })}
+          </div>
         </div>
+        {mode === 'range' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <span className="muted">last</span>
+            <select
+              value={days}
+              onChange={(e) => setDays(Number(e.target.value))}
+              style={{ padding: '0.2rem' }}
+            >
+              <option value={7}>7 days</option>
+              <option value={14}>14 days</option>
+              <option value={30}>30 days</option>
+              <option value={90}>90 days</option>
+            </select>
+          </div>
+        )}
+      </div>
+
+      {mode === 'day' && <DayNavigator date={date} onChange={setDate} />}
+
+      <div className="panel">
         {entries.length === 0 ? (
-          <div className="muted" style={{ marginTop: '0.5rem' }}>
-            No entries in the last {days} days.
+          <div className="muted">
+            {mode === 'range'
+              ? `No entries in the last ${days} days.`
+              : `No entries on ${formatHeader(date)}.`}
           </div>
         ) : (
           <ul style={{ listStyle: 'none', padding: 0, marginTop: '0.5rem' }}>
