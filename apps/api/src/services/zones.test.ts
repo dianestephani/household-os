@@ -3,6 +3,7 @@ import { AdHocTask } from '../db/models/AdHocTask.js';
 import { ZoneAssessment } from '../db/models/ZoneAssessment.js';
 import {
   cancelAdHocTask,
+  createAdHocTask,
   latestAssessmentByZone,
   listOpenAdHocTasks,
   markAdHocTaskDone,
@@ -10,6 +11,7 @@ import {
   recordAssessment,
   ZONES,
 } from './zones.js';
+import { ActivityLog } from '../db/models/ActivityLog.js';
 
 describe('pickNextZone', () => {
   it('returns a never-assessed zone first', async () => {
@@ -148,5 +150,52 @@ describe('latestAssessmentByZone', () => {
     expect(latest.kitchen?.level).toBe('fine');
     expect(latest.yard?.level).toBe('rough');
     expect(latest.bathrooms).toBeUndefined();
+  });
+});
+
+describe('createAdHocTask', () => {
+  it('creates a task with sensible defaults from a name only', async () => {
+    const task = await createAdHocTask({ name: 'call the vet' });
+    expect(task.name).toBe('call the vet');
+    expect(task.zone).toBe('whole-house');
+    expect(task.severity).toBe('meh');
+    expect(task.estimate_minutes).toBe(15); // meh default
+    expect(task.energy).toBe('medium');
+    expect(task.status).toBe('open');
+    expect(task.source).toBe('manual');
+  });
+
+  it('honors caller-supplied zone / severity / source', async () => {
+    const task = await createAdHocTask({
+      name: 'scrub the shower',
+      zone: 'bathrooms',
+      severity: 'rough',
+      source: 'voice',
+    });
+    expect(task.zone).toBe('bathrooms');
+    expect(task.severity).toBe('rough');
+    expect(task.estimate_minutes).toBe(25); // rough default
+    expect(task.energy).toBe('high');
+    expect(task.source).toBe('voice');
+  });
+
+  it('trims whitespace and rejects empty names', async () => {
+    await expect(createAdHocTask({ name: '   ' })).rejects.toThrow(/required/);
+    const task = await createAdHocTask({ name: '  yard cleanup  ' });
+    expect(task.name).toBe('yard cleanup');
+  });
+
+  it('writes a task_created activity log entry', async () => {
+    await createAdHocTask({ name: 'air filter replacement', source: 'voice' });
+    const log = await ActivityLog.findOne({ kind: 'task_created' }).lean();
+    expect(log).not.toBeNull();
+    expect(log?.summary).toContain('air filter');
+    expect(log?.metadata).toMatchObject({ source: 'voice' });
+  });
+
+  it('is picked up by listOpenAdHocTasks immediately', async () => {
+    await createAdHocTask({ name: 'something new' });
+    const open = await listOpenAdHocTasks();
+    expect(open.find((t) => t.name === 'something new')).toBeDefined();
   });
 });

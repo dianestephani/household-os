@@ -1146,7 +1146,250 @@ Also clears any existing `TodayPlan` doc so the next morning-gen builds fresh ag
 
 **One thing flagged but not fixed:** `regular_cleaning` (21d, $380 outsourced) got bucketed on 2026-05-10 by the deterministic spread, but Diane has a real `cleaner_visit` trigger on file from 2026-04-25, which would put the actual next visit on **2026-05-16**. If a future Claude wants to anchor `regular_cleaning` to the real cleaner schedule rather than the arbitrary spread, it's a one-line `last_done` override.
 
-## 36. Updated route cheat sheet (current as of this Part B)
+## 37. Merge from second HANDOFF / second-instance memory (2026-05-10)
+
+A parallel Claude instance was working out of `/Users/dianestephani/household-os/` (separate copy of the codebase, never actually built code there) and accumulating project memory under the `/Users/dianestephani/` working-directory key. That memory + that copy of HANDOFF.md have richer design specs than this repo's HANDOFF Part A. The user asked me to merge in the necessary items so this session has the full picture.
+
+### What was merged into this repo
+
+- **Memory files** copied into [/Users/dianestephani/.claude/projects/-Users-dianestephani-Documents-Projects-Personal-Projects-household-os/memory/](file:///Users/dianestephani/.claude/projects/-Users-dianestephani-Documents-Projects-Personal-Projects-household-os/memory/):
+  - `beauty_maintenance.md` — haircut/head spa/nails/wax/self-tan/massage cadences, trigger-based rather than strict
+  - `budget_gated_services.md` — cross-cutting "check budget first" pattern (head spa $250/6wk, massage aspirational, housecleaner-bump)
+  - `dietary_constraints.md` — no seafood, won't handle raw meat, high protein, TJ's pre-cooked chicken
+  - `household_context.md` — duplicates some of §1 but adds the "any routine system must use flexible windows, not fixed days" constraint
+  - `workout_routine.md` — Tue/Thu self-workouts run **BEFORE** PT client sessions (~7:45–8:45 AM); never schedule self-workouts after client sessions
+  - `workout_execution_pattern.md` — programming is solved, *execution* is the gap; night-before commit + 15-min fallback + weekly tracking (not daily streaks)
+  - `energy_budgets.md` — day off 120–180 min, catering ≤60 min, weekday ~45 min default, laundromat fully blocking
+  - `hyperfixate_burnout.md` — feedback memory: prefer project-shaped work, watch for approaching burnout, suggest scope cuts rather than pushing through
+  - `shopping_and_home_tools.md` — Costco/TJ's/QFC, no Prime, Echo devices, RocketMoney + Calendar (some overlap with the existing `reference_finance_tools` memory)
+- **Type system**: added `'beauty'` to `Category`, `'self'` to `Zone`, and optional `budget_gated: boolean` + `cost_estimate: number` fields on `Routine` (distinct from `outsource_cost_estimate` — see comments in [types.ts](packages/shared/src/types.ts)).
+- **Mongoose schema**: matching `budget_gated` + `cost_estimate` defaults on the Routine model.
+- **Seed**: `pickOutsource()` in [seed.ts](apps/api/src/seed.ts) passes the new fields through.
+- **Inventory**: 8 new rolling routines under category `beauty`, zone `self`, in [inventory.json](packages/shared/src/inventory.json):
+  - `haircut` (63d, budget_gated)
+  - `head_spa` (42d, budget_gated, $250)
+  - `self_tan` (7d) + `exfoliate_prep` (7d, intended to land the day before — see "deferred" below)
+  - `brazilian_wax` (35d)
+  - `cuticle_care` (3d)
+  - `nails_apply` (14d — placeholder until nail rotation lands)
+  - `massage` (28d, budget_gated, aspirational)
+
+### Deliberately NOT built (deferred — design specs live in the other repo's HANDOFF §12.5/§12.6)
+
+These are bigger redesigns. They're documented in detail at `/Users/dianestephani/household-os/HANDOFF.md` (sections 12.5 and 12.6). Don't re-derive them from scratch — open that file first.
+
+1. **`soft_trigger` scheduling type** — for routines that are time-flexible reminders, not hard cadences (haircut "if you can't brush it," massage "if your body feels rough"). All beauty routines were degraded to `rolling` for now. The next time we touch the scheduling system, add this type and migrate the soft items to it.
+2. **`NailState` collection + nail rotation logic** — tracks `current_type` (`dip` / `gel` / `polish` / `bare`), `consecutive_dip_count`, history with duration-per-application. After 2 consecutive dips suggests gel/polish for a "health break." Dynamic `interval_days` per type via `expected_durations_days`. See §12.6 of the other HANDOFF for the route sketch.
+3. **Workout module v2** — `WorkoutDay` (per-day record with commitment + outcome + sleep + energy) + `WorkoutWeek` (weekly aggregate, *not* daily streaks) + evening check-in cron at 8 PM with Alexa AM/Later/Skip buttons + morning behavior + `fallback_15min` + sleep-pattern learning after ~6 weeks of data. The existing `services/workouts.ts` just logs status; the proper redesign would be a new `apps/workout/` module per §12.5.
+4. **`prep_dependency` on routines** — `self_tan` should soft-require `exfoliate_prep` the day before. Currently both are independent rolling routines; the dependency isn't enforced. Modest service-side feature to add when convenient.
+5. **`beauty_appointment` trigger type** — for booked services on the calendar (head spa, massage). Would let cadence reset cleanly when she actually books one.
+6. **Beauty dashboard tile** — nail state + current type + days since applied + suggestion if any; upcoming beauty soft-triggers; head spa countdown; weeks-since-massage. Would slot next to the Today plan, similar to `CalendarDayPanel`.
+
+### A note on the parallel HANDOFF file at `/Users/dianestephani/household-os/HANDOFF.md`
+
+That file (1097 lines) is the second instance's design doc. Section structure is mostly identical to Part A of this file but the second-instance one has §12.5 (Workout module) and §12.6 (Nail rotation logic) that ours doesn't — those are the design specs referenced above. It also has v1 design notes mentioning `category: 'beauty'`, `zone: 'self'`, `trigger: 'beauty_appointment'` in the original §6/§7/§8/§11 — meaning the second instance always had beauty in scope, while our Part A treated it as out-of-scope-v1.
+
+If you (Claude) ever need to compare designs, prefer Part B of *this* file (which reflects shipped code) over the second-instance design doc. Use the second-instance doc only for §12.5 / §12.6 design recovery.
+
+---
+
+## 38. Google sign-in wall (login on the deployed dashboard)
+
+Added when Diane wanted the live demo link gated so randos couldn't browse her personal household data. Design call: **the login wall is purely an access gate** — it does NOT replace the existing server-side Google Calendar OAuth setup. Calendar reads continue to use the `google-token.json` she uploads to Render's Secret Files. The two OAuth setups are intentionally separate clients in Google Cloud Console so they can evolve independently (calendar = server-side "installed app" pattern, dashboard sign-in = browser SPA pattern).
+
+### Backend pieces
+
+- [apps/api/src/services/session.ts](apps/api/src/services/session.ts) — `verifyGoogleIdToken` (uses `google-auth-library`'s `OAuth2Client.verifyIdToken` against Google's JWKS), `isAllowedEmail` (comma-separated `AUTH_ALLOWED_EMAIL`, case-insensitive, closed by default), `signSession` / `verifySession` (24h `jsonwebtoken`-signed JWT, secret read from `JWT_SECRET`).
+- [apps/api/src/middleware/auth.ts](apps/api/src/middleware/auth.ts) — single `requireToken` middleware with precedence: no-auth-configured → open; bearer matches `API_TOKEN` → allow (preserves Alexa skill + curl scripts); bearer parses as valid session JWT → allow; otherwise 401.
+- [apps/api/src/routes/auth.ts](apps/api/src/routes/auth.ts) — `POST /api/auth/google` accepts `{ credential }` from the browser, verifies, checks `email_verified` + allowlist, issues session JWT. Mounted at `/api/auth` *before* the `requireToken` guard (chicken-and-egg).
+- New deps: `jsonwebtoken` + `@types/jsonwebtoken`.
+
+### Frontend pieces
+
+- [apps/dashboard/index.html](apps/dashboard/index.html) — loads Google Identity Services from `https://accounts.google.com/gsi/client` (~2 KB, async/defer).
+- [apps/dashboard/src/auth.ts](apps/dashboard/src/auth.ts) — sessionStorage helpers + `AUTH_ENABLED` derived from `VITE_GOOGLE_OAUTH_CLIENT_ID` presence.
+- [apps/dashboard/src/components/LoginScreen.tsx](apps/dashboard/src/components/LoginScreen.tsx) — full-screen centered panel rendering GIS's standard button. Polls for the GIS script to finish loading (async/defer means it may not be ready at first paint), then `initialize` + `renderButton`. On credential callback: POST to `/api/auth/google`, store returned token + email + name + picture in `sessionStorage`, lift state to App.
+- [apps/dashboard/src/App.tsx](apps/dashboard/src/App.tsx) — gates everything on `AUTH_ENABLED && !session` returning `<LoginScreen>`. Sign-out button in the header beside the theme toggle, shows the signed-in email as tooltip.
+- [apps/dashboard/src/api.ts](apps/dashboard/src/api.ts) — `currentToken()` reads from `sessionStorage` first, falls back to `VITE_API_TOKEN` for envs without sign-in configured.
+
+### UX choice: sessionStorage, not localStorage
+
+The user asked for "login every time I click the link" behavior. `sessionStorage` clears when the tab closes, which gives that without us needing aggressive short JWT expiries or refresh-token plumbing. JWT itself is 24h so a long-lived tab doesn't get bounced mid-session.
+
+### Env vars (new)
+
+- `GOOGLE_OAUTH_CLIENT_ID` (API + dashboard as `VITE_GOOGLE_OAUTH_CLIENT_ID`) — Google Cloud Console OAuth Web-app client ID. Setting it enables the login wall.
+- `AUTH_ALLOWED_EMAIL` (API only) — comma-separated allowlist. Defaults to refusing everyone if unset.
+- `JWT_SECRET` (API only) — ≥16 chars. Required when `GOOGLE_OAUTH_CLIENT_ID` is set.
+- See README's *Google sign-in* section for the Google Cloud Console steps.
+
+### Tests
+
+- [apps/api/src/services/session.test.ts](apps/api/src/services/session.test.ts) — 9 tests: JWT round-trip, tampered token rejection, rotated-secret rejection, JWT_SECRET length + presence enforcement, email allowlist (case-insensitive, comma-separated, closed-by-default).
+- [apps/api/src/middleware/auth.test.ts](apps/api/src/middleware/auth.test.ts) — 7 tests: open-pass when no auth configured, legacy `API_TOKEN` accept + reject, JWT accept + malformed reject, EITHER token type works when both configured, missing header → 401.
+
+### Deliberate non-coverage
+
+`verifyGoogleIdToken` is *not* unit-tested — it hits Google's live JWKS endpoint and any local mock would be lower-fidelity than the real verification anyway. If a regression happens there, it'll show up as a 401 on `/api/auth/google` immediately and is loud, not silent. The route itself is also not tested (no Express route-test infrastructure in this repo yet); the service logic it sits on top of is fully covered.
+
+---
+
+## 39. Day navigator (Today tab is date-aware)
+
+Diane wanted to scroll through different days from the homepage to plan around what's coming. Built on top of the existing `scheduleRange` so the forecast is exactly what the Schedule tab uses for week/month — no second source of truth.
+
+### Backend
+
+- [apps/api/src/services/day.ts](apps/api/src/services/day.ts) — `getDayView(dateStr)` returns `{ date, is_today, is_past, is_future, plan, forecast, events, context }`. Three regimes:
+  - **Today**: auto-creates a TodayPlan via `generateTodayPlan(new Date())` if none exists. `forecast: []` because the plan is the source of truth.
+  - **Past**: returns the stored TodayPlan if any (else null). `forecast: []` deliberately — the rolling-routine `last_done` math reflects current state, so synthesizing a forecast for a past date would be wrong. We could reconstruct historical state from DeferralEvents + completion timestamps but that's a real project; not worth it for a navigator UX.
+  - **Future**: `plan: null`, `forecast: scheduleRange(date, 1).days[0].routines_due`.
+- Calendar events are always included via `scheduleRange` (which itself short-circuits to `[]` in NODE_ENV=test or when OAuth isn't configured).
+- Context entries are filtered by `ts ∈ [startOfDay, startOfDay+1]`.
+- Route: `GET /api/day/:date` with a strict `YYYY-MM-DD` regex on the param.
+
+### Frontend ([DayPanel.tsx](apps/dashboard/src/components/DayPanel.tsx))
+
+Replaces what was an inline today-only stack inside [App.tsx](apps/dashboard/src/App.tsx). Composes:
+
+- `DayNavigator` strip — ◀ / native `<input type="date" />` / ▶ buttons + a "Today" pill that appears when off-today.
+- For **today**: full mutable UI (CheckInBanner, CalendarDayPanel, TodayContextStrip, EnergyButtons, MoodButtons, TodayList) — the components Diane was already using. State sync between DayPanel and App.tsx via the `initialPlan` prop + `onPlanChange` callback so external mutations still flow through.
+- For **past with a stored plan**: read-only `PastPlanPanel` showing items with completed-status strikethrough and any deferred items in a small swap-pool footer.
+- For **past with no plan**: "No plan recorded — morning-gen didn't run that day."
+- For **future**: `ForecastPanel` showing `ScheduleRoutineDue[]` rows with the same source badges (Rolling/Fixed/Zone/Event) and cadence notes the Schedule tab uses.
+- Calendar events + context are always rendered when present, in compact `DayEventsPanel` / `DayContextPanel` sub-components for non-today (or the existing `CalendarDayPanel` / `TodayContextStrip` reused for today, since those have richer behavior on the live day).
+
+Mutations are deliberately scoped to today only. `swap_task`, `mark_done`, `pull_from_pool` only render when `is_today === true` — the past view is historical record, the future view is read-only forecast. If Diane later wants cross-day task movement ("shift this from Tue to Wed"), that's a separate feature and would need a new route.
+
+### Tests
+
+7 in [apps/api/src/services/day.test.ts](apps/api/src/services/day.test.ts): today auto-creates plan + suppresses forecast; today returns existing plan if one is stored; past returns stored plan with completion status preserved; past returns null when nothing was stored; future synthesizes forecast (with rolling-routine bucketing); context entries filtered correctly by local-day window; calendar disconnected in test mode → empty events.
+
+---
+
+## 40. Google Tasks integration
+
+Diane wanted the to-do items already on her Google Calendar (Google Tasks — the to-do product that surfaces on the calendar grid) to appear alongside system routines in the dashboard, with check-off interactions writing back to Google.
+
+### OAuth scope expansion (one-time action Diane needs to take)
+
+The existing `google-token.json` was minted only with `calendar.events`. Tasks API requires `https://www.googleapis.com/auth/tasks`. [google-auth.ts](apps/api/src/google-auth.ts) now requests both scopes. **Run `npm -w @household-os/api run google-auth` after pulling** to re-consent and replace the saved token. The new token works for both products. On Render, replace the `google-token.json` Secret File with the new one.
+
+### Backend
+
+- [utils/google-tasks.ts](apps/api/src/utils/google-tasks.ts) — `getTasksClient()`, `isTasksConnected()` (with `NODE_ENV=test` short-circuit identical to the calendar utility), `listAllTasks()` (walks all task lists and returns `{ tasklistId, task }` pairs — keeping the tasklist id is required because the Tasks API needs it for mutations), `patchTaskStatus()`.
+- [services/tasks.ts](apps/api/src/services/tasks.ts) — pure helpers: `normalizeTask` (strips Google's wider schema down to our `CalendarTask`, treats anything that isn't exactly `'completed'` as `needsAction`), `taskDueOn` (matches against the date prefix of the RFC 3339 `due` field). Orchestrators: `tasksForDay(dateStr)`, `tasksWithoutDueDate()` (for backlog), `completeTask`, `uncompleteTask`, `todaysTasks()`.
+- [routes/tasks.ts](apps/api/src/routes/tasks.ts) — `GET /api/tasks?date=YYYY-MM-DD`, `GET /api/tasks/backlog`, `POST /api/tasks/complete`, `POST /api/tasks/uncomplete`. Mutations require `{ tasklist_id, task_id }` in the body and return the updated task or a 502 `tasks_api_no_op` if the Tasks API was unreachable.
+- [services/day.ts](apps/api/src/services/day.ts) — the `DayView` payload now bundles `tasks: CalendarTask[]` alongside `plan` / `forecast` / `events` / `context`. Empty when the token isn't tasks-scoped or in test mode.
+
+### Frontend
+
+- [DayPanel.tsx](apps/dashboard/src/components/DayPanel.tsx) — new `TasksPanel` sub-component renders the day's tasks as a checkbox list. Checking/unchecking on today flips the Google Tasks status via `api.tasks.complete` / `api.tasks.uncomplete`; on past/future days the checkbox is disabled (read-only with a tooltip). Optimistic local update on response.
+- [api.ts](apps/dashboard/src/api.ts) — `api.tasks.forDay(date)`, `backlog()`, `complete(...)`, `uncomplete(...)`.
+
+### Direction of integration (intentional v1 limitation)
+
+This is **Google Tasks → dashboard read, plus dashboard → Google Tasks for status mutations only**. The dashboard does *not* push system-routine completions back to Google Tasks (Diane already has those tracked in the system; mirroring would just duplicate state). Creating new Google Tasks from the dashboard is also out of scope — she can use Google's UI for that, then check them off here. If she ever wants full CRUD or wants routine-completions mirrored to Google, the route stubs are in place to extend.
+
+### What's *not* tested
+
+- `listAllTasks` / `patchTaskStatus` — `NODE_ENV=test` short-circuits them at the utility layer, same isolation pattern the calendar tests rely on. Asserting against the real Google Tasks API would be flaky and mocking the entire `googleapis` client is more brittle than valuable. The service-level tests cover the pure helpers (normalize / date filter) plus the disconnected-state behavior.
+
+### Tests
+
+8 in [apps/api/src/services/tasks.test.ts](apps/api/src/services/tasks.test.ts): `normalizeTask` happy path / status fallback / null on missing id+title / completed timestamp preservation; `taskDueOn` date-prefix match + no-due → false; `tasksForDay` + `todaysTasks` return `[]` when disconnected; `completeTask` + `uncompleteTask` return null when disconnected.
+
+---
+
+## 41. Ad-hoc task creation + MCP server (Claude.ai writeback)
+
+Diane asked for two things in one breath: Alexa should be able to add tasks, and she should be able to talk to the household persona on Claude.ai with real write access — not just advisory. Both ship together because they share the same `createAdHocTask` service and the same "ask for clarification, never guess" persona behavior.
+
+### Ad-hoc task creation
+
+- [services/zones.ts](apps/api/src/services/zones.ts) — new `createAdHocTask({ name, zone?, severity?, estimate_minutes?, energy?, source? })`. Defaults: zone='whole-house', severity='meh' (15 min, medium energy). Trims whitespace, errors on empty. Writes a `task_created` activity log entry tagged with the source. Returns the inserted doc.
+- [routes/zones.ts](apps/api/src/routes/zones.ts) — `POST /api/zones/tasks` exposes it. Validates name + optional zone/severity against existing enums.
+- The `AdHocTask.source` field was previously typed `'zone_assessment'` only; broadened to `'zone_assessment' | 'voice' | 'mcp' | 'persona' | 'manual'` so we can distinguish provenance in the activity log.
+- Picked up by morning-gen the next time it runs, with the same severity + age priority math zone-assessment-generated tasks use.
+
+### Alexa AddTaskIntent
+
+- Interaction model: new `AddTaskIntent` with `TaskName: AMAZON.SearchQuery` slot. Intent-level samples are slot-free (so Alexa always elicits), slot-level samples cover free-form utterances. Dialog config requires elicitation with `Elicit.Slot.TaskName` prompt ("What task should I add?").
+- Handler [zones.ts](apps/alexa-skill/src/handlers/zones.ts) — if `TaskName` is missing, returns `addElicitSlotDirective('TaskName')`. If present, calls `apiClient.addAdHocTask(name)` and reads the name back.
+- Client method [client.ts](apps/alexa-skill/src/client.ts): `addAdHocTask(name, zone?, severity?)` POSTs to `/api/zones/tasks` with `source: 'voice'`.
+
+### MCP server
+
+- New deps: `@modelcontextprotocol/sdk`.
+- [mcp/server.ts](apps/api/src/mcp/server.ts) — `buildMcpServer()` returns a fresh `McpServer` with 11 registered tools: writes (`add_ad_hoc_task`, `mark_done`, `swap_task`, `update_energy`, `log_mood`, `log_workout`, `log_context`) + reads (`get_today`, `recent_activity`, `recent_context`, `list_open_zone_tasks`). Each tool's handler calls into the same service-layer function the Anthropic-API persona path uses, so behavior stays identical regardless of surface. Writes tag `source: 'mcp'` (or `'persona'` for log_context) so the activity log distinguishes provenance.
+- [mcp/route.ts](apps/api/src/mcp/route.ts) — `mcpAuth` accepts the bearer via `Authorization: Bearer <token>` *or* `?token=...` query param. The query-param path matters because Claude.ai's Custom Connectors UI doesn't have a generic header-injection field; users paste a full URL. `mcpHandler` creates a fresh `StreamableHTTPServerTransport` (stateless mode — `sessionIdGenerator: undefined`) per request, connects the MCP server, and bridges the Express req/res through `transport.handleRequest`. `res.on('close')` cleans up transport + server.
+- Mounted at `/mcp` (root server, not under `/api`) in [index.ts](apps/api/src/index.ts) before the `requireToken` guard.
+
+### Persona prompt updates (clarification principle)
+
+Both [household.ts](packages/shared/src/personas/household.ts) and [finance.ts](packages/shared/src/personas/finance.ts) system prompts now include a "CLARIFICATION PRINCIPLE" block with concrete examples: when the ask is genuinely ambiguous, ask one short question rather than guess. Exception: fields with safe defaults (severity='meh', filing_status='single' when only gross income given) can be used silently as long as the persona tells her what it defaulted to.
+
+### Tests
+
+- 5 new in [zones.test.ts](apps/api/src/services/zones.test.ts) — `createAdHocTask` defaults, caller overrides, whitespace trim + empty rejection, activity log side-effect, immediate visibility in `listOpenAdHocTasks`.
+- The pre-existing schema/impl-drift test in [tools.test.ts](apps/api/src/persona/tools.test.ts) auto-validated the new `add_ad_hoc_task` tool wiring (every tool declared in the persona schemas has an implementation in tools.ts).
+- MCP transport itself is not unit-tested — testing `StreamableHTTPServerTransport.handleRequest` would mean stubbing a full HTTP cycle through `@hono/node-server`; cheaper to validate by pointing Claude.ai at the deployed `/mcp` URL and listing tools.
+
+### Status: MCP server is built but intentionally unused (2026-05-10)
+
+The MCP server ships in the codebase but Diane explicitly chose not to wire it to any chat interface. She evaluated three paths — Claude.ai web Custom Connectors (blocked by OAuth requirement we hadn't built), Claude Desktop (would require installing another app), and re-adding dashboard chat with the Anthropic API (~$2/mo, she'd previously declined the API cost) — and rejected all of them. Voice (Alexa) + dashboard click-to-edit is the interaction model.
+
+The MCP code is kept in place because (a) it's done and tested, and (b) future surfaces (Claude Desktop adoption, a different MCP-aware chat client, ChatGPT custom-GPT-style integrations) could pick it up without rebuild. **Future Claude: don't push chat-style interfaces unprompted; see `feedback_chat_interface_decision.md` memory.** If she ever asks for chat, the lowest-friction restore is re-adding the dashboard ChatPanel with an Anthropic API spending cap — don't re-litigate MCP unless she specifically asks.
+
+### Auth model going forward
+
+Three bearer-eligible paths through the API now:
+
+1. `API_TOKEN` (static, env-driven) — Alexa skill, MCP query param, curl scripts
+2. Session JWT from `/api/auth/google` — dashboard browser session
+3. No-auth open mode — when neither `API_TOKEN` nor `GOOGLE_OAUTH_CLIENT_ID` is set
+
+All three are accepted by the `requireToken` middleware on `/api/*`. The `/mcp` route has its own thinner middleware (`mcpAuth`) that ONLY checks against `API_TOKEN` — MCP clients don't have access to the Google sign-in flow, and exposing the session-JWT path on MCP would require URL-encoding sensitive tokens that we'd rather not generate ad-hoc.
+
+---
+
+## 42. Recent UX + coverage detail (2026-05-10 evening)
+
+Small but worth documenting since they shaped where tests went.
+
+### Mood / Energy "saved" confirmation pattern
+
+Diane asked for visual confirmation when she logs mood / energy — clicking the buttons fired off API calls but the only visible feedback was the active-state highlight, which wasn't enough.
+
+- **MoodButtons** ([apps/dashboard/src/components/MoodButtons.tsx](apps/dashboard/src/components/MoodButtons.tsx)): now prefills `selected` + `loggedAt` from the most recent mood log if it was logged today (`api.mood.recent(1)` → check `isToday(ts)`). Renders `✓ Logged "good" at 2:14 PM` in the panel header (green via `var(--good)`). Active state now survives tab switches + page reloads.
+- **EnergyButtons** ([apps/dashboard/src/components/EnergyButtons.tsx](apps/dashboard/src/components/EnergyButtons.tsx)): same `✓ Logged "medium" at 2:14 PM` indicator. **Bug fix worth knowing:** cancelling the energy-suggestions modal previously didn't refetch the plan, so even though the energy POST persisted, the visible `current` level stayed pointing at the old value. New `dismissSuggestion()` handler calls `api.today.get()` regardless. Symptom for the next session: if `current_energy` ever looks wrong, check that the modal-dismissal path still refetches.
+- New api method: `api.mood.recent(days)` → `MoodLog[]`.
+
+### Clarification principle in both persona prompts
+
+The household + finance system prompts now both include a "CLARIFICATION PRINCIPLE" block with concrete examples. The rule: if the ask is genuinely ambiguous, ask one short question rather than guess. Exception only for fields with safe defaults (severity='meh', filing_status='single'), and even then the persona must state what it defaulted to so she can correct it.
+
+This was a Diane-stated preference. Don't dilute it in future prompt edits — it's a real correction of past behavior where the persona was guessing zones / interpretations.
+
+### Test coverage additions
+
+Two gaps surfaced in a coverage audit and got filled:
+
+- **`routines.ts`** ([apps/api/src/services/routines.test.ts](apps/api/src/services/routines.test.ts), 9 tests): `patchRoutine` allow-list (applies whitelisted fields, silently drops `key` / `_id` / other off-list fields, supports nested `scheduling` patch, allows `last_done` updates), `listRoutines` filters (active-only default, category, zone), `softDeleteRoutine` (sets `active=false` without removing doc), `createRoutine` smoke.
+- **`alexa-push.ts`** ([apps/api/src/services/alexa-push.test.ts](apps/api/src/services/alexa-push.test.ts), 8 tests): the body-template logic was extracted into a pure `buildCheckInCardBody` helper so it's testable without going through the LWA-push side effect. Tests cover morning_intent template, frequent_deferral with name + count, missing-count default to 0, missed_workouts template, generic fallback for unknown pattern_interrupt kinds, generic fallback when frequent_deferral lacks `routine_name` (otherwise we'd render "undefined has been deferred N times"), null returns for non-pushable check-in types.
+
+### Deliberately *not* tested (decisions worth preserving)
+
+- **`mcp/server.ts` + `mcp/route.ts`** — transport mocking via `@hono/node-server` is more brittle than the test would catch. Validate by pointing an MCP client at the deployed `/mcp` and listing tools. Service-layer behavior the MCP tools delegate to is fully covered.
+- **`services/triggers.ts`** — thin wrapper over Mongoose + a `logActivity` call already exercised in [activity-wiring.test.ts](apps/api/src/services/activity-wiring.test.ts).
+- **`utils/google-calendar.ts` + `utils/google-tasks.ts`** — `NODE_ENV=test` short-circuits prevent real API calls. Service-layer wrappers (`calendar.ts`, `tasks.ts`) cover the normalization logic.
+- **Dashboard components** — no React testing infrastructure in this repo. If we ever introduce Vitest + Testing Library, `EnergyButtons` energy-cancel-modal bug fix + `MoodButtons` prefill behavior would be the first regression candidates.
+
+Total: **231 tests** across 30 files (221 API + 10 alexa-skill).
+
+---
+
+## 36. Route cheat sheet (current as of this Part B)
 
 | Endpoint | Method | Purpose |
 |---|---|---|

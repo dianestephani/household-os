@@ -27,7 +27,8 @@ export type Category =
   | 'trash'
   | 'airbnb'
   | 'dogsit'
-  | 'personal';
+  | 'personal'
+  | 'beauty';
 
 export type Zone =
   | 'kitchen'
@@ -35,7 +36,8 @@ export type Zone =
   | 'common'
   | 'bedroom'
   | 'yard'
-  | 'whole-house';
+  | 'whole-house'
+  | 'self';
 
 export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 
@@ -77,6 +79,20 @@ export interface Routine {
   outsourceable?: boolean;
   /** Typical local-market cost per occurrence in USD. */
   outsource_cost_estimate?: number;
+  /**
+   * Whether suggesting this routine should consult the Finance persona first.
+   * Use for booked services Diane wants on a cadence but only when finances
+   * allow (head spa, massage, housecleaner-cadence bump). See the
+   * `budget_gated_services` memory.
+   */
+  budget_gated?: boolean;
+  /**
+   * Typical out-of-pocket cost per occurrence in USD, distinct from
+   * `outsource_cost_estimate` which means "cost to outsource a thing I do
+   * myself." `cost_estimate` is for things she always pays for (head spa,
+   * haircut, massage). Used by budget-gated suggestion logic.
+   */
+  cost_estimate?: number;
 }
 
 // ----- Finance -----
@@ -307,6 +323,54 @@ export interface CalendarDayResponse {
   open_in_calendar_url: string;
 }
 
+// ----- Google Tasks (the to-do product, surfaced on Calendar's grid) -----
+
+/**
+ * Normalized shape for a single Google Tasks item. We track `tasklist_id`
+ * because the Tasks API requires it to mutate the task (mark complete) — a
+ * Tasks ID alone isn't enough.
+ */
+export interface CalendarTask {
+  id: string;
+  tasklist_id: string;
+  title: string;
+  notes?: string;
+  /** RFC 3339 date (Google stores due as date-only at UTC midnight). */
+  due?: string;
+  status: 'needsAction' | 'completed';
+  /** Set when status flipped to 'completed'. */
+  completed?: string;
+}
+
+// ----- Day view (single-day navigator on the Today tab) -----
+
+/**
+ * Bundle the dashboard needs to render any single day. Today and past days
+ * carry a real `plan` (today is auto-created if missing); future days carry a
+ * `forecast` of what would be due. Calendar events + context entries are
+ * always included if available.
+ */
+export interface DayView {
+  /** YYYY-MM-DD, local. */
+  date: string;
+  is_today: boolean;
+  is_past: boolean;
+  is_future: boolean;
+  /** The stored TodayPlan for that date, if any. Null for future days and for
+   *  past days where morning-gen never ran. */
+  plan: TodayPlan | null;
+  /** What would be due that day, when no real plan exists (future). Empty for
+   *  today/past — those use `plan` instead. */
+  forecast: ScheduleRoutineDue[];
+  events: CalendarEvent[];
+  /**
+   * Google Tasks with `due` matching this date. Empty when the OAuth token
+   * hasn't been re-consented for the tasks scope, or in test mode.
+   */
+  tasks: CalendarTask[];
+  context: ContextEntry[];
+}
+
 // ----- Schedule preview (week / month look-ahead) -----
 
 /**
@@ -436,7 +500,12 @@ export interface AdHocTask {
   ts: Date | string;
   zone: Zone;
   name: string;
-  source: 'zone_assessment';
+  /**
+   * What surface created this task. `zone_assessment` is the original
+   * pathway via `recordAssessment`; `voice`, `mcp`, `persona`, `manual` cover
+   * the direct-creation pathways added later.
+   */
+  source: 'zone_assessment' | 'voice' | 'mcp' | 'persona' | 'manual';
   source_assessment_id?: string;
   severity: ZoneStateLevel;
   estimate_minutes: number;
@@ -530,6 +599,8 @@ export interface InventoryRollingRoutine {
   skip_if?: string;
   outsourceable?: boolean;
   outsource_cost_estimate?: number;
+  budget_gated?: boolean;
+  cost_estimate?: number;
 }
 
 export interface InventoryFixedRoutine {

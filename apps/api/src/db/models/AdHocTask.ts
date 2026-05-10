@@ -5,7 +5,7 @@ const AdHocTaskSchema = new Schema(
     ts: { type: Date, default: () => new Date(), index: true },
     zone: { type: String, required: true },
     name: { type: String, required: true },
-    source: { type: String, required: true }, // 'zone_assessment'|...
+    source: { type: String, required: true }, // 'zone_assessment'|'voice'|'mcp'|'persona'|'manual'
     source_assessment_id: String,
     severity: { type: String, default: 'meh' }, // fine|meh|rough
     estimate_minutes: { type: Number, default: 15 },
