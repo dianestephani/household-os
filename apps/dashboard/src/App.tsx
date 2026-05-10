@@ -26,7 +26,7 @@ type View =
   | 'workouts'
   | 'activity'
   | 'household'
-  | 'nutrition'
+  | 'food'
   | 'finance'
   | 'routines'
   | 'journal'
@@ -38,7 +38,7 @@ const VIEWS: readonly View[] = [
   'workouts',
   'activity',
   'household',
-  'nutrition',
+  'food',
   'finance',
   'routines',
   'journal',
@@ -163,10 +163,10 @@ export default function App() {
           Household Ops
         </button>
         <button
-          className={view === 'nutrition' ? 'active' : ''}
-          onClick={() => setView('nutrition')}
+          className={view === 'food' ? 'active' : ''}
+          onClick={() => setView('food')}
         >
-          Nutrition
+          Food
         </button>
         <button
           className={view === 'finance' ? 'active' : ''}
@@ -211,14 +211,7 @@ export default function App() {
       {view === 'activity' && <ActivityFeed />}
 
       {view === 'household' && <PersonaLauncher persona="household" />}
-      {view === 'nutrition' && (
-        <div className="panel">
-          <strong>Nutrition</strong>
-          <p className="muted" style={{ marginTop: '0.4rem' }}>
-            Nutrition persona isn't built yet — Diane is starting with Household Ops.
-          </p>
-        </div>
-      )}
+      {view === 'food' && <PersonaLauncher persona="grocery" />}
       {view === 'finance' && <FinancePanel />}
       {view === 'routines' && <RoutinesPage />}
       {view === 'journal' && <JournalPanel />}

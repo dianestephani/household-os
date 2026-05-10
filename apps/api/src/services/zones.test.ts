@@ -9,6 +9,7 @@ import {
   markAdHocTaskDone,
   pickNextZone,
   recordAssessment,
+  splitTaskNotes,
   ZONES,
 } from './zones.js';
 import { ActivityLog } from '../db/models/ActivityLog.js';
@@ -41,37 +42,43 @@ describe('pickNextZone', () => {
 });
 
 describe('recordAssessment', () => {
-  it("doesn't create a task for level=fine", async () => {
-    const { task } = await recordAssessment('kitchen', 'fine', 'looks great');
-    expect(task).toBeNull();
+  it("doesn't create any tasks for level=fine", async () => {
+    const { tasks } = await recordAssessment('kitchen', 'fine', 'looks great');
+    expect(tasks).toEqual([]);
     const stored = await ZoneAssessment.findOne({}).lean();
     expect(stored?.level).toBe('fine');
   });
 
-  it('creates an open AdHocTask using notes as the name when provided', async () => {
-    const { task } = await recordAssessment('bathrooms', 'rough', 'sink + toilet');
-    expect(task?.name).toBe('sink + toilet');
-    expect(task?.severity).toBe('rough');
-    expect(task?.energy).toBe('high');
-    expect(task?.estimate_minutes).toBe(25);
-    expect(task?.status).toBe('open');
+  it('creates an open AdHocTask using notes as the name when provided (single item)', async () => {
+    const { tasks } = await recordAssessment('bathrooms', 'rough', 'sink + toilet');
+    expect(tasks.length).toBe(1);
+    const task = tasks[0]!;
+    expect(task.name).toBe('sink + toilet');
+    expect(task.severity).toBe('rough');
+    expect(task.energy).toBe('high');
+    expect(task.estimate_minutes).toBe(25);
+    expect(task.status).toBe('open');
   });
 
   it('falls back to a default name when notes are empty', async () => {
-    const { task } = await recordAssessment('kitchen', 'meh', '');
-    expect(task?.name).toMatch(/kitchen/i);
-    expect(task?.severity).toBe('meh');
-    expect(task?.energy).toBe('medium');
+    const { tasks } = await recordAssessment('kitchen', 'meh', '');
+    expect(tasks.length).toBe(1);
+    const task = tasks[0]!;
+    expect(task.name).toMatch(/kitchen/i);
+    expect(task.severity).toBe('meh');
+    expect(task.energy).toBe('medium');
   });
 
-  it('links the task back to its source assessment', async () => {
-    const { assessment, task } = await recordAssessment(
+  it('links every created task back to its source assessment', async () => {
+    const { assessment, tasks } = await recordAssessment(
       'common',
       'rough',
       'dust',
     );
-    expect(task?.source_assessment_id).toBeDefined();
-    expect(String(task?.source_assessment_id)).toBe(String(assessment._id));
+    expect(tasks.length).toBe(1);
+    const task = tasks[0]!;
+    expect(task.source_assessment_id).toBeDefined();
+    expect(String(task.source_assessment_id)).toBe(String(assessment._id));
   });
 });
 
@@ -197,5 +204,110 @@ describe('createAdHocTask', () => {
     await createAdHocTask({ name: 'something new' });
     const open = await listOpenAdHocTasks();
     expect(open.find((t) => t.name === 'something new')).toBeDefined();
+  });
+});
+
+describe('splitTaskNotes', () => {
+  it('returns [] for null / undefined / empty / whitespace-only', () => {
+    expect(splitTaskNotes(undefined)).toEqual([]);
+    expect(splitTaskNotes(null)).toEqual([]);
+    expect(splitTaskNotes('')).toEqual([]);
+    expect(splitTaskNotes('    ')).toEqual([]);
+    expect(splitTaskNotes(' , , ')).toEqual([]);
+  });
+
+  it('returns a single-element array for notes with no commas', () => {
+    expect(splitTaskNotes('wipe counters')).toEqual(['wipe counters']);
+    expect(splitTaskNotes('  wipe counters  ')).toEqual(['wipe counters']);
+  });
+
+  it('splits on commas and trims each segment', () => {
+    expect(splitTaskNotes('wipe counters, sweep floor, take out trash')).toEqual([
+      'wipe counters',
+      'sweep floor',
+      'take out trash',
+    ]);
+    expect(splitTaskNotes('a,b,c')).toEqual(['a', 'b', 'c']);
+  });
+
+  it('drops empty segments (consecutive commas, trailing comma)', () => {
+    expect(splitTaskNotes('a,,b')).toEqual(['a', 'b']);
+    expect(splitTaskNotes('a, , b')).toEqual(['a', 'b']);
+    expect(splitTaskNotes('a, b,')).toEqual(['a', 'b']);
+    expect(splitTaskNotes(',a,b')).toEqual(['a', 'b']);
+  });
+
+  it('only splits on commas — semicolons / newlines / slashes are preserved inside a segment', () => {
+    expect(splitTaskNotes('a; b, c\nd')).toEqual(['a; b', 'c\nd']);
+    expect(splitTaskNotes('kitchen/bathrooms, yard')).toEqual([
+      'kitchen/bathrooms',
+      'yard',
+    ]);
+  });
+});
+
+describe('recordAssessment — multi-task split on commas', () => {
+  it('creates one open AdHocTask per comma-separated note item', async () => {
+    const { tasks } = await recordAssessment(
+      'kitchen',
+      'rough',
+      'wipe counters, sweep floor, take out trash',
+    );
+    expect(tasks.length).toBe(3);
+    expect(tasks.map((t) => t.name)).toEqual([
+      'wipe counters',
+      'sweep floor',
+      'take out trash',
+    ]);
+    // All tasks share the severity-derived defaults
+    for (const t of tasks) {
+      expect(t.severity).toBe('rough');
+      expect(t.energy).toBe('high');
+      expect(t.estimate_minutes).toBe(25);
+      expect(t.status).toBe('open');
+      expect(t.zone).toBe('kitchen');
+    }
+  });
+
+  it('emits one task_created activity entry per task created', async () => {
+    await recordAssessment('bathrooms', 'meh', 'scrub sink, mop floor');
+    const events = await ActivityLog.find({ kind: 'task_created' })
+      .sort({ ts: 1 })
+      .lean();
+    expect(events.length).toBe(2);
+    expect(events.map((e) => e.summary)).toEqual([
+      'Task added: "scrub sink"',
+      'Task added: "mop floor"',
+    ]);
+  });
+
+  it('links every task in the batch back to the same source assessment', async () => {
+    const { assessment, tasks } = await recordAssessment(
+      'common',
+      'rough',
+      'dust shelves, vacuum rug',
+    );
+    expect(tasks.length).toBe(2);
+    const aid = String(assessment._id);
+    for (const t of tasks) {
+      expect(String(t.source_assessment_id)).toBe(aid);
+    }
+  });
+
+  it('treats single-item notes as 1 task (regression — preserves prior behavior)', async () => {
+    const { tasks } = await recordAssessment(
+      'yard',
+      'meh',
+      'pick up branches',
+    );
+    expect(tasks.length).toBe(1);
+    expect(tasks[0]?.name).toBe('pick up branches');
+  });
+
+  it('all-empty-segment notes fall through to the default-name fallback', async () => {
+    // " , , " has no usable items → defaultTaskName fires
+    const { tasks } = await recordAssessment('bedroom', 'meh', ' , , ');
+    expect(tasks.length).toBe(1);
+    expect(tasks[0]?.name).toMatch(/bedroom/i);
   });
 });

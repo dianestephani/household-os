@@ -1434,6 +1434,99 @@ Total now: **241 tests** across 30 files (231 API + 10 alexa-skill).
 
 Pure single-day filtering feels quiet on days with no activity, while the rolling-window view answers "what have I been up to lately" — the more common use case for those tabs. The DayNavigator is a deliberate opt-in for forensic "what did I do on April 30" queries, not the default lens.
 
+### Finance day log (added immediately after §43)
+
+[FinancePanel.tsx](apps/dashboard/src/components/FinancePanel.tsx) gained a `FinanceDayLog` sub-component at the bottom (above the PersonaLauncher). It mounts its own DayNavigator and renders two grouped sub-lists for the selected date:
+
+- **Journal entries** — finance-tagged context entries via `api.context.onDate(date, 'finance')`. That helper returns entries where `related_persona ∈ {'finance','both'}`, so cross-cutting "chaos week, ordering takeout = extra spend" entries surface here too.
+- **Edits** — activity-log entries that passed the `isFinanceActivity` filter (exported for testability). The filter excludes `context_logged` kind (already rendered above) and includes `routine_edited` entries whose `metadata.fields` contain finance-relevant strings (`income`, `tax`, `expenses`, `expense_breakdown`, `extra_withholding`, `state`, `filing_status`, `outsource`).
+
+**Design call:** the profile + RocketMoney breakdown + outsourceable table at the top of the Finance tab remain "current state" — they don't accept a date param. Profile snapshots over time would be a separate, much bigger feature (snapshot-on-edit + historical-state reconstruction). For now, the day log answers "what was logged for finance on this date" without pretending the profile itself is date-bound.
+
+**`isFinanceActivity` filter is intentionally narrow.** Outsource-cost edits via `edit_routine_outsourcing` trigger `patchRoutine` whose summary is "Edited routine: <key>" — no finance keyword. The filter catches them by inspecting `metadata.fields` for `outsource*` patterns. False positives clutter the log; the global Activity feed is the right place to see everything.
+
+---
+
+## 44. Zone-assessment multi-task split (2026-05-10 PM)
+
+Diane was entering things like "wipe counters, sweep floor, take out trash" in the zone-check `zone_notes` answer and getting **one** ad-hoc task with the full comma-separated string as the name. Wanted one task per comma-separated item.
+
+### Behavior change
+
+[services/zones.ts](apps/api/src/services/zones.ts):
+
+- New exported pure helper `splitTaskNotes(notes)` — comma-split, trim each segment, drop empty segments. Only commas separate; semicolons / slashes / newlines stay inside a segment for predictability.
+- `recordAssessment` now creates **one `AdHocTask` per non-empty item** instead of one task with the full string. Single-item notes still produce 1 task (regression-tested). All-empty / whitespace-only notes still fall back to the zone's `defaultTaskName`. Each task gets its own `task_created` activity entry. All tasks in the batch share the same `source_assessment_id` so they're cancelable / queryable as a batch later if needed.
+
+### Return-shape change (small API break)
+
+`recordAssessment` was `Promise<{ assessment, task: AdHocTaskType | null }>`. Now it's `Promise<{ assessment, tasks: AdHocTaskType[] }>`. Empty array for level=fine. Length ≥ 1 for level=meh / level=rough.
+
+**Callers updated:**
+
+- `routes/zones.ts` — just passes the new shape through to the HTTP response, no code change beyond the type.
+- `services/checkins.ts` — never read the return value, no change.
+- Both test files (`zones.test.ts`, `activity-wiring.test.ts`) updated to destructure `{ tasks }` instead of `{ task }`.
+
+### Tests
+
+- 5 new `splitTaskNotes` cases: null/undefined/empty/whitespace → []; single segment (no comma) → 1-element array, trimmed; multi-comma; empty-segment dropping (consecutive commas, trailing commas, leading commas, whitespace-only segments); only-commas separator (semicolons/newlines/slashes preserved).
+- 5 new `recordAssessment` cases: one open task per comma-separated item with correct severity-derived defaults; one `task_created` activity entry per task; all tasks linked to same source assessment; single-item notes → 1 task (regression); all-empty-segment notes → default-name fallback (regression).
+
+Total now: **251 tests** across 30 files (241 API + 10 alexa-skill).
+
+### What didn't change
+
+- Alexa `AssessZoneIntent` doesn't pass notes through (no `Notes` slot — that's been removed from the interaction model), so voice zone checks still produce default-named tasks. Multi-task split only fires when notes come from the dashboard's `zone_assessment` check-in or a direct `POST /api/zones/assess` with a comma-separated `notes` body.
+- The activity log records each task individually (which was already the per-call behavior) — `Task added: "<name>"`. If you want a single rolled-up activity entry per batch, that's a separate change.
+
+---
+
+## 45. Grocery Manager persona + Food tab (renamed from Nutrition, 2026-05-10 PM)
+
+Diane wanted the previously-stub Nutrition tab to become a real Grocery Manager persona linked to her Claude Project. Renamed end-to-end, no in-API tool loop — launcher-only.
+
+### Renames + structural changes
+
+- [packages/shared/src/personas/grocery.ts](packages/shared/src/personas/grocery.ts) — new file with full system prompt encoding hard constraints (TJ's-primary, no seafood, no raw meat) + active goals (>100g protein/day, ~5kg weight loss target). Carries `stub: true` so the `/api/chat/grocery` route returns a "use the launcher" canned reply instead of trying to hit the (no-longer-configured) Claude API. Empty `tools: []` array — launcher-only.
+- `packages/shared/src/personas/nutrition.ts` — **deleted**. `personas/index.ts` and `package.json#exports` now export `grocery` instead.
+- [apps/api/src/persona/runner.ts](apps/api/src/persona/runner.ts) — branch for `personaName === 'grocery'` replaces the old `'nutrition'` branch with a canned message pointing at the Food tab.
+- [apps/api/src/persona/tools.ts](apps/api/src/persona/tools.ts) — `stubTools.not_implemented` message updated to the launcher-only framing.
+- [apps/api/src/persona/tools.test.ts](apps/api/src/persona/tools.test.ts) + [runner.test.ts](apps/api/src/persona/runner.test.ts) — updated to reference 'grocery' instead of 'nutrition'.
+- [packages/shared/src/personas/household.ts](packages/shared/src/personas/household.ts) — system prompt's exclusion line updated to "food/groceries" wording.
+
+### App.tsx — Nutrition → Food
+
+- View union: `'nutrition'` → `'food'`. Tab label: "Nutrition" → "Food".
+- Inline "not built yet" stub replaced with `<PersonaLauncher persona="grocery" />`.
+- **Migration for already-persisted localStorage**: users whose `household-os.view` was set to `'nutrition'` will hit `readSavedView()`, fail the new VIEWS membership check, and fall through to `'today'`. Safe.
+
+### PersonaLauncher — per-persona default Project URL
+
+[PersonaLauncher.tsx](apps/dashboard/src/components/PersonaLauncher.tsx) gains a `DEFAULT_PROJECT_URL` map. The "Open in Claude.ai" button target is now `savedUrl || DEFAULT_PROJECT_URL[persona] || HOSTED_FALLBACK`. For `grocery` the default is hardcoded to `https://claude.ai/project/019e141a-8cbc-720d-843a-0732ad1293c2`. The "Saved Project URL" input still lets her override. Status text under the button reflects three states: saved / default / fallback.
+
+### iOS app handoff
+
+iOS Universal Links handle this automatically — when the Claude iOS app is installed, tapping a `claude.ai/project/...` link prompts to open in the app. No special URL scheme or per-platform code needed. This already works for Household and Finance launchers; Grocery inherits the behavior via the shared launcher component.
+
+### What's NOT built — Alexa Shopping List integration
+
+Diane's described workflow ends with: "[Grocery Manager] should print a grocery list and then add every item on the list to my Shopping list in Alexa." The print-the-list piece is in the persona system prompt (parsable format with `## Section` headers + `- <qty> <item>` rows). The auto-add-to-Alexa-list piece requires a separate buildout:
+
+1. Alexa Developer Console: request `alexa::household:lists:write` permission on the skill
+2. User grants it in the Alexa app
+3. Account linking flow so our server can hold an Amazon-issued access token outside live skill sessions
+4. New API endpoint (e.g. `POST /api/alexa/shopping-list/add`) that accepts an array of items and calls the Alexa Lists API
+5. Dashboard panel: paste the persona's grocery list → parse → bulk-add → confirm
+
+Estimated effort: 2–3 hours. The voice fallback is workable in the meantime — Alexa supports multi-item add over voice ("Alexa, add eggs, bread, and milk to my shopping list"). Diane was told this and chose not to pursue the full integration this session.
+
+### Tests
+
+No test-count change. The persona-tools wiring test was updated (nutrition → grocery) but the assertion shape is the same — `getToolsForPersona('grocery')` still falls through to `stubTools` since grocery has no real in-API tool implementations. Runner test updated to verify the new launcher-only canned reply.
+
+Total: still **251 tests** (241 API + 10 alexa-skill).
+
 ---
 
 ## 36. Route cheat sheet (current as of this Part B)

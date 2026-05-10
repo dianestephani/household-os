@@ -55,8 +55,8 @@ export async function chat(
 
   if (persona.stub) {
     const reply =
-      personaName === 'nutrition'
-        ? "Nutrition persona is in stub mode for v1 — coming later. For now, RocketMoney + groceries-as-usual."
+      personaName === 'grocery'
+        ? "Grocery Manager is launcher-only — open the Food tab in the dashboard and click 'Open in Claude.ai' to chat in your Grocery Manager Claude Project."
         : personaName === 'finance'
           ? 'Finance persona is in stub mode for v1 — RocketMoney is still your source of truth.'
           : 'This persona is in stub mode.';

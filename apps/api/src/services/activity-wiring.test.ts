@@ -115,7 +115,8 @@ describe('action sites write to ActivityLog', () => {
   });
 
   it('cancelAdHocTask → task_cancelled', async () => {
-    const { task } = await recordAssessment('yard', 'meh', 'sweep');
+    const { tasks } = await recordAssessment('yard', 'meh', 'sweep');
+    const task = tasks[0];
     if (!task?._id) throw new Error('expected task');
     await cancelAdHocTask(String(task._id));
     const events = await ActivityLog.find({ kind: 'task_cancelled' }).lean();
