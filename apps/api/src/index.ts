@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import express, { type Request, type Response, type NextFunction } from 'express';
+import express from 'express';
 import cron from 'node-cron';
 import { ExpressAdapter } from 'ask-sdk-express-adapter';
 import { skill as alexaSkill } from '@household-os/alexa-skill';
@@ -19,6 +19,8 @@ import financeRouter from './routes/finance.js';
 import contextRouter from './routes/context.js';
 import calendarRouter from './routes/calendar.js';
 import scheduleRouter from './routes/schedule.js';
+import authRouter from './routes/auth.js';
+import { requireToken } from './middleware/auth.js';
 import { generateTodayPlan } from './cron/morning-gen.js';
 import { ingestCalendarTriggers } from './cron/calendar-ingest.js';
 import {
@@ -58,18 +60,9 @@ app.post('/alexa', alexaAdapter.getRequestHandlers());
 
 app.use(express.json({ limit: '1mb' }));
 
-const requireToken = (req: Request, res: Response, next: NextFunction): void => {
-  const expected = process.env.API_TOKEN;
-  if (!expected) {
-    next();
-    return;
-  }
-  if (req.headers.authorization !== `Bearer ${expected}`) {
-    res.status(401).json({ error: 'unauthorized' });
-    return;
-  }
-  next();
-};
+// Login endpoint must NOT require auth (chicken-and-egg). Mount before the
+// `/api` requireToken guard below.
+app.use('/api/auth', authRouter);
 
 app.get('/', (_req, res) => {
   res.json({
@@ -94,6 +87,7 @@ app.get('/', (_req, res) => {
         '/api/context',
         '/api/calendar',
         '/api/schedule',
+        '/api/auth/google',
         '/api/chat/:persona',
       ],
     },

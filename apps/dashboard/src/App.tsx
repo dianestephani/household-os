@@ -15,6 +15,14 @@ import TodayContextStrip from './components/TodayContextStrip.js';
 import CalendarDayPanel from './components/CalendarDayPanel.js';
 import SchedulePanel from './components/SchedulePanel.js';
 import ThemeToggle from './components/ThemeToggle.js';
+import LoginScreen from './components/LoginScreen.js';
+import {
+  AUTH_ENABLED,
+  clearSession,
+  readSession,
+  writeSession,
+  type AuthSession,
+} from './auth.js';
 import type { TodayPlan } from '@household-os/shared/types';
 
 type View =
@@ -33,6 +41,9 @@ export default function App() {
   const [view, setView] = useState<View>('today');
   const [plan, setPlan] = useState<TodayPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(() =>
+    AUTH_ENABLED ? readSession() : null,
+  );
 
   async function refresh() {
     try {
@@ -43,15 +54,43 @@ export default function App() {
     }
   }
 
+  function handleLogin(s: AuthSession) {
+    writeSession(s);
+    setSession(s);
+  }
+
+  function handleLogout() {
+    clearSession();
+    setSession(null);
+    setPlan(null);
+  }
+
   useEffect(() => {
+    if (AUTH_ENABLED && !session) return;
     void refresh();
-  }, []);
+  }, [session]);
+
+  if (AUTH_ENABLED && !session) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
 
   return (
     <div className="app">
       <header className="app-header">
         <h1>Household OS</h1>
-        <ThemeToggle />
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {session && (
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={handleLogout}
+              title={`Signed in as ${session.email}`}
+            >
+              Sign out
+            </button>
+          )}
+          <ThemeToggle />
+        </div>
       </header>
 
       <div className="tabs">

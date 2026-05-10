@@ -34,15 +34,31 @@ export interface AffordabilityReport {
   rationale: string;
 }
 
-const TOKEN = import.meta.env.VITE_API_TOKEN ?? '';
+const LEGACY_TOKEN = import.meta.env.VITE_API_TOKEN ?? '';
 const BASE = import.meta.env.VITE_API_BASE ?? '/api';
+
+/**
+ * Resolve the current bearer for an outgoing API request. Session token
+ * (Google sign-in flow) takes precedence; falls back to the legacy build-time
+ * VITE_API_TOKEN for envs that haven't set up sign-in.
+ */
+function currentToken(): string {
+  try {
+    const session = sessionStorage.getItem('household-os.session');
+    if (session) return session;
+  } catch {
+    /* sessionStorage unavailable */
+  }
+  return LEGACY_TOKEN;
+}
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'content-type': 'application/json',
     ...((init.headers as Record<string, string>) ?? {}),
   };
-  if (TOKEN) headers.authorization = `Bearer ${TOKEN}`;
+  const token = currentToken();
+  if (token) headers.authorization = `Bearer ${token}`;
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return (await res.json()) as T;

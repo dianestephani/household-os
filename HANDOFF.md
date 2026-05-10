@@ -1193,6 +1193,47 @@ If you (Claude) ever need to compare designs, prefer Part B of *this* file (whic
 
 ---
 
+## 38. Google sign-in wall (login on the deployed dashboard)
+
+Added when Diane wanted the live demo link gated so randos couldn't browse her personal household data. Design call: **the login wall is purely an access gate** — it does NOT replace the existing server-side Google Calendar OAuth setup. Calendar reads continue to use the `google-token.json` she uploads to Render's Secret Files. The two OAuth setups are intentionally separate clients in Google Cloud Console so they can evolve independently (calendar = server-side "installed app" pattern, dashboard sign-in = browser SPA pattern).
+
+### Backend pieces
+
+- [apps/api/src/services/session.ts](apps/api/src/services/session.ts) — `verifyGoogleIdToken` (uses `google-auth-library`'s `OAuth2Client.verifyIdToken` against Google's JWKS), `isAllowedEmail` (comma-separated `AUTH_ALLOWED_EMAIL`, case-insensitive, closed by default), `signSession` / `verifySession` (24h `jsonwebtoken`-signed JWT, secret read from `JWT_SECRET`).
+- [apps/api/src/middleware/auth.ts](apps/api/src/middleware/auth.ts) — single `requireToken` middleware with precedence: no-auth-configured → open; bearer matches `API_TOKEN` → allow (preserves Alexa skill + curl scripts); bearer parses as valid session JWT → allow; otherwise 401.
+- [apps/api/src/routes/auth.ts](apps/api/src/routes/auth.ts) — `POST /api/auth/google` accepts `{ credential }` from the browser, verifies, checks `email_verified` + allowlist, issues session JWT. Mounted at `/api/auth` *before* the `requireToken` guard (chicken-and-egg).
+- New deps: `jsonwebtoken` + `@types/jsonwebtoken`.
+
+### Frontend pieces
+
+- [apps/dashboard/index.html](apps/dashboard/index.html) — loads Google Identity Services from `https://accounts.google.com/gsi/client` (~2 KB, async/defer).
+- [apps/dashboard/src/auth.ts](apps/dashboard/src/auth.ts) — sessionStorage helpers + `AUTH_ENABLED` derived from `VITE_GOOGLE_OAUTH_CLIENT_ID` presence.
+- [apps/dashboard/src/components/LoginScreen.tsx](apps/dashboard/src/components/LoginScreen.tsx) — full-screen centered panel rendering GIS's standard button. Polls for the GIS script to finish loading (async/defer means it may not be ready at first paint), then `initialize` + `renderButton`. On credential callback: POST to `/api/auth/google`, store returned token + email + name + picture in `sessionStorage`, lift state to App.
+- [apps/dashboard/src/App.tsx](apps/dashboard/src/App.tsx) — gates everything on `AUTH_ENABLED && !session` returning `<LoginScreen>`. Sign-out button in the header beside the theme toggle, shows the signed-in email as tooltip.
+- [apps/dashboard/src/api.ts](apps/dashboard/src/api.ts) — `currentToken()` reads from `sessionStorage` first, falls back to `VITE_API_TOKEN` for envs without sign-in configured.
+
+### UX choice: sessionStorage, not localStorage
+
+The user asked for "login every time I click the link" behavior. `sessionStorage` clears when the tab closes, which gives that without us needing aggressive short JWT expiries or refresh-token plumbing. JWT itself is 24h so a long-lived tab doesn't get bounced mid-session.
+
+### Env vars (new)
+
+- `GOOGLE_OAUTH_CLIENT_ID` (API + dashboard as `VITE_GOOGLE_OAUTH_CLIENT_ID`) — Google Cloud Console OAuth Web-app client ID. Setting it enables the login wall.
+- `AUTH_ALLOWED_EMAIL` (API only) — comma-separated allowlist. Defaults to refusing everyone if unset.
+- `JWT_SECRET` (API only) — ≥16 chars. Required when `GOOGLE_OAUTH_CLIENT_ID` is set.
+- See README's *Google sign-in* section for the Google Cloud Console steps.
+
+### Tests
+
+- [apps/api/src/services/session.test.ts](apps/api/src/services/session.test.ts) — 9 tests: JWT round-trip, tampered token rejection, rotated-secret rejection, JWT_SECRET length + presence enforcement, email allowlist (case-insensitive, comma-separated, closed-by-default).
+- [apps/api/src/middleware/auth.test.ts](apps/api/src/middleware/auth.test.ts) — 7 tests: open-pass when no auth configured, legacy `API_TOKEN` accept + reject, JWT accept + malformed reject, EITHER token type works when both configured, missing header → 401.
+
+### Deliberate non-coverage
+
+`verifyGoogleIdToken` is *not* unit-tested — it hits Google's live JWKS endpoint and any local mock would be lower-fidelity than the real verification anyway. If a regression happens there, it'll show up as a 401 on `/api/auth/google` immediately and is loud, not silent. The route itself is also not tested (no Express route-test infrastructure in this repo yet); the service logic it sits on top of is fully covered.
+
+---
+
 ## 36. Route cheat sheet (current as of this Part B)
 
 | Endpoint | Method | Purpose |
