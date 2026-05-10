@@ -4,6 +4,7 @@ import { Routine } from '../db/models/Routine.js';
 import {
   affordabilityReport,
   discretionary,
+  estimateMonthlyTax,
   getFinancialProfile,
   listOutsourceable,
   setFinancialProfile,
@@ -51,46 +52,61 @@ async function seedRoutines(): Promise<void> {
 describe('financial profile', () => {
   it('returns a default-shaped profile when nothing saved', async () => {
     const p = await getFinancialProfile();
-    expect(p.monthly_income).toBe(0);
+    expect(p.monthly_gross_income).toBe(0);
+    expect(p.monthly_tax_estimate).toBe(0);
     expect(p.monthly_fixed_expenses).toBe(0);
+    expect(p.filing_status).toBe('single');
   });
 
   it('upserts and reads back', async () => {
     await setFinancialProfile({
-      monthly_income: 5000,
+      monthly_gross_income: 6000,
+      monthly_tax_estimate: 1200,
       monthly_fixed_expenses: 3500,
+      state: 'wa',
+      filing_status: 'single',
+      monthly_extra_withholding: 100,
       notes: 'baseline',
     });
     const p = await getFinancialProfile();
-    expect(p.monthly_income).toBe(5000);
+    expect(p.monthly_gross_income).toBe(6000);
+    expect(p.monthly_tax_estimate).toBe(1200);
     expect(p.monthly_fixed_expenses).toBe(3500);
+    expect(p.state).toBe('WA');
+    expect(p.monthly_extra_withholding).toBe(100);
     expect(p.notes).toBe('baseline');
   });
 
   it('partial updates leave other fields intact', async () => {
-    await setFinancialProfile({ monthly_income: 5000, monthly_fixed_expenses: 3500 });
+    await setFinancialProfile({
+      monthly_gross_income: 5000,
+      monthly_tax_estimate: 900,
+      monthly_fixed_expenses: 3500,
+    });
     await setFinancialProfile({ notes: 'updated' });
     const p = await getFinancialProfile();
-    expect(p.monthly_income).toBe(5000);
+    expect(p.monthly_gross_income).toBe(5000);
+    expect(p.monthly_tax_estimate).toBe(900);
     expect(p.monthly_fixed_expenses).toBe(3500);
     expect(p.notes).toBe('updated');
   });
 
   it('only one profile exists (singleton on key=self)', async () => {
-    await setFinancialProfile({ monthly_income: 1000 });
-    await setFinancialProfile({ monthly_income: 2000 });
+    await setFinancialProfile({ monthly_gross_income: 1000 });
+    await setFinancialProfile({ monthly_gross_income: 2000 });
     const all = await FinancialProfile.find({}).lean();
     expect(all.length).toBe(1);
-    expect(all[0]?.monthly_income).toBe(2000);
+    expect(all[0]?.monthly_gross_income).toBe(2000);
   });
 });
 
 describe('discretionary', () => {
-  it('returns income minus fixed', () => {
+  it('returns gross minus tax minus fixed', () => {
     expect(
       discretionary({
         key: 'self',
-        monthly_income: 5000,
+        monthly_gross_income: 6000,
+        monthly_tax_estimate: 1000,
         monthly_fixed_expenses: 3500,
         updated_at: new Date(),
       }),
@@ -101,11 +117,74 @@ describe('discretionary', () => {
     expect(
       discretionary({
         key: 'self',
-        monthly_income: 1000,
+        monthly_gross_income: 1000,
+        monthly_tax_estimate: 200,
         monthly_fixed_expenses: 3500,
         updated_at: new Date(),
       }),
     ).toBe(0);
+  });
+});
+
+describe('estimateMonthlyTax', () => {
+  it('returns zero on zero income', () => {
+    const e = estimateMonthlyTax({ monthly_gross_income: 0 });
+    expect(e.total).toBe(0);
+    expect(e.effective_rate).toBe(0);
+  });
+
+  it('WA single — no state tax, federal + FICA only', () => {
+    const e = estimateMonthlyTax({
+      monthly_gross_income: 5000,
+      state: 'WA',
+      filing_status: 'single',
+      monthly_extra_withholding: 0,
+    });
+    expect(e.state_tax).toBe(0);
+    expect(e.federal).toBeGreaterThan(0);
+    expect(e.fica).toBeGreaterThan(0);
+    expect(e.total).toBeCloseTo(e.federal + e.fica + e.state_tax + e.extra, 1);
+    // 7.65% FICA on $5k = $382.50/mo
+    expect(e.fica).toBeCloseTo(382.5, 1);
+  });
+
+  it('adds extra withholding to total', () => {
+    const a = estimateMonthlyTax({
+      monthly_gross_income: 5000,
+      state: 'WA',
+      monthly_extra_withholding: 0,
+    });
+    const b = estimateMonthlyTax({
+      monthly_gross_income: 5000,
+      state: 'WA',
+      monthly_extra_withholding: 200,
+    });
+    expect(b.total - a.total).toBeCloseTo(200, 1);
+    expect(b.extra).toBe(200);
+  });
+
+  it('uses higher effective rate for known state vs no state', () => {
+    const wa = estimateMonthlyTax({
+      monthly_gross_income: 8000,
+      state: 'WA',
+      filing_status: 'single',
+    });
+    const ca = estimateMonthlyTax({
+      monthly_gross_income: 8000,
+      state: 'CA',
+      filing_status: 'single',
+    });
+    expect(ca.state_tax).toBeGreaterThan(wa.state_tax);
+    expect(ca.total).toBeGreaterThan(wa.total);
+  });
+
+  it('flags unknown state in notes', () => {
+    const e = estimateMonthlyTax({
+      monthly_gross_income: 5000,
+      state: 'ZZ',
+    });
+    expect(e.notes).toMatch(/not in lookup/i);
+    expect(e.state_tax).toBe(0);
   });
 });
 
@@ -149,7 +228,8 @@ describe('affordabilityReport', () => {
   it('greedy splits items into fits / exceeds based on discretionary', async () => {
     await seedRoutines();
     await setFinancialProfile({
-      monthly_income: 5000,
+      monthly_gross_income: 6000,
+      monthly_tax_estimate: 1000,
       monthly_fixed_expenses: 4870,
     });
     // discretionary = $130, yard ≈ $128.57/mo fits, airbnb_pre $120/mo doesn't fit on top.

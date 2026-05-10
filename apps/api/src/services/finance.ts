@@ -2,9 +2,11 @@ import { FinancialProfile } from '../db/models/FinancialProfile.js';
 import { Routine } from '../db/models/Routine.js';
 import { logActivity } from './activity.js';
 import type {
+  FilingStatus,
   FinancialProfile as FinancialProfileType,
   OutsourceableSummary,
   OutsourceableSummaryItem,
+  TaxEstimate,
 } from '@household-os/shared/types';
 
 const DAYS_PER_MONTH = 30;
@@ -18,24 +20,43 @@ export async function getFinancialProfile(): Promise<FinancialProfileType> {
   if (existing) return existing as unknown as FinancialProfileType;
   return {
     key: 'self',
-    monthly_income: 0,
+    monthly_gross_income: 0,
+    monthly_tax_estimate: 0,
     monthly_fixed_expenses: 0,
+    state: '',
+    filing_status: 'single',
+    monthly_extra_withholding: 0,
     notes: '',
+    expense_breakdown: '',
     updated_at: new Date(),
   };
 }
 
 export async function setFinancialProfile(input: {
-  monthly_income?: number;
+  monthly_gross_income?: number;
+  monthly_tax_estimate?: number;
   monthly_fixed_expenses?: number;
+  state?: string;
+  filing_status?: FilingStatus;
+  monthly_extra_withholding?: number;
   notes?: string;
+  expense_breakdown?: string;
 }): Promise<FinancialProfileType> {
   const update: Record<string, unknown> = { updated_at: new Date() };
-  if (typeof input.monthly_income === 'number')
-    update.monthly_income = input.monthly_income;
+  if (typeof input.monthly_gross_income === 'number')
+    update.monthly_gross_income = input.monthly_gross_income;
+  if (typeof input.monthly_tax_estimate === 'number')
+    update.monthly_tax_estimate = input.monthly_tax_estimate;
   if (typeof input.monthly_fixed_expenses === 'number')
     update.monthly_fixed_expenses = input.monthly_fixed_expenses;
+  if (typeof input.state === 'string') update.state = input.state.toUpperCase();
+  if (typeof input.filing_status === 'string')
+    update.filing_status = input.filing_status;
+  if (typeof input.monthly_extra_withholding === 'number')
+    update.monthly_extra_withholding = input.monthly_extra_withholding;
   if (typeof input.notes === 'string') update.notes = input.notes;
+  if (typeof input.expense_breakdown === 'string')
+    update.expense_breakdown = input.expense_breakdown;
 
   const updated = await FinancialProfile.findOneAndUpdate(
     { key: 'self' },
@@ -50,17 +71,140 @@ export async function setFinancialProfile(input: {
   return updated as unknown as FinancialProfileType;
 }
 
+/**
+ * Discretionary = gross − tax − fixed. Clamped at zero.
+ */
 export function discretionary(profile: FinancialProfileType): number {
-  return Math.max(
-    0,
-    (profile.monthly_income ?? 0) - (profile.monthly_fixed_expenses ?? 0),
-  );
+  const gross = profile.monthly_gross_income ?? 0;
+  const tax = profile.monthly_tax_estimate ?? 0;
+  const fixed = profile.monthly_fixed_expenses ?? 0;
+  return Math.max(0, gross - tax - fixed);
 }
 
+// ---------- Tax estimator ----------
+
 /**
- * Estimate monthly occurrences for a routine based on its scheduling. Used to
- * convert per-occurrence outsourcing cost into a monthly figure.
+ * 2025 US federal income tax brackets per filing status.
+ * Annual taxable-income breakpoints + marginal rates.
  */
+const FEDERAL_BRACKETS: Record<FilingStatus, { upTo: number; rate: number }[]> = {
+  single: [
+    { upTo: 11_925, rate: 0.10 },
+    { upTo: 48_475, rate: 0.12 },
+    { upTo: 103_350, rate: 0.22 },
+    { upTo: 197_300, rate: 0.24 },
+    { upTo: 250_525, rate: 0.32 },
+    { upTo: 626_350, rate: 0.35 },
+    { upTo: Infinity, rate: 0.37 },
+  ],
+  married_jointly: [
+    { upTo: 23_850, rate: 0.10 },
+    { upTo: 96_950, rate: 0.12 },
+    { upTo: 206_700, rate: 0.22 },
+    { upTo: 394_600, rate: 0.24 },
+    { upTo: 501_050, rate: 0.32 },
+    { upTo: 751_600, rate: 0.35 },
+    { upTo: Infinity, rate: 0.37 },
+  ],
+  head_of_household: [
+    { upTo: 17_000, rate: 0.10 },
+    { upTo: 64_850, rate: 0.12 },
+    { upTo: 103_350, rate: 0.22 },
+    { upTo: 197_300, rate: 0.24 },
+    { upTo: 250_500, rate: 0.32 },
+    { upTo: 626_350, rate: 0.35 },
+    { upTo: Infinity, rate: 0.37 },
+  ],
+};
+
+const STANDARD_DEDUCTION: Record<FilingStatus, number> = {
+  single: 15_000,
+  married_jointly: 30_000,
+  head_of_household: 22_500,
+};
+
+/**
+ * Rough effective state-tax rates at moderate single-earner income. Not exact;
+ * meant to surface ballpark numbers for affordability decisions, not file
+ * returns. Diane can override the estimator output if her real tax differs.
+ */
+const STATE_EFFECTIVE_RATES: Record<string, number> = {
+  AK: 0, FL: 0, NH: 0, NV: 0, SD: 0, TN: 0, TX: 0, WA: 0, WY: 0,
+  // Common other states with rough effective rates at $50-100k single:
+  CA: 0.05, OR: 0.07, NY: 0.05, MA: 0.05, IL: 0.0495, CO: 0.044,
+  GA: 0.04, AZ: 0.025, NC: 0.0425, VA: 0.045, MD: 0.04, NJ: 0.045,
+  PA: 0.0307, OH: 0.035, MN: 0.06, MI: 0.0425,
+};
+
+function annualFederalTax(annualGross: number, filingStatus: FilingStatus): number {
+  const taxable = Math.max(0, annualGross - STANDARD_DEDUCTION[filingStatus]);
+  const brackets = FEDERAL_BRACKETS[filingStatus];
+  let owed = 0;
+  let prevCap = 0;
+  for (const b of brackets) {
+    if (taxable <= prevCap) break;
+    const slice = Math.min(taxable, b.upTo) - prevCap;
+    if (slice > 0) owed += slice * b.rate;
+    prevCap = b.upTo;
+  }
+  return owed;
+}
+
+/** FICA: Social Security 6.2% (capped at $168,600 wage base for 2025) + Medicare 1.45% */
+function annualFicaTax(annualGross: number): number {
+  const ssWageBase = 168_600;
+  const ss = Math.min(annualGross, ssWageBase) * 0.062;
+  const medicare = annualGross * 0.0145;
+  return ss + medicare;
+}
+
+export function estimateMonthlyTax(input: {
+  monthly_gross_income: number;
+  state?: string;
+  filing_status?: FilingStatus;
+  monthly_extra_withholding?: number;
+}): TaxEstimate {
+  const monthly = input.monthly_gross_income ?? 0;
+  const annual = monthly * 12;
+  const filing = input.filing_status ?? 'single';
+  const stateCode = (input.state ?? '').toUpperCase();
+  const extraMonthly = input.monthly_extra_withholding ?? 0;
+
+  const fedAnnual = annualFederalTax(annual, filing);
+  const ficaAnnual = annualFicaTax(annual);
+  const stateRate = STATE_EFFECTIVE_RATES[stateCode] ?? 0;
+  const stateAnnual = annual * stateRate;
+
+  const fedMonthly = fedAnnual / 12;
+  const ficaMonthly = ficaAnnual / 12;
+  const stateMonthly = stateAnnual / 12;
+  const total = fedMonthly + ficaMonthly + stateMonthly + extraMonthly;
+  const effective_rate = monthly > 0 ? total / monthly : 0;
+
+  const knownState = stateCode in STATE_EFFECTIVE_RATES;
+  const stateNote = stateCode
+    ? knownState
+      ? `${stateCode} effective rate: ${(stateRate * 100).toFixed(2)}%.`
+      : `${stateCode} not in lookup table — state tax assumed 0; adjust manually if needed.`
+    : 'No state set — state tax assumed 0.';
+
+  return {
+    monthly_gross_income: monthly,
+    state: stateCode,
+    filing_status: filing,
+    monthly_extra_withholding: extraMonthly,
+    federal: Math.round(fedMonthly * 100) / 100,
+    fica: Math.round(ficaMonthly * 100) / 100,
+    state_tax: Math.round(stateMonthly * 100) / 100,
+    extra: Math.round(extraMonthly * 100) / 100,
+    total: Math.round(total * 100) / 100,
+    effective_rate: Math.round(effective_rate * 10000) / 10000,
+    notes: `${stateNote} Estimate is rough — uses 2025 federal brackets, standard deduction, and effective state rates. Not a substitute for actual tax software.`,
+  };
+}
+
+// ---------- Outsourceable + affordability (unchanged math) ----------
+
 function monthlyOccurrences(scheduling: {
   type?: string;
   interval_days?: number | null;
@@ -72,11 +216,8 @@ function monthlyOccurrences(scheduling: {
     return DAYS_PER_MONTH / Math.max(1, interval);
   }
   if (t === 'fixed') {
-    // ~4.3 occurrences/mo for weekly, ~2.15 for biweekly.
     return scheduling.biweekly ? 30 / 14 : 30 / 7;
   }
-  // as_needed and event_driven default to "you'd choose monthly cadence";
-  // surface 1 occurrence/mo as a planning baseline. User can interpret.
   return 1;
 }
 
@@ -120,10 +261,6 @@ export interface AffordabilityReport {
   rationale: string;
 }
 
-/**
- * Quick affordability snapshot — what could she outsource within her current
- * discretionary monthly amount, prioritized by highest-cost-first?
- */
 export async function affordabilityReport(): Promise<AffordabilityReport> {
   const profile = await getFinancialProfile();
   const dispMonthly = discretionary(profile);
@@ -131,8 +268,6 @@ export async function affordabilityReport(): Promise<AffordabilityReport> {
 
   const fits: OutsourceableSummaryItem[] = [];
   const exceeds: OutsourceableSummaryItem[] = [];
-  // Greedy fill by largest monthly cost first — matches "what should I
-  // prioritize outsourcing if I had to pick?" intuition.
   let used = 0;
   for (const item of summary.items) {
     if (used + item.monthly_cost <= dispMonthly) {

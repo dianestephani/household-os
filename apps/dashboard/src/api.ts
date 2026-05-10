@@ -14,8 +14,10 @@ import type {
   CheckIn,
   ActivityKind,
   ActivityLogEntry,
+  FilingStatus,
   FinancialProfile,
   OutsourceableSummary,
+  TaxEstimate,
 } from '@household-os/shared/types';
 
 export interface AffordabilityReport {
@@ -141,6 +143,16 @@ export const api = {
       }),
     outsourceable: () => request<OutsourceableSummary>('/finance/outsourceable'),
     affordability: () => request<AffordabilityReport>('/finance/affordability'),
+    estimateTax: (input: {
+      monthly_gross_income: number;
+      state?: string;
+      filing_status?: FilingStatus;
+      monthly_extra_withholding?: number;
+    }) =>
+      request<TaxEstimate>('/finance/estimate-tax', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
   },
   chat: (
     persona: string,

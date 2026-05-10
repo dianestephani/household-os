@@ -81,15 +81,49 @@ export interface Routine {
 
 // ----- Finance -----
 
+export type FilingStatus = 'single' | 'married_jointly' | 'head_of_household';
+
 export interface FinancialProfile {
   _id?: string;
   /** Singleton key — only one profile per system. */
   key: 'self';
-  monthly_income: number;
+  /** Monthly gross income (pre-tax) across all jobs. */
+  monthly_gross_income: number;
+  /** Monthly tax withholding estimate. Auto-fillable; manually overridable. */
+  monthly_tax_estimate: number;
+  /** Monthly fixed expenses (rent, insurance, subscriptions, etc.) */
   monthly_fixed_expenses: number;
+  /** Two-letter state code (e.g. WA, CA) — drives state-tax in the estimator. */
+  state?: string;
+  filing_status?: FilingStatus;
+  /** Total monthly extra withholding across all paychecks, in dollars. */
+  monthly_extra_withholding?: number;
   /** Any extra notes Diane wants to keep alongside the numbers. */
   notes?: string;
+  /**
+   * Free-form RocketMoney-derived context. Diane pastes whatever summary feels
+   * useful — category breakdown, recurring subscriptions, top spending lines,
+   * income split, etc. The Finance persona reads this as additional grounding
+   * for affordability questions; we never parse it structurally.
+   */
+  expense_breakdown?: string;
   updated_at: Date | string;
+}
+
+export interface TaxEstimate {
+  monthly_gross_income: number;
+  state: string;
+  filing_status: FilingStatus;
+  monthly_extra_withholding: number;
+  /** Computed components (monthly). */
+  federal: number;
+  fica: number;
+  state_tax: number;
+  extra: number;
+  total: number;
+  /** Effective tax rate on gross. */
+  effective_rate: number;
+  notes: string;
 }
 
 export interface OutsourceableSummaryItem {

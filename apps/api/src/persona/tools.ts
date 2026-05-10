@@ -27,11 +27,12 @@ import {
 import { recentActivity } from '../services/activity.js';
 import {
   affordabilityReport,
+  estimateMonthlyTax,
   getFinancialProfile,
   listOutsourceable,
   setFinancialProfile,
 } from '../services/finance.js';
-import type { ActivityKind } from '@household-os/shared/types';
+import type { ActivityKind, FilingStatus } from '@household-os/shared/types';
 import type {
   DeferReasonCode,
   EnergyLevel,
@@ -135,9 +136,24 @@ export const financeTools: Record<string, ToolImpl> = {
 
   set_financial_profile: async (input) =>
     setFinancialProfile({
-      monthly_income: input.monthly_income as number | undefined,
+      monthly_gross_income: input.monthly_gross_income as number | undefined,
+      monthly_tax_estimate: input.monthly_tax_estimate as number | undefined,
       monthly_fixed_expenses: input.monthly_fixed_expenses as number | undefined,
+      state: input.state as string | undefined,
+      filing_status: input.filing_status as FilingStatus | undefined,
+      monthly_extra_withholding:
+        input.monthly_extra_withholding as number | undefined,
       notes: input.notes as string | undefined,
+      expense_breakdown: input.expense_breakdown as string | undefined,
+    }),
+
+  estimate_tax: async (input) =>
+    estimateMonthlyTax({
+      monthly_gross_income: (input.monthly_gross_income as number) ?? 0,
+      state: input.state as string | undefined,
+      filing_status: input.filing_status as FilingStatus | undefined,
+      monthly_extra_withholding:
+        input.monthly_extra_withholding as number | undefined,
     }),
 
   list_outsourceable_routines: async () => listOutsourceable(),
