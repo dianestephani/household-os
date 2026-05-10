@@ -1434,6 +1434,17 @@ Total now: **241 tests** across 30 files (231 API + 10 alexa-skill).
 
 Pure single-day filtering feels quiet on days with no activity, while the rolling-window view answers "what have I been up to lately" — the more common use case for those tabs. The DayNavigator is a deliberate opt-in for forensic "what did I do on April 30" queries, not the default lens.
 
+### Finance day log (added immediately after §43)
+
+[FinancePanel.tsx](apps/dashboard/src/components/FinancePanel.tsx) gained a `FinanceDayLog` sub-component at the bottom (above the PersonaLauncher). It mounts its own DayNavigator and renders two grouped sub-lists for the selected date:
+
+- **Journal entries** — finance-tagged context entries via `api.context.onDate(date, 'finance')`. That helper returns entries where `related_persona ∈ {'finance','both'}`, so cross-cutting "chaos week, ordering takeout = extra spend" entries surface here too.
+- **Edits** — activity-log entries that passed the `isFinanceActivity` filter (exported for testability). The filter excludes `context_logged` kind (already rendered above) and includes `routine_edited` entries whose `metadata.fields` contain finance-relevant strings (`income`, `tax`, `expenses`, `expense_breakdown`, `extra_withholding`, `state`, `filing_status`, `outsource`).
+
+**Design call:** the profile + RocketMoney breakdown + outsourceable table at the top of the Finance tab remain "current state" — they don't accept a date param. Profile snapshots over time would be a separate, much bigger feature (snapshot-on-edit + historical-state reconstruction). For now, the day log answers "what was logged for finance on this date" without pretending the profile itself is date-bound.
+
+**`isFinanceActivity` filter is intentionally narrow.** Outsource-cost edits via `edit_routine_outsourcing` trigger `patchRoutine` whose summary is "Edited routine: <key>" — no finance keyword. The filter catches them by inspecting `metadata.fields` for `outsource*` patterns. False positives clutter the log; the global Activity feed is the right place to see everything.
+
 ---
 
 ## 36. Route cheat sheet (current as of this Part B)
