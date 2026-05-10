@@ -8,6 +8,7 @@ import CalendarDayPanel from './CalendarDayPanel.js';
 import TodayContextStrip from './TodayContextStrip.js';
 import type {
   CalendarEvent,
+  CalendarTask,
   ContextEntry,
   DayView,
   PlanItem,
@@ -121,6 +122,25 @@ export default function DayPanel({
             ) : (
               <DayContextPanel entries={view.context} />
             ))}
+
+          {view.tasks.length > 0 && (
+            <TasksPanel
+              tasks={view.tasks}
+              isToday={isToday}
+              onTaskUpdate={(updated) =>
+                setView((v) =>
+                  v
+                    ? {
+                        ...v,
+                        tasks: v.tasks.map((t) =>
+                          t.id === updated.id ? updated : t,
+                        ),
+                      }
+                    : v,
+                )
+              }
+            />
+          )}
 
           {isToday && view.plan && (
             <>
@@ -444,6 +464,107 @@ function DayEventsPanel({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function TasksPanel({
+  tasks,
+  isToday,
+  onTaskUpdate,
+}: {
+  tasks: CalendarTask[];
+  isToday: boolean;
+  onTaskUpdate: (task: CalendarTask) => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggle(t: CalendarTask) {
+    setBusyId(t.id);
+    setError(null);
+    try {
+      const updated =
+        t.status === 'completed'
+          ? await api.tasks.uncomplete(t.tasklist_id, t.id)
+          : await api.tasks.complete(t.tasklist_id, t.id);
+      onTaskUpdate(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <strong>Google Tasks</strong>
+      <p className="muted" style={{ marginTop: '0.25rem', fontSize: '0.86rem' }}>
+        Items from Google Tasks due that day. Check them off here and the
+        change writes back to Google.
+      </p>
+      <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0 0 0' }}>
+        {tasks.map((t) => {
+          const done = t.status === 'completed';
+          return (
+            <li
+              key={t.id}
+              style={{
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: '0.6rem',
+                padding: '0.45rem 0',
+                borderBottom: '1px solid var(--border)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={done}
+                disabled={!isToday || busyId === t.id}
+                onChange={() => toggle(t)}
+                title={
+                  !isToday
+                    ? 'Toggling tasks is only enabled for today'
+                    : undefined
+                }
+              />
+              <span
+                style={{
+                  flex: 1,
+                  textDecoration: done ? 'line-through' : 'none',
+                  color: done ? 'var(--muted)' : 'inherit',
+                }}
+              >
+                {t.title}
+                {t.notes && (
+                  <div
+                    className="muted"
+                    style={{ fontSize: '0.8rem', marginTop: '0.15rem' }}
+                  >
+                    {t.notes}
+                  </div>
+                )}
+              </span>
+              {busyId === t.id && (
+                <span className="muted" style={{ fontSize: '0.78rem' }}>
+                  Saving…
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {error && (
+        <div
+          style={{
+            marginTop: '0.5rem',
+            fontSize: '0.85rem',
+            color: 'var(--bad)',
+          }}
+        >
+          {error}
+        </div>
+      )}
     </div>
   );
 }

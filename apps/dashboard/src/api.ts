@@ -15,6 +15,7 @@ import type {
   ActivityKind,
   ActivityLogEntry,
   CalendarDayResponse,
+  CalendarTask,
   ContextEntry,
   ContextEntryInput,
   ContextRelatedPersona,
@@ -165,6 +166,21 @@ export const api = {
   },
   day: {
     get: (date: string) => request<DayView>(`/day/${date}`),
+  },
+  tasks: {
+    forDay: (date: string) =>
+      request<CalendarTask[]>(`/tasks?date=${date}`),
+    backlog: () => request<CalendarTask[]>('/tasks/backlog'),
+    complete: (tasklist_id: string, task_id: string) =>
+      request<CalendarTask>('/tasks/complete', {
+        method: 'POST',
+        body: JSON.stringify({ tasklist_id, task_id }),
+      }),
+    uncomplete: (tasklist_id: string, task_id: string) =>
+      request<CalendarTask>('/tasks/uncomplete', {
+        method: 'POST',
+        body: JSON.stringify({ tasklist_id, task_id }),
+      }),
   },
   context: {
     list: (days = 7, persona?: ContextRelatedPersona) => {

@@ -26,6 +26,7 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | **Daily plan generation** (rolling routines, fixed routines, zone rotation, event-driven triggers, skip_if + also_triggers, budget packing) | [apps/api/src/cron/morning-gen.ts](apps/api/src/cron/morning-gen.ts) |
 | **Schedule preview** (week / month look-ahead — calendar events + routines coming due, deterministic earliest-due-day bucketing, pending ad-hoc tasks) | [apps/api/src/services/schedule.ts](apps/api/src/services/schedule.ts), [apps/api/src/routes/schedule.ts](apps/api/src/routes/schedule.ts), [apps/dashboard/src/components/SchedulePanel.tsx](apps/dashboard/src/components/SchedulePanel.tsx) |
 | **Day navigator** (Today tab is now date-aware — prev/next + native date picker; today is fully mutable, past days show stored plan read-only, future days show forecast from schedule logic; calendar events + that day's journal entries always shown) | [apps/api/src/services/day.ts](apps/api/src/services/day.ts), [apps/api/src/routes/day.ts](apps/api/src/routes/day.ts), [apps/dashboard/src/components/DayPanel.tsx](apps/dashboard/src/components/DayPanel.tsx) |
+| **Google Tasks integration** (read + mark-done from the dashboard — Tasks API across all task lists, date-filtered onto the day navigator, checkbox mutations write back to Google) | [apps/api/src/utils/google-tasks.ts](apps/api/src/utils/google-tasks.ts), [apps/api/src/services/tasks.ts](apps/api/src/services/tasks.ts), [apps/api/src/routes/tasks.ts](apps/api/src/routes/tasks.ts) |
 | **Calendar (today's events)** (passthrough to Google Calendar with normalized event shape, click-through to event + day permalinks) | [apps/api/src/services/calendar.ts](apps/api/src/services/calendar.ts), [apps/api/src/routes/calendar.ts](apps/api/src/routes/calendar.ts), [apps/dashboard/src/components/CalendarDayPanel.tsx](apps/dashboard/src/components/CalendarDayPanel.tsx) |
 | **Calendar trigger ingestion** (Airbnb, dogsit, landscaper, cleaner) | [apps/api/src/cron/calendar-ingest.ts](apps/api/src/cron/calendar-ingest.ts) |
 | **Publisher** (debounced fan-out to Google Calendar + Alexa app cards) | [apps/api/src/publisher/](apps/api/src/publisher/) |
@@ -79,7 +80,7 @@ Open <http://localhost:5173>. The Today tab is the landing page. The **❔ Guide
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 201 tests (191 API + 10 alexa-skill)
+npm test                 # all workspaces — currently 209 tests (199 API + 10 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 

@@ -323,6 +323,25 @@ export interface CalendarDayResponse {
   open_in_calendar_url: string;
 }
 
+// ----- Google Tasks (the to-do product, surfaced on Calendar's grid) -----
+
+/**
+ * Normalized shape for a single Google Tasks item. We track `tasklist_id`
+ * because the Tasks API requires it to mutate the task (mark complete) — a
+ * Tasks ID alone isn't enough.
+ */
+export interface CalendarTask {
+  id: string;
+  tasklist_id: string;
+  title: string;
+  notes?: string;
+  /** RFC 3339 date (Google stores due as date-only at UTC midnight). */
+  due?: string;
+  status: 'needsAction' | 'completed';
+  /** Set when status flipped to 'completed'. */
+  completed?: string;
+}
+
 // ----- Day view (single-day navigator on the Today tab) -----
 
 /**
@@ -344,6 +363,11 @@ export interface DayView {
    *  today/past — those use `plan` instead. */
   forecast: ScheduleRoutineDue[];
   events: CalendarEvent[];
+  /**
+   * Google Tasks with `due` matching this date. Empty when the OAuth token
+   * hasn't been re-consented for the tasks scope, or in test mode.
+   */
+  tasks: CalendarTask[];
   context: ContextEntry[];
 }
 

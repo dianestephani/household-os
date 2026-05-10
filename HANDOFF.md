@@ -1267,6 +1267,40 @@ Mutations are deliberately scoped to today only. `swap_task`, `mark_done`, `pull
 
 ---
 
+## 40. Google Tasks integration
+
+Diane wanted the to-do items already on her Google Calendar (Google Tasks — the to-do product that surfaces on the calendar grid) to appear alongside system routines in the dashboard, with check-off interactions writing back to Google.
+
+### OAuth scope expansion (one-time action Diane needs to take)
+
+The existing `google-token.json` was minted only with `calendar.events`. Tasks API requires `https://www.googleapis.com/auth/tasks`. [google-auth.ts](apps/api/src/google-auth.ts) now requests both scopes. **Run `npm -w @household-os/api run google-auth` after pulling** to re-consent and replace the saved token. The new token works for both products. On Render, replace the `google-token.json` Secret File with the new one.
+
+### Backend
+
+- [utils/google-tasks.ts](apps/api/src/utils/google-tasks.ts) — `getTasksClient()`, `isTasksConnected()` (with `NODE_ENV=test` short-circuit identical to the calendar utility), `listAllTasks()` (walks all task lists and returns `{ tasklistId, task }` pairs — keeping the tasklist id is required because the Tasks API needs it for mutations), `patchTaskStatus()`.
+- [services/tasks.ts](apps/api/src/services/tasks.ts) — pure helpers: `normalizeTask` (strips Google's wider schema down to our `CalendarTask`, treats anything that isn't exactly `'completed'` as `needsAction`), `taskDueOn` (matches against the date prefix of the RFC 3339 `due` field). Orchestrators: `tasksForDay(dateStr)`, `tasksWithoutDueDate()` (for backlog), `completeTask`, `uncompleteTask`, `todaysTasks()`.
+- [routes/tasks.ts](apps/api/src/routes/tasks.ts) — `GET /api/tasks?date=YYYY-MM-DD`, `GET /api/tasks/backlog`, `POST /api/tasks/complete`, `POST /api/tasks/uncomplete`. Mutations require `{ tasklist_id, task_id }` in the body and return the updated task or a 502 `tasks_api_no_op` if the Tasks API was unreachable.
+- [services/day.ts](apps/api/src/services/day.ts) — the `DayView` payload now bundles `tasks: CalendarTask[]` alongside `plan` / `forecast` / `events` / `context`. Empty when the token isn't tasks-scoped or in test mode.
+
+### Frontend
+
+- [DayPanel.tsx](apps/dashboard/src/components/DayPanel.tsx) — new `TasksPanel` sub-component renders the day's tasks as a checkbox list. Checking/unchecking on today flips the Google Tasks status via `api.tasks.complete` / `api.tasks.uncomplete`; on past/future days the checkbox is disabled (read-only with a tooltip). Optimistic local update on response.
+- [api.ts](apps/dashboard/src/api.ts) — `api.tasks.forDay(date)`, `backlog()`, `complete(...)`, `uncomplete(...)`.
+
+### Direction of integration (intentional v1 limitation)
+
+This is **Google Tasks → dashboard read, plus dashboard → Google Tasks for status mutations only**. The dashboard does *not* push system-routine completions back to Google Tasks (Diane already has those tracked in the system; mirroring would just duplicate state). Creating new Google Tasks from the dashboard is also out of scope — she can use Google's UI for that, then check them off here. If she ever wants full CRUD or wants routine-completions mirrored to Google, the route stubs are in place to extend.
+
+### What's *not* tested
+
+- `listAllTasks` / `patchTaskStatus` — `NODE_ENV=test` short-circuits them at the utility layer, same isolation pattern the calendar tests rely on. Asserting against the real Google Tasks API would be flaky and mocking the entire `googleapis` client is more brittle than valuable. The service-level tests cover the pure helpers (normalize / date filter) plus the disconnected-state behavior.
+
+### Tests
+
+8 in [apps/api/src/services/tasks.test.ts](apps/api/src/services/tasks.test.ts): `normalizeTask` happy path / status fallback / null on missing id+title / completed timestamp preservation; `taskDueOn` date-prefix match + no-due → false; `tasksForDay` + `todaysTasks` return `[]` when disconnected; `completeTask` + `uncompleteTask` return null when disconnected.
+
+---
+
 ## 36. Route cheat sheet (current as of this Part B)
 
 | Endpoint | Method | Purpose |

@@ -30,7 +30,13 @@ const tokenPath =
 
 const PORT = 53682;
 const REDIRECT_URI = `http://localhost:${PORT}/`;
-const SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
+const SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events',
+  // Google Tasks (the to-do product whose items render on the Calendar grid).
+  // Adding this scope requires re-consent: re-run `npm run google-auth` after
+  // pulling. The new token replaces the old one and works for both products.
+  'https://www.googleapis.com/auth/tasks',
+];
 
 if (!fs.existsSync(credsPath)) {
   console.error(`No credentials at ${credsPath}.`);

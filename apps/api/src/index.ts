@@ -20,6 +20,7 @@ import contextRouter from './routes/context.js';
 import calendarRouter from './routes/calendar.js';
 import scheduleRouter from './routes/schedule.js';
 import dayRouter from './routes/day.js';
+import tasksRouter from './routes/tasks.js';
 import authRouter from './routes/auth.js';
 import { requireToken } from './middleware/auth.js';
 import { generateTodayPlan } from './cron/morning-gen.js';
@@ -89,6 +90,7 @@ app.get('/', (_req, res) => {
         '/api/calendar',
         '/api/schedule',
         '/api/day/:YYYY-MM-DD',
+        '/api/tasks',
         '/api/auth/google',
         '/api/chat/:persona',
       ],
@@ -117,6 +119,7 @@ app.use('/api/context', contextRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/schedule', scheduleRouter);
 app.use('/api/day', dayRouter);
+app.use('/api/tasks', tasksRouter);
 
 cron.schedule('30 5 * * *', () => {
   console.log('[cron] ingesting calendar triggers');

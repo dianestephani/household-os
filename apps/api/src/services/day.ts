@@ -3,6 +3,7 @@ import { ContextEntry } from '../db/models/ContextEntry.js';
 import { addDays, parseYmd, ymd } from '../utils/dates.js';
 import { generateTodayPlan } from '../cron/morning-gen.js';
 import { scheduleRange } from './schedule.js';
+import { tasksForDay } from './tasks.js';
 import type {
   ContextEntry as ContextEntryType,
   DayView,
@@ -53,11 +54,12 @@ export async function getDayView(dateStr: string): Promise<DayView> {
 
   const start = parseYmd(dateStr);
   const end = addDays(start, 1);
-  const ctxDocs = await ContextEntry.find({
-    ts: { $gte: start, $lt: end },
-  })
-    .sort({ ts: -1 })
-    .lean();
+  const [ctxDocs, tasks] = await Promise.all([
+    ContextEntry.find({ ts: { $gte: start, $lt: end } })
+      .sort({ ts: -1 })
+      .lean(),
+    tasksForDay(dateStr),
+  ]);
 
   return {
     date: dateStr,
@@ -67,6 +69,7 @@ export async function getDayView(dateStr: string): Promise<DayView> {
     plan,
     forecast,
     events: dayEntry.events,
+    tasks,
     context: ctxDocs as unknown as ContextEntryType[],
   };
 }
