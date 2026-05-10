@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type AffordabilityReport } from '../api.js';
 import type { FilingStatus, TaxEstimate } from '@household-os/shared/types';
-import ChatPanel from './ChatPanel.js';
+import PersonaLauncher from './PersonaLauncher.js';
 
 const FILING_OPTIONS: { value: FilingStatus; label: string }[] = [
   { value: 'single', label: 'Single' },
@@ -305,7 +305,7 @@ export default function FinancePanel() {
         </p>
       </div>
 
-      <ChatPanel persona="finance" />
+      <PersonaLauncher persona="finance" />
     </>
   );
 }

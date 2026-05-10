@@ -6,7 +6,7 @@ import MoodButtons from './components/MoodButtons.js';
 import WorkoutPanel from './components/WorkoutPanel.js';
 import CheckInBanner from './components/CheckInBanner.js';
 import ActivityFeed from './components/ActivityFeed.js';
-import ChatPanel from './components/ChatPanel.js';
+import PersonaLauncher from './components/PersonaLauncher.js';
 import RoutinesPage from './components/RoutinesPage.js';
 import HowToGuide from './components/HowToGuide.js';
 import FinancePanel from './components/FinancePanel.js';
@@ -138,8 +138,15 @@ export default function App() {
       {view === 'workouts' && <WorkoutPanel />}
       {view === 'activity' && <ActivityFeed />}
 
-      {view === 'household' && <ChatPanel persona="household" onUpdate={refresh} />}
-      {view === 'nutrition' && <ChatPanel persona="nutrition" stub />}
+      {view === 'household' && <PersonaLauncher persona="household" />}
+      {view === 'nutrition' && (
+        <div className="panel">
+          <strong>Nutrition</strong>
+          <p className="muted" style={{ marginTop: '0.4rem' }}>
+            Nutrition persona isn't built yet — Diane is starting with Household Ops.
+          </p>
+        </div>
+      )}
       {view === 'finance' && <FinancePanel />}
       {view === 'routines' && <RoutinesPage />}
       {view === 'journal' && <JournalPanel />}
