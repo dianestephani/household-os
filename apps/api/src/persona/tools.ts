@@ -27,12 +27,15 @@ import {
 import { recentActivity } from '../services/activity.js';
 import {
   affordabilityReport,
+  estimateMonthlyTax,
   getFinancialProfile,
   listOutsourceable,
   setFinancialProfile,
 } from '../services/finance.js';
-import type { ActivityKind } from '@household-os/shared/types';
+import { addContext, recentContext } from '../services/context.js';
+import type { ActivityKind, FilingStatus } from '@household-os/shared/types';
 import type {
+  ContextRelatedPersona,
   DeferReasonCode,
   EnergyLevel,
   MoodLevel,
@@ -128,6 +131,25 @@ export const householdTools: Record<string, ToolImpl> = {
       (input.days as number | undefined) ?? 7,
       input.kind as ActivityKind | undefined,
     ),
+
+  log_context: async (input) =>
+    addContext({
+      text: input.text as string,
+      tags: input.tags as string[] | undefined,
+      energy: input.energy as EnergyLevel | undefined,
+      mood: input.mood as MoodLevel | undefined,
+      dogsit_count: input.dogsit_count as number | undefined,
+      blocked_activities: input.blocked_activities as string[] | undefined,
+      related_persona:
+        (input.related_persona as ContextRelatedPersona | undefined) ?? 'household',
+      source: 'persona',
+    }),
+
+  recent_context: async (input) =>
+    recentContext(
+      (input.days as number | undefined) ?? 7,
+      (input.persona as ContextRelatedPersona | undefined) ?? 'household',
+    ),
 };
 
 export const financeTools: Record<string, ToolImpl> = {
@@ -135,9 +157,24 @@ export const financeTools: Record<string, ToolImpl> = {
 
   set_financial_profile: async (input) =>
     setFinancialProfile({
-      monthly_income: input.monthly_income as number | undefined,
+      monthly_gross_income: input.monthly_gross_income as number | undefined,
+      monthly_tax_estimate: input.monthly_tax_estimate as number | undefined,
       monthly_fixed_expenses: input.monthly_fixed_expenses as number | undefined,
+      state: input.state as string | undefined,
+      filing_status: input.filing_status as FilingStatus | undefined,
+      monthly_extra_withholding:
+        input.monthly_extra_withholding as number | undefined,
       notes: input.notes as string | undefined,
+      expense_breakdown: input.expense_breakdown as string | undefined,
+    }),
+
+  estimate_tax: async (input) =>
+    estimateMonthlyTax({
+      monthly_gross_income: (input.monthly_gross_income as number) ?? 0,
+      state: input.state as string | undefined,
+      filing_status: input.filing_status as FilingStatus | undefined,
+      monthly_extra_withholding:
+        input.monthly_extra_withholding as number | undefined,
     }),
 
   list_outsourceable_routines: async () => listOutsourceable(),
@@ -151,6 +188,25 @@ export const financeTools: Record<string, ToolImpl> = {
         | number
         | undefined,
     }),
+
+  log_context: async (input) =>
+    addContext({
+      text: input.text as string,
+      tags: input.tags as string[] | undefined,
+      energy: input.energy as EnergyLevel | undefined,
+      mood: input.mood as MoodLevel | undefined,
+      dogsit_count: input.dogsit_count as number | undefined,
+      blocked_activities: input.blocked_activities as string[] | undefined,
+      related_persona:
+        (input.related_persona as ContextRelatedPersona | undefined) ?? 'finance',
+      source: 'persona',
+    }),
+
+  recent_context: async (input) =>
+    recentContext(
+      (input.days as number | undefined) ?? 14,
+      (input.persona as ContextRelatedPersona | undefined) ?? 'finance',
+    ),
 };
 
 export const stubTools: Record<string, ToolImpl> = {

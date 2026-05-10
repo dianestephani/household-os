@@ -48,6 +48,16 @@ export function getCalendarClient(): calendar_v3.Calendar | null {
   return cachedClient;
 }
 
+/**
+ * Lightweight connection check for the dashboard's calendar panel. Returns
+ * false in test mode so route tests don't get a flaky "connected" reading
+ * dependent on whether the developer's local creds files exist.
+ */
+export function isCalendarConnected(): boolean {
+  if (process.env.NODE_ENV === 'test') return false;
+  return getCalendarClient() !== null;
+}
+
 export async function listEvents(
   timeMinIso: string,
   timeMaxIso: string,

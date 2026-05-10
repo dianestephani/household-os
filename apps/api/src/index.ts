@@ -16,6 +16,9 @@ import checkinsRouter from './routes/checkins.js';
 import zonesRouter from './routes/zones.js';
 import activityRouter from './routes/activity.js';
 import financeRouter from './routes/finance.js';
+import contextRouter from './routes/context.js';
+import calendarRouter from './routes/calendar.js';
+import scheduleRouter from './routes/schedule.js';
 import { generateTodayPlan } from './cron/morning-gen.js';
 import { ingestCalendarTriggers } from './cron/calendar-ingest.js';
 import {
@@ -88,6 +91,9 @@ app.get('/', (_req, res) => {
         '/api/triggers',
         '/api/activity',
         '/api/finance',
+        '/api/context',
+        '/api/calendar',
+        '/api/schedule',
         '/api/chat/:persona',
       ],
     },
@@ -111,6 +117,9 @@ app.use('/api/checkins', checkinsRouter);
 app.use('/api/zones', zonesRouter);
 app.use('/api/activity', activityRouter);
 app.use('/api/finance', financeRouter);
+app.use('/api/context', contextRouter);
+app.use('/api/calendar', calendarRouter);
+app.use('/api/schedule', scheduleRouter);
 
 cron.schedule('30 5 * * *', () => {
   console.log('[cron] ingesting calendar triggers');

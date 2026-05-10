@@ -81,15 +81,49 @@ export interface Routine {
 
 // ----- Finance -----
 
+export type FilingStatus = 'single' | 'married_jointly' | 'head_of_household';
+
 export interface FinancialProfile {
   _id?: string;
   /** Singleton key — only one profile per system. */
   key: 'self';
-  monthly_income: number;
+  /** Monthly gross income (pre-tax) across all jobs. */
+  monthly_gross_income: number;
+  /** Monthly tax withholding estimate. Auto-fillable; manually overridable. */
+  monthly_tax_estimate: number;
+  /** Monthly fixed expenses (rent, insurance, subscriptions, etc.) */
   monthly_fixed_expenses: number;
+  /** Two-letter state code (e.g. WA, CA) — drives state-tax in the estimator. */
+  state?: string;
+  filing_status?: FilingStatus;
+  /** Total monthly extra withholding across all paychecks, in dollars. */
+  monthly_extra_withholding?: number;
   /** Any extra notes Diane wants to keep alongside the numbers. */
   notes?: string;
+  /**
+   * Free-form RocketMoney-derived context. Diane pastes whatever summary feels
+   * useful — category breakdown, recurring subscriptions, top spending lines,
+   * income split, etc. The Finance persona reads this as additional grounding
+   * for affordability questions; we never parse it structurally.
+   */
+  expense_breakdown?: string;
   updated_at: Date | string;
+}
+
+export interface TaxEstimate {
+  monthly_gross_income: number;
+  state: string;
+  filing_status: FilingStatus;
+  monthly_extra_withholding: number;
+  /** Computed components (monthly). */
+  federal: number;
+  fica: number;
+  state_tax: number;
+  extra: number;
+  total: number;
+  /** Effective tax rate on gross. */
+  effective_rate: number;
+  notes: string;
 }
 
 export interface OutsourceableSummaryItem {
@@ -225,7 +259,8 @@ export type ActivityKind =
   | 'check_in_answered'
   | 'check_in_skipped'
   | 'trigger_added'
-  | 'routine_edited';
+  | 'routine_edited'
+  | 'context_logged';
 
 export type ActivityActor = 'user' | 'system' | 'cron';
 
@@ -238,6 +273,140 @@ export interface ActivityLogEntry {
   actor: ActivityActor;
   /** Optional structured metadata for analytics / dashboards. */
   metadata?: Record<string, unknown>;
+}
+
+// ----- Calendar (Google Calendar passthrough for dashboard display) -----
+
+/**
+ * Normalized event shape returned by the dashboard calendar endpoint. We
+ * intentionally don't expose the full Google Schema$Event — the dashboard
+ * only needs enough to render a day strip with a click-through.
+ */
+export interface CalendarEvent {
+  id: string;
+  summary: string;
+  /** ISO 8601 datetime for timed events; YYYY-MM-DD for all-day events. */
+  start: string;
+  end: string;
+  is_all_day: boolean;
+  location?: string;
+  /** Direct deep-link to the event in Google Calendar's web UI. */
+  html_link?: string;
+}
+
+export interface CalendarDayResponse {
+  /** Local YYYY-MM-DD the events apply to. */
+  date: string;
+  /**
+   * Whether Google Calendar OAuth credentials are configured. False means the
+   * dashboard should render a "calendar not connected" state with setup hint.
+   */
+  connected: boolean;
+  events: CalendarEvent[];
+  /** Permalink to the user's Google Calendar at this exact day. */
+  open_in_calendar_url: string;
+}
+
+// ----- Schedule preview (week / month look-ahead) -----
+
+/**
+ * A single routine that's due on a specific day in the schedule window.
+ * `source` distinguishes the upstream classifier so the UI can group/style
+ * appropriately (rolling overdue items look different from this-week's
+ * fixed-day trash etc.).
+ */
+export interface ScheduleRoutineDue {
+  routine_key: string;
+  name: string;
+  category?: string;
+  estimate_minutes: number;
+  energy: EnergyLevel;
+  source: 'rolling' | 'fixed' | 'zone_rotation' | 'event_driven';
+  /**
+   * Human-readable note about why this is on this day:
+   *   rolling     → "due" / "overdue 3d"
+   *   fixed       → "Tue evening" / "biweekly"
+   *   zone        → "week 3"
+   *   event       → "Airbnb checkin tomorrow" / "Landscaper today"
+   */
+  cadence_note: string;
+}
+
+export interface ScheduleEntry {
+  /** YYYY-MM-DD, local. */
+  date: string;
+  is_today: boolean;
+  events: CalendarEvent[];
+  routines_due: ScheduleRoutineDue[];
+}
+
+export interface SchedulePendingAdHoc {
+  id: string;
+  name: string;
+  zone: Zone;
+  severity: ZoneStateLevel;
+  estimate_minutes: number;
+}
+
+export interface ScheduleRangeResponse {
+  /** YYYY-MM-DD inclusive. */
+  start: string;
+  /** YYYY-MM-DD exclusive — the day AFTER the last day in `days`. */
+  end: string;
+  days: ScheduleEntry[];
+  /** Open ad-hoc zone tasks; not date-anchored, shown at top of UI. */
+  pending_adhoc_tasks: SchedulePendingAdHoc[];
+  calendar_connected: boolean;
+  /** Permalink to the user's Google Calendar at the start of the range. */
+  open_in_calendar_url: string;
+}
+
+// ----- Context journal -----
+
+/**
+ * Append-only narrative journal shared by both personas. Lets Diane (or a
+ * persona on her behalf) drop qualitative context — "5 dogs today, exhausted,
+ * couldn't leave the house" — that the system can reason about later.
+ *
+ * Structured fields are optional but encouraged: they make the entries
+ * queryable for patterns (e.g. "high dogsit_count days correlate with low
+ * energy and skipped workouts") rather than just LLM-readable prose.
+ */
+export type ContextRelatedPersona = 'household' | 'finance' | 'both';
+
+export type ContextSource = 'voice' | 'dashboard' | 'persona' | 'api';
+
+export interface ContextEntry {
+  _id?: string;
+  ts: Date | string;
+  /** Required free-form narrative — the truth of record. */
+  text: string;
+  /** Free-form descriptive labels (e.g. ["dogsit-stress", "weather"]). */
+  tags?: string[];
+  energy?: EnergyLevel;
+  mood?: MoodLevel;
+  /** How many guest dogs are present (excluding Diane's own 2). */
+  dogsit_count?: number;
+  /**
+   * Activities the user said she couldn't / didn't do because of context.
+   * Free-form strings (e.g. "workout", "errands", "leave_house").
+   */
+  blocked_activities?: string[];
+  /** Which persona this entry is most relevant to. Default 'both'. */
+  related_persona?: ContextRelatedPersona;
+  source: ContextSource;
+}
+
+/** Input shape used by the service / API / personas to add an entry. */
+export interface ContextEntryInput {
+  text: string;
+  tags?: string[];
+  energy?: EnergyLevel;
+  mood?: MoodLevel;
+  dogsit_count?: number;
+  blocked_activities?: string[];
+  related_persona?: ContextRelatedPersona;
+  source?: ContextSource;
 }
 
 // ----- Check-ins -----

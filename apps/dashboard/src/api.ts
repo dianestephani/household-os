@@ -14,8 +14,15 @@ import type {
   CheckIn,
   ActivityKind,
   ActivityLogEntry,
+  CalendarDayResponse,
+  ContextEntry,
+  ContextEntryInput,
+  ContextRelatedPersona,
+  FilingStatus,
+  ScheduleRangeResponse,
   FinancialProfile,
   OutsourceableSummary,
+  TaxEstimate,
 } from '@household-os/shared/types';
 
 export interface AffordabilityReport {
@@ -132,6 +139,31 @@ export const api = {
       return request<ActivityLogEntry[]>(`/activity?${qs.toString()}`);
     },
   },
+  calendar: {
+    today: () => request<CalendarDayResponse>('/calendar/today'),
+  },
+  schedule: {
+    range: (days = 7) =>
+      request<ScheduleRangeResponse>(`/schedule?days=${days}`),
+  },
+  context: {
+    list: (days = 7, persona?: ContextRelatedPersona) => {
+      const qs = new URLSearchParams({ days: String(days) });
+      if (persona) qs.set('persona', persona);
+      return request<ContextEntry[]>(`/context?${qs.toString()}`);
+    },
+    today: (persona?: ContextRelatedPersona) => {
+      const qs = new URLSearchParams();
+      if (persona) qs.set('persona', persona);
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return request<ContextEntry[]>(`/context/today${suffix}`);
+    },
+    add: (entry: ContextEntryInput) =>
+      request<ContextEntry>('/context', {
+        method: 'POST',
+        body: JSON.stringify({ ...entry, source: entry.source ?? 'dashboard' }),
+      }),
+  },
   finance: {
     profile: () => request<FinancialProfile>('/finance/profile'),
     setProfile: (patch: Partial<FinancialProfile>) =>
@@ -141,6 +173,16 @@ export const api = {
       }),
     outsourceable: () => request<OutsourceableSummary>('/finance/outsourceable'),
     affordability: () => request<AffordabilityReport>('/finance/affordability'),
+    estimateTax: (input: {
+      monthly_gross_income: number;
+      state?: string;
+      filing_status?: FilingStatus;
+      monthly_extra_withholding?: number;
+    }) =>
+      request<TaxEstimate>('/finance/estimate-tax', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
   },
   chat: (
     persona: string,

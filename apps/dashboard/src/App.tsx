@@ -6,20 +6,27 @@ import MoodButtons from './components/MoodButtons.js';
 import WorkoutPanel from './components/WorkoutPanel.js';
 import CheckInBanner from './components/CheckInBanner.js';
 import ActivityFeed from './components/ActivityFeed.js';
-import ChatPanel from './components/ChatPanel.js';
+import PersonaLauncher from './components/PersonaLauncher.js';
 import RoutinesPage from './components/RoutinesPage.js';
 import HowToGuide from './components/HowToGuide.js';
 import FinancePanel from './components/FinancePanel.js';
+import JournalPanel from './components/JournalPanel.js';
+import TodayContextStrip from './components/TodayContextStrip.js';
+import CalendarDayPanel from './components/CalendarDayPanel.js';
+import SchedulePanel from './components/SchedulePanel.js';
+import ThemeToggle from './components/ThemeToggle.js';
 import type { TodayPlan } from '@household-os/shared/types';
 
 type View =
   | 'today'
+  | 'schedule'
   | 'workouts'
   | 'activity'
   | 'household'
   | 'nutrition'
   | 'finance'
   | 'routines'
+  | 'journal'
   | 'guide';
 
 export default function App() {
@@ -42,11 +49,20 @@ export default function App() {
 
   return (
     <div className="app">
-      <h1>Household OS</h1>
+      <header className="app-header">
+        <h1>Household OS</h1>
+        <ThemeToggle />
+      </header>
 
       <div className="tabs">
         <button className={view === 'today' ? 'active' : ''} onClick={() => setView('today')}>
           Today
+        </button>
+        <button
+          className={view === 'schedule' ? 'active' : ''}
+          onClick={() => setView('schedule')}
+        >
+          Schedule
         </button>
         <button
           className={view === 'workouts' ? 'active' : ''}
@@ -85,6 +101,12 @@ export default function App() {
           Routines
         </button>
         <button
+          className={view === 'journal' ? 'active' : ''}
+          onClick={() => setView('journal')}
+        >
+          Journal
+        </button>
+        <button
           className={view === 'guide' ? 'active' : ''}
           onClick={() => setView('guide')}
           title="How-to guide for everything Household OS can do"
@@ -103,6 +125,8 @@ export default function App() {
       {view === 'today' && plan && (
         <>
           <CheckInBanner />
+          <CalendarDayPanel />
+          <TodayContextStrip />
           <EnergyButtons current={plan.current_energy} onChange={setPlan} />
           <MoodButtons />
           <TodayList plan={plan} onChange={setPlan} />
@@ -110,13 +134,22 @@ export default function App() {
       )}
       {view === 'today' && !plan && !error && <div className="muted">Loading…</div>}
 
+      {view === 'schedule' && <SchedulePanel />}
       {view === 'workouts' && <WorkoutPanel />}
       {view === 'activity' && <ActivityFeed />}
 
-      {view === 'household' && <ChatPanel persona="household" onUpdate={refresh} />}
-      {view === 'nutrition' && <ChatPanel persona="nutrition" stub />}
+      {view === 'household' && <PersonaLauncher persona="household" />}
+      {view === 'nutrition' && (
+        <div className="panel">
+          <strong>Nutrition</strong>
+          <p className="muted" style={{ marginTop: '0.4rem' }}>
+            Nutrition persona isn't built yet — Diane is starting with Household Ops.
+          </p>
+        </div>
+      )}
       {view === 'finance' && <FinancePanel />}
       {view === 'routines' && <RoutinesPage />}
+      {view === 'journal' && <JournalPanel />}
       {view === 'guide' && <HowToGuide />}
     </div>
   );
