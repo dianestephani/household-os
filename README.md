@@ -120,7 +120,16 @@ Push to `master` → Render auto-deploys. Logs are in the Render dashboard.
 | Anthropic API      | pay-per-use, persona chat only  | ~$0–2 (typical) |
 | **Total**          |                                 | **~$7–9**       |
 
-If you ever want the dashboard hosted too, add a `static_site` entry to [render.yaml](./render.yaml).
+### Hosting the dashboard too
+
+The dashboard is also defined in [render.yaml](./render.yaml) as a Static Site. Render's static-site tier is free (unlimited bandwidth, no sleep), so the total cost stays at ~$7/mo.
+
+When you next push and re-apply the Blueprint, Render will prompt for the dashboard's env vars:
+
+- `VITE_API_BASE` — `https://<your-render-api-url>.onrender.com/api`
+- `VITE_API_TOKEN` — leave blank unless you set `API_TOKEN` on the API service
+
+The dashboard will then be available at its own Render URL (e.g. `https://household-os-dashboard.onrender.com`).
 
 ## Project memory + docs
 
