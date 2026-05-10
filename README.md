@@ -82,7 +82,7 @@ Open <http://localhost:5173>. The Today tab is the landing page. The **❔ Guide
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 214 tests (204 API + 10 alexa-skill)
+npm test                 # all workspaces — currently 231 tests (221 API + 10 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 
@@ -94,6 +94,8 @@ Coverage spans:
 - **Cron** — morning-gen (rolling + fixed + zone rotation + event-driven + skip_if + ad-hoc), calendar-ingest, deferral edge cases
 - **Persona wiring** — every tool declared in the persona schemas has a matching implementation in [apps/api/src/persona/tools.ts](apps/api/src/persona/tools.ts) (catches schema/impl drift; this matters even with launcher-mode personas because the API tool runtime is still maintained)
 - **Auth** — session JWT round-trip + tamper-rejection + secret-rotation rejection + length-requirement enforcement; allowlist case-insensitive + comma-separated + closed-by-default; middleware accepts `API_TOKEN` *or* a valid JWT, rejects bad/missing bearers, open-passes when nothing is configured
+- **Routines CRUD** — `patchRoutine` allow-list silently drops disallowed fields (`key`, `_id`, anything off the curated list); list filters by category + zone; soft delete flips `active` without removing the doc
+- **Alexa proactive cards** — `buildCheckInCardBody` template logic: morning_intent message, frequent-deferral with routine name + count, missed-workouts copy, fallback for unknown kinds, null for check-in types we deliberately don't push
 - **Activity-log fan-out** — every action site that should log an event does (incl. `context_logged`)
 - **Alexa client** — token-fallback, base-URL resolution, header construction
 

@@ -1353,6 +1353,42 @@ All three are accepted by the `requireToken` middleware on `/api/*`. The `/mcp` 
 
 ---
 
+## 42. Recent UX + coverage detail (2026-05-10 evening)
+
+Small but worth documenting since they shaped where tests went.
+
+### Mood / Energy "saved" confirmation pattern
+
+Diane asked for visual confirmation when she logs mood / energy — clicking the buttons fired off API calls but the only visible feedback was the active-state highlight, which wasn't enough.
+
+- **MoodButtons** ([apps/dashboard/src/components/MoodButtons.tsx](apps/dashboard/src/components/MoodButtons.tsx)): now prefills `selected` + `loggedAt` from the most recent mood log if it was logged today (`api.mood.recent(1)` → check `isToday(ts)`). Renders `✓ Logged "good" at 2:14 PM` in the panel header (green via `var(--good)`). Active state now survives tab switches + page reloads.
+- **EnergyButtons** ([apps/dashboard/src/components/EnergyButtons.tsx](apps/dashboard/src/components/EnergyButtons.tsx)): same `✓ Logged "medium" at 2:14 PM` indicator. **Bug fix worth knowing:** cancelling the energy-suggestions modal previously didn't refetch the plan, so even though the energy POST persisted, the visible `current` level stayed pointing at the old value. New `dismissSuggestion()` handler calls `api.today.get()` regardless. Symptom for the next session: if `current_energy` ever looks wrong, check that the modal-dismissal path still refetches.
+- New api method: `api.mood.recent(days)` → `MoodLog[]`.
+
+### Clarification principle in both persona prompts
+
+The household + finance system prompts now both include a "CLARIFICATION PRINCIPLE" block with concrete examples. The rule: if the ask is genuinely ambiguous, ask one short question rather than guess. Exception only for fields with safe defaults (severity='meh', filing_status='single'), and even then the persona must state what it defaulted to so she can correct it.
+
+This was a Diane-stated preference. Don't dilute it in future prompt edits — it's a real correction of past behavior where the persona was guessing zones / interpretations.
+
+### Test coverage additions
+
+Two gaps surfaced in a coverage audit and got filled:
+
+- **`routines.ts`** ([apps/api/src/services/routines.test.ts](apps/api/src/services/routines.test.ts), 9 tests): `patchRoutine` allow-list (applies whitelisted fields, silently drops `key` / `_id` / other off-list fields, supports nested `scheduling` patch, allows `last_done` updates), `listRoutines` filters (active-only default, category, zone), `softDeleteRoutine` (sets `active=false` without removing doc), `createRoutine` smoke.
+- **`alexa-push.ts`** ([apps/api/src/services/alexa-push.test.ts](apps/api/src/services/alexa-push.test.ts), 8 tests): the body-template logic was extracted into a pure `buildCheckInCardBody` helper so it's testable without going through the LWA-push side effect. Tests cover morning_intent template, frequent_deferral with name + count, missing-count default to 0, missed_workouts template, generic fallback for unknown pattern_interrupt kinds, generic fallback when frequent_deferral lacks `routine_name` (otherwise we'd render "undefined has been deferred N times"), null returns for non-pushable check-in types.
+
+### Deliberately *not* tested (decisions worth preserving)
+
+- **`mcp/server.ts` + `mcp/route.ts`** — transport mocking via `@hono/node-server` is more brittle than the test would catch. Validate by pointing an MCP client at the deployed `/mcp` and listing tools. Service-layer behavior the MCP tools delegate to is fully covered.
+- **`services/triggers.ts`** — thin wrapper over Mongoose + a `logActivity` call already exercised in [activity-wiring.test.ts](apps/api/src/services/activity-wiring.test.ts).
+- **`utils/google-calendar.ts` + `utils/google-tasks.ts`** — `NODE_ENV=test` short-circuits prevent real API calls. Service-layer wrappers (`calendar.ts`, `tasks.ts`) cover the normalization logic.
+- **Dashboard components** — no React testing infrastructure in this repo. If we ever introduce Vitest + Testing Library, `EnergyButtons` energy-cancel-modal bug fix + `MoodButtons` prefill behavior would be the first regression candidates.
+
+Total: **231 tests** across 30 files (221 API + 10 alexa-skill).
+
+---
+
 ## 36. Route cheat sheet (current as of this Part B)
 
 | Endpoint | Method | Purpose |
