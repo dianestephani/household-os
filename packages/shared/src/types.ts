@@ -275,6 +275,92 @@ export interface ActivityLogEntry {
   metadata?: Record<string, unknown>;
 }
 
+// ----- Calendar (Google Calendar passthrough for dashboard display) -----
+
+/**
+ * Normalized event shape returned by the dashboard calendar endpoint. We
+ * intentionally don't expose the full Google Schema$Event — the dashboard
+ * only needs enough to render a day strip with a click-through.
+ */
+export interface CalendarEvent {
+  id: string;
+  summary: string;
+  /** ISO 8601 datetime for timed events; YYYY-MM-DD for all-day events. */
+  start: string;
+  end: string;
+  is_all_day: boolean;
+  location?: string;
+  /** Direct deep-link to the event in Google Calendar's web UI. */
+  html_link?: string;
+}
+
+export interface CalendarDayResponse {
+  /** Local YYYY-MM-DD the events apply to. */
+  date: string;
+  /**
+   * Whether Google Calendar OAuth credentials are configured. False means the
+   * dashboard should render a "calendar not connected" state with setup hint.
+   */
+  connected: boolean;
+  events: CalendarEvent[];
+  /** Permalink to the user's Google Calendar at this exact day. */
+  open_in_calendar_url: string;
+}
+
+// ----- Schedule preview (week / month look-ahead) -----
+
+/**
+ * A single routine that's due on a specific day in the schedule window.
+ * `source` distinguishes the upstream classifier so the UI can group/style
+ * appropriately (rolling overdue items look different from this-week's
+ * fixed-day trash etc.).
+ */
+export interface ScheduleRoutineDue {
+  routine_key: string;
+  name: string;
+  category?: string;
+  estimate_minutes: number;
+  energy: EnergyLevel;
+  source: 'rolling' | 'fixed' | 'zone_rotation' | 'event_driven';
+  /**
+   * Human-readable note about why this is on this day:
+   *   rolling     → "due" / "overdue 3d"
+   *   fixed       → "Tue evening" / "biweekly"
+   *   zone        → "week 3"
+   *   event       → "Airbnb checkin tomorrow" / "Landscaper today"
+   */
+  cadence_note: string;
+}
+
+export interface ScheduleEntry {
+  /** YYYY-MM-DD, local. */
+  date: string;
+  is_today: boolean;
+  events: CalendarEvent[];
+  routines_due: ScheduleRoutineDue[];
+}
+
+export interface SchedulePendingAdHoc {
+  id: string;
+  name: string;
+  zone: Zone;
+  severity: ZoneStateLevel;
+  estimate_minutes: number;
+}
+
+export interface ScheduleRangeResponse {
+  /** YYYY-MM-DD inclusive. */
+  start: string;
+  /** YYYY-MM-DD exclusive — the day AFTER the last day in `days`. */
+  end: string;
+  days: ScheduleEntry[];
+  /** Open ad-hoc zone tasks; not date-anchored, shown at top of UI. */
+  pending_adhoc_tasks: SchedulePendingAdHoc[];
+  calendar_connected: boolean;
+  /** Permalink to the user's Google Calendar at the start of the range. */
+  open_in_calendar_url: string;
+}
+
 // ----- Context journal -----
 
 /**

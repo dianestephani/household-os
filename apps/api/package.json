@@ -8,6 +8,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "seed": "tsx src/seed.ts",
+    "start-tomorrow": "tsx scripts/start-tomorrow.ts",
     "google-auth": "tsx src/google-auth.ts",
     "test": "vitest run",
     "test:watch": "vitest",

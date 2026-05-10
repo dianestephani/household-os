@@ -14,10 +14,12 @@ import type {
   CheckIn,
   ActivityKind,
   ActivityLogEntry,
+  CalendarDayResponse,
   ContextEntry,
   ContextEntryInput,
   ContextRelatedPersona,
   FilingStatus,
+  ScheduleRangeResponse,
   FinancialProfile,
   OutsourceableSummary,
   TaxEstimate,
@@ -136,6 +138,13 @@ export const api = {
       if (kind) qs.set('kind', kind);
       return request<ActivityLogEntry[]>(`/activity?${qs.toString()}`);
     },
+  },
+  calendar: {
+    today: () => request<CalendarDayResponse>('/calendar/today'),
+  },
+  schedule: {
+    range: (days = 7) =>
+      request<ScheduleRangeResponse>(`/schedule?days=${days}`),
   },
   context: {
     list: (days = 7, persona?: ContextRelatedPersona) => {

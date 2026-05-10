@@ -12,10 +12,14 @@ import HowToGuide from './components/HowToGuide.js';
 import FinancePanel from './components/FinancePanel.js';
 import JournalPanel from './components/JournalPanel.js';
 import TodayContextStrip from './components/TodayContextStrip.js';
+import CalendarDayPanel from './components/CalendarDayPanel.js';
+import SchedulePanel from './components/SchedulePanel.js';
+import ThemeToggle from './components/ThemeToggle.js';
 import type { TodayPlan } from '@household-os/shared/types';
 
 type View =
   | 'today'
+  | 'schedule'
   | 'workouts'
   | 'activity'
   | 'household'
@@ -45,11 +49,20 @@ export default function App() {
 
   return (
     <div className="app">
-      <h1>Household OS</h1>
+      <header className="app-header">
+        <h1>Household OS</h1>
+        <ThemeToggle />
+      </header>
 
       <div className="tabs">
         <button className={view === 'today' ? 'active' : ''} onClick={() => setView('today')}>
           Today
+        </button>
+        <button
+          className={view === 'schedule' ? 'active' : ''}
+          onClick={() => setView('schedule')}
+        >
+          Schedule
         </button>
         <button
           className={view === 'workouts' ? 'active' : ''}
@@ -112,6 +125,7 @@ export default function App() {
       {view === 'today' && plan && (
         <>
           <CheckInBanner />
+          <CalendarDayPanel />
           <TodayContextStrip />
           <EnergyButtons current={plan.current_energy} onChange={setPlan} />
           <MoodButtons />
@@ -120,6 +134,7 @@ export default function App() {
       )}
       {view === 'today' && !plan && !error && <div className="muted">Loading…</div>}
 
+      {view === 'schedule' && <SchedulePanel />}
       {view === 'workouts' && <WorkoutPanel />}
       {view === 'activity' && <ActivityFeed />}
 
