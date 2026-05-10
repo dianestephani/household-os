@@ -1447,6 +1447,41 @@ Pure single-day filtering feels quiet on days with no activity, while the rollin
 
 ---
 
+## 44. Zone-assessment multi-task split (2026-05-10 PM)
+
+Diane was entering things like "wipe counters, sweep floor, take out trash" in the zone-check `zone_notes` answer and getting **one** ad-hoc task with the full comma-separated string as the name. Wanted one task per comma-separated item.
+
+### Behavior change
+
+[services/zones.ts](apps/api/src/services/zones.ts):
+
+- New exported pure helper `splitTaskNotes(notes)` — comma-split, trim each segment, drop empty segments. Only commas separate; semicolons / slashes / newlines stay inside a segment for predictability.
+- `recordAssessment` now creates **one `AdHocTask` per non-empty item** instead of one task with the full string. Single-item notes still produce 1 task (regression-tested). All-empty / whitespace-only notes still fall back to the zone's `defaultTaskName`. Each task gets its own `task_created` activity entry. All tasks in the batch share the same `source_assessment_id` so they're cancelable / queryable as a batch later if needed.
+
+### Return-shape change (small API break)
+
+`recordAssessment` was `Promise<{ assessment, task: AdHocTaskType | null }>`. Now it's `Promise<{ assessment, tasks: AdHocTaskType[] }>`. Empty array for level=fine. Length ≥ 1 for level=meh / level=rough.
+
+**Callers updated:**
+
+- `routes/zones.ts` — just passes the new shape through to the HTTP response, no code change beyond the type.
+- `services/checkins.ts` — never read the return value, no change.
+- Both test files (`zones.test.ts`, `activity-wiring.test.ts`) updated to destructure `{ tasks }` instead of `{ task }`.
+
+### Tests
+
+- 5 new `splitTaskNotes` cases: null/undefined/empty/whitespace → []; single segment (no comma) → 1-element array, trimmed; multi-comma; empty-segment dropping (consecutive commas, trailing commas, leading commas, whitespace-only segments); only-commas separator (semicolons/newlines/slashes preserved).
+- 5 new `recordAssessment` cases: one open task per comma-separated item with correct severity-derived defaults; one `task_created` activity entry per task; all tasks linked to same source assessment; single-item notes → 1 task (regression); all-empty-segment notes → default-name fallback (regression).
+
+Total now: **251 tests** across 30 files (241 API + 10 alexa-skill).
+
+### What didn't change
+
+- Alexa `AssessZoneIntent` doesn't pass notes through (no `Notes` slot — that's been removed from the interaction model), so voice zone checks still produce default-named tasks. Multi-task split only fires when notes come from the dashboard's `zone_assessment` check-in or a direct `POST /api/zones/assess` with a comma-separated `notes` body.
+- The activity log records each task individually (which was already the per-call behavior) — `Task added: "<name>"`. If you want a single rolled-up activity entry per batch, that's a separate change.
+
+---
+
 ## 36. Route cheat sheet (current as of this Part B)
 
 | Endpoint | Method | Purpose |

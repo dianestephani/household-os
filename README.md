@@ -84,7 +84,7 @@ Open <http://localhost:5173>. The Today tab is the landing page. The **❔ Guide
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 241 tests (231 API + 10 alexa-skill)
+npm test                 # all workspaces — currently 251 tests (241 API + 10 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 
@@ -97,6 +97,7 @@ Coverage spans:
 - **Persona wiring** — every tool declared in the persona schemas has a matching implementation in [apps/api/src/persona/tools.ts](apps/api/src/persona/tools.ts) (catches schema/impl drift; this matters even with launcher-mode personas because the API tool runtime is still maintained)
 - **Auth** — session JWT round-trip + tamper-rejection + secret-rotation rejection + length-requirement enforcement; allowlist case-insensitive + comma-separated + closed-by-default; middleware accepts `API_TOKEN` *or* a valid JWT, rejects bad/missing bearers, open-passes when nothing is configured
 - **Routines CRUD** — `patchRoutine` allow-list silently drops disallowed fields (`key`, `_id`, anything off the curated list); list filters by category + zone; soft delete flips `active` without removing the doc
+- **Zone-assessment multi-task split** — `splitTaskNotes` (empty/null/whitespace → []; commas split; segments trimmed; empty segments dropped; only commas separate — semicolons / slashes / newlines stay inside a segment) and `recordAssessment` (one task per comma-separated item, single-item notes still produce 1 task, fallback to default name when all segments are empty, one activity log entry per task, all tasks linked to same source assessment)
 - **Alexa proactive cards** — `buildCheckInCardBody` template logic: morning_intent message, frequent-deferral with routine name + count, missed-workouts copy, fallback for unknown kinds, null for check-in types we deliberately don't push
 - **Activity-log fan-out** — every action site that should log an event does (incl. `context_logged`)
 - **Alexa client** — token-fallback, base-URL resolution, header construction

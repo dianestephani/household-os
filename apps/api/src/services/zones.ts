@@ -72,12 +72,29 @@ export async function pickNextZone(): Promise<Zone> {
   })[0]!;
 }
 
+/**
+ * Pure helper for splitting free-form zone-assessment notes into individual
+ * task names. Comma-separated; each segment is trimmed; empty segments
+ * (consecutive commas, trailing comma, all-whitespace) are dropped.
+ *
+ * Exported so it's unit-testable independently of the DB-touching path in
+ * `recordAssessment` below. Use a single comma — semicolons / newlines /
+ * bullets are not separators (keeps the heuristic predictable).
+ */
+export function splitTaskNotes(notes: string | undefined | null): string[] {
+  if (!notes) return [];
+  return notes
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 export async function recordAssessment(
   zone: Zone,
   level: ZoneStateLevel,
   notes: string | undefined,
   source_checkin_id?: string,
-): Promise<{ assessment: ZoneAssessmentType; task: AdHocTaskType | null }> {
+): Promise<{ assessment: ZoneAssessmentType; tasks: AdHocTaskType[] }> {
   const assessment = await ZoneAssessment.create({
     ts: new Date(),
     zone,
@@ -93,33 +110,41 @@ export async function recordAssessment(
   if (level === 'fine') {
     return {
       assessment: assessment.toObject() as unknown as ZoneAssessmentType,
-      task: null,
+      tasks: [],
     };
   }
 
-  const trimmed = (notes ?? '').trim();
-  const taskName = trimmed.length > 0 ? trimmed : defaultTaskName(zone, level);
+  // Multi-task split: "wipe counters, sweep floor, take out trash" → 3 tasks.
+  // Single-item notes still produce a single task (no separator → one chunk).
+  // Empty notes fall back to the zone's default placeholder name.
+  const split = splitTaskNotes(notes);
+  const taskNames = split.length > 0 ? split : [defaultTaskName(zone, level)];
 
-  const task = await AdHocTask.create({
-    ts: new Date(),
-    zone,
-    name: taskName,
-    source: 'zone_assessment',
-    source_assessment_id: assessment.id,
-    severity: level,
-    estimate_minutes: ESTIMATE_BY_SEVERITY[level],
-    energy: ENERGY_BY_SEVERITY[level],
-    status: 'open',
-  });
+  const tasks: AdHocTaskType[] = [];
+  for (const name of taskNames) {
+    const task = await AdHocTask.create({
+      ts: new Date(),
+      zone,
+      name,
+      source: 'zone_assessment',
+      source_assessment_id: assessment.id,
+      severity: level,
+      estimate_minutes: ESTIMATE_BY_SEVERITY[level],
+      energy: ENERGY_BY_SEVERITY[level],
+      status: 'open',
+    });
 
-  await logActivity('task_created', `Task added: "${taskName}"`, {
-    actor: 'system',
-    metadata: { zone, severity: level, source: 'zone_assessment' },
-  });
+    await logActivity('task_created', `Task added: "${name}"`, {
+      actor: 'system',
+      metadata: { zone, severity: level, source: 'zone_assessment' },
+    });
+
+    tasks.push(task.toObject() as unknown as AdHocTaskType);
+  }
 
   return {
     assessment: assessment.toObject() as unknown as ZoneAssessmentType,
-    task: task.toObject() as unknown as AdHocTaskType,
+    tasks,
   };
 }
 
