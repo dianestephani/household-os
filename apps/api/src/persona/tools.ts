@@ -225,7 +225,7 @@ export const financeTools: Record<string, ToolImpl> = {
 export const stubTools: Record<string, ToolImpl> = {
   not_implemented: async () => ({
     message:
-      "This persona isn't built yet. Diane is starting with Household Ops; nutrition comes later.",
+      "This persona is launcher-only. Open it from the dashboard's Food tab to chat in the Claude.ai Project.",
   }),
 };
 

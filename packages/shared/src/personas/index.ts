@@ -1,13 +1,13 @@
 import type { PersonaConfig } from '../types.js';
 import { household } from './household.js';
-import { nutrition } from './nutrition.js';
+import { grocery } from './grocery.js';
 import { finance } from './finance.js';
 
 export const personas: Record<string, PersonaConfig> = {
   household,
-  nutrition,
+  grocery,
   finance,
 };
 
 export type PersonaName = keyof typeof personas;
-export { household, nutrition, finance };
+export { household, grocery, finance };

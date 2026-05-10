@@ -29,7 +29,7 @@ describe('persona tool wiring — every declared tool has an implementation', ()
   it('getToolsForPersona returns the right map per persona', () => {
     expect(getToolsForPersona('household')).toBe(householdTools);
     expect(getToolsForPersona('finance')).toBe(financeTools);
-    expect('not_implemented' in getToolsForPersona('nutrition')).toBe(true);
+    expect('not_implemented' in getToolsForPersona('grocery')).toBe(true);
   });
 });
 

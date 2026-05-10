@@ -37,10 +37,10 @@ function makeClient(responses: Anthropic.Message[]): { client: AnthropicLike; cr
 }
 
 describe('chat — stub personas short-circuit', () => {
-  it('returns canned reply for nutrition without calling Claude', async () => {
+  it('returns canned reply for grocery (launcher-only) without calling Claude', async () => {
     const { client, create } = makeClient([]);
-    const res = await chat('nutrition', [{ role: 'user', content: 'meal plan?' }], client);
-    expect(res.reply).toMatch(/stub mode/i);
+    const res = await chat('grocery', [{ role: 'user', content: 'meal plan?' }], client);
+    expect(res.reply).toMatch(/launcher-only|Food tab/i);
     expect(create).not.toHaveBeenCalled();
   });
 

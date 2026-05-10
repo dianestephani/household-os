@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { household } from '@household-os/shared/personas/household';
 import { finance } from '@household-os/shared/personas/finance';
+import { grocery } from '@household-os/shared/personas/grocery';
 import type { PersonaConfig } from '@household-os/shared/types';
 
-type PersonaName = 'household' | 'finance';
+type PersonaName = 'household' | 'finance' | 'grocery';
 
 const CONFIGS: Record<PersonaName, PersonaConfig> = {
   household,
   finance,
+  grocery,
 };
 
 const BLURB: Record<PersonaName, string> = {
@@ -15,6 +17,18 @@ const BLURB: Record<PersonaName, string> = {
     "Your household ops thinking partner. Energy management, prioritizing chores, talking through deferrals and patterns.",
   finance:
     "Your outsourcing & affordability sounding board. Tax estimates, monthly budget questions, what to outsource and when.",
+  grocery:
+    "Your food planning + shopping assistant. Meal ideas built around TJ's, no-seafood / no-raw-meat constraints, 100g+ protein target, weight-loss-aware. Produces a parsable grocery list at the end.",
+};
+
+/**
+ * Per-persona hardcoded Project URL. The launcher uses this when no
+ * user-saved URL exists in localStorage. Means the "Open in Claude.ai"
+ * button always lands somewhere sensible even on first use. Users can
+ * still override via the "Saved Project URL" input.
+ */
+const DEFAULT_PROJECT_URL: Partial<Record<PersonaName, string>> = {
+  grocery: 'https://claude.ai/project/019e141a-8cbc-720d-843a-0732ad1293c2',
 };
 
 const HOSTED_FALLBACK = 'https://claude.ai/new';
@@ -37,7 +51,8 @@ export default function PersonaLauncher({ persona }: { persona: PersonaName }) {
     }
   }, [storageKey]);
 
-  const target = projectUrl.trim() || HOSTED_FALLBACK;
+  const target =
+    projectUrl.trim() || DEFAULT_PROJECT_URL[persona] || HOSTED_FALLBACK;
 
   function saveProjectUrl() {
     try {
@@ -102,7 +117,11 @@ export default function PersonaLauncher({ persona }: { persona: PersonaName }) {
             Open in Claude.ai →
           </a>
           <span className="muted" style={{ fontSize: '0.82rem' }}>
-            {projectUrl.trim() ? 'Goes to your saved Project.' : 'Goes to claude.ai/new — set up a Project below for a persistent chat.'}
+            {projectUrl.trim()
+              ? 'Goes to your saved Project.'
+              : DEFAULT_PROJECT_URL[persona]
+                ? 'Goes to the linked Claude Project. Set a custom URL below to override.'
+                : 'Goes to claude.ai/new — set up a Project below for a persistent chat.'}
           </span>
         </div>
       </div>

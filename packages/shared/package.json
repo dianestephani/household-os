@@ -10,7 +10,7 @@
     "./types": "./src/types.ts",
     "./inventory.json": "./src/inventory.json",
     "./personas/household": "./src/personas/household.ts",
-    "./personas/nutrition": "./src/personas/nutrition.ts",
+    "./personas/grocery": "./src/personas/grocery.ts",
     "./personas/finance": "./src/personas/finance.ts",
     "./personas": "./src/personas/index.ts"
   },

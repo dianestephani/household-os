@@ -1482,6 +1482,53 @@ Total now: **251 tests** across 30 files (241 API + 10 alexa-skill).
 
 ---
 
+## 45. Grocery Manager persona + Food tab (renamed from Nutrition, 2026-05-10 PM)
+
+Diane wanted the previously-stub Nutrition tab to become a real Grocery Manager persona linked to her Claude Project. Renamed end-to-end, no in-API tool loop — launcher-only.
+
+### Renames + structural changes
+
+- [packages/shared/src/personas/grocery.ts](packages/shared/src/personas/grocery.ts) — new file with full system prompt encoding hard constraints (TJ's-primary, no seafood, no raw meat) + active goals (>100g protein/day, ~5kg weight loss target). Carries `stub: true` so the `/api/chat/grocery` route returns a "use the launcher" canned reply instead of trying to hit the (no-longer-configured) Claude API. Empty `tools: []` array — launcher-only.
+- `packages/shared/src/personas/nutrition.ts` — **deleted**. `personas/index.ts` and `package.json#exports` now export `grocery` instead.
+- [apps/api/src/persona/runner.ts](apps/api/src/persona/runner.ts) — branch for `personaName === 'grocery'` replaces the old `'nutrition'` branch with a canned message pointing at the Food tab.
+- [apps/api/src/persona/tools.ts](apps/api/src/persona/tools.ts) — `stubTools.not_implemented` message updated to the launcher-only framing.
+- [apps/api/src/persona/tools.test.ts](apps/api/src/persona/tools.test.ts) + [runner.test.ts](apps/api/src/persona/runner.test.ts) — updated to reference 'grocery' instead of 'nutrition'.
+- [packages/shared/src/personas/household.ts](packages/shared/src/personas/household.ts) — system prompt's exclusion line updated to "food/groceries" wording.
+
+### App.tsx — Nutrition → Food
+
+- View union: `'nutrition'` → `'food'`. Tab label: "Nutrition" → "Food".
+- Inline "not built yet" stub replaced with `<PersonaLauncher persona="grocery" />`.
+- **Migration for already-persisted localStorage**: users whose `household-os.view` was set to `'nutrition'` will hit `readSavedView()`, fail the new VIEWS membership check, and fall through to `'today'`. Safe.
+
+### PersonaLauncher — per-persona default Project URL
+
+[PersonaLauncher.tsx](apps/dashboard/src/components/PersonaLauncher.tsx) gains a `DEFAULT_PROJECT_URL` map. The "Open in Claude.ai" button target is now `savedUrl || DEFAULT_PROJECT_URL[persona] || HOSTED_FALLBACK`. For `grocery` the default is hardcoded to `https://claude.ai/project/019e141a-8cbc-720d-843a-0732ad1293c2`. The "Saved Project URL" input still lets her override. Status text under the button reflects three states: saved / default / fallback.
+
+### iOS app handoff
+
+iOS Universal Links handle this automatically — when the Claude iOS app is installed, tapping a `claude.ai/project/...` link prompts to open in the app. No special URL scheme or per-platform code needed. This already works for Household and Finance launchers; Grocery inherits the behavior via the shared launcher component.
+
+### What's NOT built — Alexa Shopping List integration
+
+Diane's described workflow ends with: "[Grocery Manager] should print a grocery list and then add every item on the list to my Shopping list in Alexa." The print-the-list piece is in the persona system prompt (parsable format with `## Section` headers + `- <qty> <item>` rows). The auto-add-to-Alexa-list piece requires a separate buildout:
+
+1. Alexa Developer Console: request `alexa::household:lists:write` permission on the skill
+2. User grants it in the Alexa app
+3. Account linking flow so our server can hold an Amazon-issued access token outside live skill sessions
+4. New API endpoint (e.g. `POST /api/alexa/shopping-list/add`) that accepts an array of items and calls the Alexa Lists API
+5. Dashboard panel: paste the persona's grocery list → parse → bulk-add → confirm
+
+Estimated effort: 2–3 hours. The voice fallback is workable in the meantime — Alexa supports multi-item add over voice ("Alexa, add eggs, bread, and milk to my shopping list"). Diane was told this and chose not to pursue the full integration this session.
+
+### Tests
+
+No test-count change. The persona-tools wiring test was updated (nutrition → grocery) but the assertion shape is the same — `getToolsForPersona('grocery')` still falls through to `stubTools` since grocery has no real in-API tool implementations. Runner test updated to verify the new launcher-only canned reply.
+
+Total: still **251 tests** (241 API + 10 alexa-skill).
+
+---
+
 ## 36. Route cheat sheet (current as of this Part B)
 
 | Endpoint | Method | Purpose |
