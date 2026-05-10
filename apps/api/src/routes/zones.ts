@@ -1,13 +1,18 @@
 import { Router } from 'express';
 import {
   cancelAdHocTask,
+  createAdHocTask,
   latestAssessmentByZone,
   listOpenAdHocTasks,
   listRecentAssessments,
   recordAssessment,
   ZONES,
 } from '../services/zones.js';
-import type { Zone, ZoneStateLevel } from '@household-os/shared/types';
+import type {
+  EnergyLevel,
+  Zone,
+  ZoneStateLevel,
+} from '@household-os/shared/types';
 
 const router: Router = Router();
 
@@ -41,6 +46,38 @@ router.post('/assess', async (req, res) => {
     return;
   }
   res.status(201).json(await recordAssessment(zone, level as ZoneStateLevel, notes));
+});
+
+router.post('/tasks', async (req, res) => {
+  const body = (req.body ?? {}) as {
+    name?: string;
+    zone?: Zone;
+    severity?: ZoneStateLevel;
+    estimate_minutes?: number;
+    energy?: EnergyLevel;
+    source?: string;
+  };
+  if (!body.name || typeof body.name !== 'string' || !body.name.trim()) {
+    res.status(400).json({ error: 'name is required' });
+    return;
+  }
+  if (body.zone && !ZONES.includes(body.zone)) {
+    res.status(400).json({ error: `zone must be one of ${ZONES.join(', ')}` });
+    return;
+  }
+  if (body.severity && !VALID_LEVELS.includes(body.severity)) {
+    res.status(400).json({ error: 'severity must be fine|meh|rough' });
+    return;
+  }
+  const task = await createAdHocTask({
+    name: body.name,
+    zone: body.zone,
+    severity: body.severity,
+    estimate_minutes: body.estimate_minutes,
+    energy: body.energy,
+    source: body.source,
+  });
+  res.status(201).json(task);
 });
 
 router.post('/tasks/:id/cancel', async (req, res) => {

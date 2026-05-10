@@ -127,6 +127,53 @@ export async function listOpenAdHocTasks() {
   return AdHocTask.find({ status: 'open' }).sort({ ts: 1 }).lean();
 }
 
+/**
+ * Direct ad-hoc task creation (no zone assessment required). Used by surfaces
+ * that take a free-form name from the user — Alexa "add a task X", the MCP
+ * server's `add_ad_hoc_task` tool, the Household Ops persona, etc. Picked-up
+ * by morning-gen on the next run with the same severity + age priority as
+ * tasks created from zone assessments.
+ *
+ * Defaults are tuned for the voice path: when Diane says "add a task" without
+ * specifying zone/severity, we don't want to ask three follow-up questions.
+ * Callers that *have* better info should pass it through.
+ */
+export async function createAdHocTask(input: {
+  name: string;
+  zone?: Zone;
+  severity?: ZoneStateLevel;
+  estimate_minutes?: number;
+  energy?: EnergyLevel;
+  source?: string;
+}): Promise<AdHocTaskType> {
+  const name = (input.name ?? '').trim();
+  if (!name) throw new Error('task name is required');
+
+  const severity = input.severity ?? 'meh';
+  const task = await AdHocTask.create({
+    ts: new Date(),
+    zone: input.zone ?? 'whole-house',
+    name,
+    source: input.source ?? 'manual',
+    severity,
+    estimate_minutes:
+      input.estimate_minutes ?? ESTIMATE_BY_SEVERITY[severity],
+    energy: input.energy ?? ENERGY_BY_SEVERITY[severity],
+    status: 'open',
+  });
+
+  await logActivity('task_created', `Task added: "${name}"`, {
+    metadata: {
+      zone: task.zone,
+      severity,
+      source: task.source,
+      voice_or_chat: true,
+    },
+  });
+
+  return task.toObject() as unknown as AdHocTaskType;
+}
+
 export async function listRecentAssessments(days = 14) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   return ZoneAssessment.find({ ts: { $gte: since } })

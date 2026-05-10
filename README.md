@@ -27,6 +27,8 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | **Schedule preview** (week / month look-ahead — calendar events + routines coming due, deterministic earliest-due-day bucketing, pending ad-hoc tasks) | [apps/api/src/services/schedule.ts](apps/api/src/services/schedule.ts), [apps/api/src/routes/schedule.ts](apps/api/src/routes/schedule.ts), [apps/dashboard/src/components/SchedulePanel.tsx](apps/dashboard/src/components/SchedulePanel.tsx) |
 | **Day navigator** (Today tab is now date-aware — prev/next + native date picker; today is fully mutable, past days show stored plan read-only, future days show forecast from schedule logic; calendar events + that day's journal entries always shown) | [apps/api/src/services/day.ts](apps/api/src/services/day.ts), [apps/api/src/routes/day.ts](apps/api/src/routes/day.ts), [apps/dashboard/src/components/DayPanel.tsx](apps/dashboard/src/components/DayPanel.tsx) |
 | **Google Tasks integration** (read + mark-done from the dashboard — Tasks API across all task lists, date-filtered onto the day navigator, checkbox mutations write back to Google) | [apps/api/src/utils/google-tasks.ts](apps/api/src/utils/google-tasks.ts), [apps/api/src/services/tasks.ts](apps/api/src/services/tasks.ts), [apps/api/src/routes/tasks.ts](apps/api/src/routes/tasks.ts) |
+| **Ad-hoc task creation** (free-form task add — direct creation without a zone assessment, slots into morning-gen's severity + age priority just like assessment-generated tasks; reachable from Alexa, the persona tools, MCP, or `POST /api/zones/tasks`) | [apps/api/src/services/zones.ts](apps/api/src/services/zones.ts) (`createAdHocTask`), [apps/api/src/routes/zones.ts](apps/api/src/routes/zones.ts) |
+| **MCP server** (Model Context Protocol — exposes a focused subset of household tools to Claude.ai's Custom Connectors at `/mcp` via Streamable HTTP. `add_ad_hoc_task`, `mark_done`, `log_context`, `log_mood`, `update_energy`, `log_workout`, `swap_task` + read tools to ground responses. Auth via `?token=` query param.) | [apps/api/src/mcp/server.ts](apps/api/src/mcp/server.ts), [apps/api/src/mcp/route.ts](apps/api/src/mcp/route.ts) |
 | **Calendar (today's events)** (passthrough to Google Calendar with normalized event shape, click-through to event + day permalinks) | [apps/api/src/services/calendar.ts](apps/api/src/services/calendar.ts), [apps/api/src/routes/calendar.ts](apps/api/src/routes/calendar.ts), [apps/dashboard/src/components/CalendarDayPanel.tsx](apps/dashboard/src/components/CalendarDayPanel.tsx) |
 | **Calendar trigger ingestion** (Airbnb, dogsit, landscaper, cleaner) | [apps/api/src/cron/calendar-ingest.ts](apps/api/src/cron/calendar-ingest.ts) |
 | **Publisher** (debounced fan-out to Google Calendar + Alexa app cards) | [apps/api/src/publisher/](apps/api/src/publisher/) |
@@ -80,7 +82,7 @@ Open <http://localhost:5173>. The Today tab is the landing page. The **❔ Guide
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 209 tests (199 API + 10 alexa-skill)
+npm test                 # all workspaces — currently 214 tests (204 API + 10 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 
@@ -120,6 +122,19 @@ You need a *separate* OAuth 2.0 Client from the one used by Google Calendar — 
    - `JWT_SECRET=$(openssl rand -hex 32)` — must be at least 16 chars
 
 That's it — redeploy and the dashboard will gate on Google sign-in.
+
+## Claude.ai → household-os (MCP Custom Connector)
+
+The API exposes a Model Context Protocol server at `/mcp`. Add it as a Custom Connector on Claude.ai (Pro/Team) and your Household Ops persona on Claude.ai gets real tools: `add_ad_hoc_task`, `mark_done`, `swap_task`, `log_context`, `log_mood`, `update_energy`, `log_workout` + read tools (`get_today`, `recent_activity`, `recent_context`, `list_open_zone_tasks`).
+
+**One-time setup:**
+
+1. In Claude.ai, *Settings → Connectors → Add Custom Connector*.
+2. URL: `https://<your-render-api>.onrender.com/mcp?token=<your-API_TOKEN>` (the token is the same `API_TOKEN` env var the Alexa skill uses — easiest to include as a query param since Claude.ai's connector UI doesn't have a header-injection field).
+3. Name it "Household OS" or similar. Save.
+4. In your Household Ops Claude Project (the one you wired through the Persona Launcher), enable the connector for that Project.
+
+After that, the persona can call tools directly while you're chatting on claude.ai — "I cleaned the bathrooms today" → it calls `mark_done` if the routine is on today's plan, or `add_ad_hoc_task` if you're flagging something not currently scheduled. Per the persona's system prompt it'll ask one clarifying question before guessing (zone? severity?).
 
 ## Voice / Alexa
 

@@ -1301,6 +1301,58 @@ This is **Google Tasks → dashboard read, plus dashboard → Google Tasks for s
 
 ---
 
+## 41. Ad-hoc task creation + MCP server (Claude.ai writeback)
+
+Diane asked for two things in one breath: Alexa should be able to add tasks, and she should be able to talk to the household persona on Claude.ai with real write access — not just advisory. Both ship together because they share the same `createAdHocTask` service and the same "ask for clarification, never guess" persona behavior.
+
+### Ad-hoc task creation
+
+- [services/zones.ts](apps/api/src/services/zones.ts) — new `createAdHocTask({ name, zone?, severity?, estimate_minutes?, energy?, source? })`. Defaults: zone='whole-house', severity='meh' (15 min, medium energy). Trims whitespace, errors on empty. Writes a `task_created` activity log entry tagged with the source. Returns the inserted doc.
+- [routes/zones.ts](apps/api/src/routes/zones.ts) — `POST /api/zones/tasks` exposes it. Validates name + optional zone/severity against existing enums.
+- The `AdHocTask.source` field was previously typed `'zone_assessment'` only; broadened to `'zone_assessment' | 'voice' | 'mcp' | 'persona' | 'manual'` so we can distinguish provenance in the activity log.
+- Picked up by morning-gen the next time it runs, with the same severity + age priority math zone-assessment-generated tasks use.
+
+### Alexa AddTaskIntent
+
+- Interaction model: new `AddTaskIntent` with `TaskName: AMAZON.SearchQuery` slot. Intent-level samples are slot-free (so Alexa always elicits), slot-level samples cover free-form utterances. Dialog config requires elicitation with `Elicit.Slot.TaskName` prompt ("What task should I add?").
+- Handler [zones.ts](apps/alexa-skill/src/handlers/zones.ts) — if `TaskName` is missing, returns `addElicitSlotDirective('TaskName')`. If present, calls `apiClient.addAdHocTask(name)` and reads the name back.
+- Client method [client.ts](apps/alexa-skill/src/client.ts): `addAdHocTask(name, zone?, severity?)` POSTs to `/api/zones/tasks` with `source: 'voice'`.
+
+### MCP server
+
+- New deps: `@modelcontextprotocol/sdk`.
+- [mcp/server.ts](apps/api/src/mcp/server.ts) — `buildMcpServer()` returns a fresh `McpServer` with 11 registered tools: writes (`add_ad_hoc_task`, `mark_done`, `swap_task`, `update_energy`, `log_mood`, `log_workout`, `log_context`) + reads (`get_today`, `recent_activity`, `recent_context`, `list_open_zone_tasks`). Each tool's handler calls into the same service-layer function the Anthropic-API persona path uses, so behavior stays identical regardless of surface. Writes tag `source: 'mcp'` (or `'persona'` for log_context) so the activity log distinguishes provenance.
+- [mcp/route.ts](apps/api/src/mcp/route.ts) — `mcpAuth` accepts the bearer via `Authorization: Bearer <token>` *or* `?token=...` query param. The query-param path matters because Claude.ai's Custom Connectors UI doesn't have a generic header-injection field; users paste a full URL. `mcpHandler` creates a fresh `StreamableHTTPServerTransport` (stateless mode — `sessionIdGenerator: undefined`) per request, connects the MCP server, and bridges the Express req/res through `transport.handleRequest`. `res.on('close')` cleans up transport + server.
+- Mounted at `/mcp` (root server, not under `/api`) in [index.ts](apps/api/src/index.ts) before the `requireToken` guard.
+
+### Persona prompt updates (clarification principle)
+
+Both [household.ts](packages/shared/src/personas/household.ts) and [finance.ts](packages/shared/src/personas/finance.ts) system prompts now include a "CLARIFICATION PRINCIPLE" block with concrete examples: when the ask is genuinely ambiguous, ask one short question rather than guess. Exception: fields with safe defaults (severity='meh', filing_status='single' when only gross income given) can be used silently as long as the persona tells her what it defaulted to.
+
+### Tests
+
+- 5 new in [zones.test.ts](apps/api/src/services/zones.test.ts) — `createAdHocTask` defaults, caller overrides, whitespace trim + empty rejection, activity log side-effect, immediate visibility in `listOpenAdHocTasks`.
+- The pre-existing schema/impl-drift test in [tools.test.ts](apps/api/src/persona/tools.test.ts) auto-validated the new `add_ad_hoc_task` tool wiring (every tool declared in the persona schemas has an implementation in tools.ts).
+- MCP transport itself is not unit-tested — testing `StreamableHTTPServerTransport.handleRequest` would mean stubbing a full HTTP cycle through `@hono/node-server`; cheaper to validate by pointing Claude.ai at the deployed `/mcp` URL and listing tools.
+
+### Status: MCP server is built but intentionally unused (2026-05-10)
+
+The MCP server ships in the codebase but Diane explicitly chose not to wire it to any chat interface. She evaluated three paths — Claude.ai web Custom Connectors (blocked by OAuth requirement we hadn't built), Claude Desktop (would require installing another app), and re-adding dashboard chat with the Anthropic API (~$2/mo, she'd previously declined the API cost) — and rejected all of them. Voice (Alexa) + dashboard click-to-edit is the interaction model.
+
+The MCP code is kept in place because (a) it's done and tested, and (b) future surfaces (Claude Desktop adoption, a different MCP-aware chat client, ChatGPT custom-GPT-style integrations) could pick it up without rebuild. **Future Claude: don't push chat-style interfaces unprompted; see `feedback_chat_interface_decision.md` memory.** If she ever asks for chat, the lowest-friction restore is re-adding the dashboard ChatPanel with an Anthropic API spending cap — don't re-litigate MCP unless she specifically asks.
+
+### Auth model going forward
+
+Three bearer-eligible paths through the API now:
+
+1. `API_TOKEN` (static, env-driven) — Alexa skill, MCP query param, curl scripts
+2. Session JWT from `/api/auth/google` — dashboard browser session
+3. No-auth open mode — when neither `API_TOKEN` nor `GOOGLE_OAUTH_CLIENT_ID` is set
+
+All three are accepted by the `requireToken` middleware on `/api/*`. The `/mcp` route has its own thinner middleware (`mcpAuth`) that ONLY checks against `API_TOKEN` — MCP clients don't have access to the Google sign-in flow, and exposing the session-JWT path on MCP would require URL-encoding sensitive tokens that we'd rather not generate ad-hoc.
+
+---
+
 ## 36. Route cheat sheet (current as of this Part B)
 
 | Endpoint | Method | Purpose |

@@ -105,6 +105,29 @@
             "rate the {Zone} as {ZoneLevel}"
           ]
         },
+        {
+          "name": "AddTaskIntent",
+          "slots": [
+            {
+              "name": "TaskName",
+              "type": "AMAZON.SearchQuery",
+              "samples": [
+                "add {TaskName}",
+                "{TaskName}",
+                "remind me to {TaskName}",
+                "I need to {TaskName}",
+                "the task is {TaskName}"
+              ]
+            }
+          ],
+          "samples": [
+            "add a task",
+            "add a task to my list",
+            "add a chore",
+            "add something to my list",
+            "remind me to do something"
+          ]
+        },
 
         {
           "name": "ListPendingCheckInsIntent",
@@ -228,6 +251,22 @@
     "dialog": {
       "intents": [
         {
+          "name": "AddTaskIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "TaskName",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.Slot.TaskName"
+              }
+            }
+          ]
+        },
+        {
           "name": "AnswerMorningCheckInIntent",
           "confirmationRequired": false,
           "prompts": {},
@@ -265,6 +304,12 @@
       "delegationStrategy": "ALWAYS"
     },
     "prompts": [
+      {
+        "id": "Elicit.Slot.TaskName",
+        "variations": [
+          { "type": "PlainText", "value": "What task should I add?" }
+        ]
+      },
       {
         "id": "Elicit.Slot.OneThing",
         "variations": [

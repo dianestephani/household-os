@@ -19,7 +19,7 @@ import {
   TodaysWorkoutHandler,
   UpdateEnergyHandler,
 } from './handlers/wellbeing.js';
-import { AssessZoneHandler } from './handlers/zones.js';
+import { AddTaskHandler, AssessZoneHandler } from './handlers/zones.js';
 import {
   AnswerMorningCheckInHandler,
   ListPendingCheckInsHandler,
@@ -42,6 +42,7 @@ const builder = SkillBuilders.custom()
     TodaysWorkoutHandler,
     LogWorkoutHandler,
     AssessZoneHandler,
+    AddTaskHandler,
     ListPendingCheckInsHandler,
     AnswerMorningCheckInHandler,
     WhatDidIDoHandler,

@@ -23,6 +23,7 @@ import dayRouter from './routes/day.js';
 import tasksRouter from './routes/tasks.js';
 import authRouter from './routes/auth.js';
 import { requireToken } from './middleware/auth.js';
+import { mcpAuth, mcpHandler } from './mcp/route.js';
 import { generateTodayPlan } from './cron/morning-gen.js';
 import { ingestCalendarTriggers } from './cron/calendar-ingest.js';
 import {
@@ -66,6 +67,11 @@ app.use(express.json({ limit: '1mb' }));
 // `/api` requireToken guard below.
 app.use('/api/auth', authRouter);
 
+// MCP endpoint for Claude.ai Custom Connectors. Auth via `?token=...` query
+// param or Authorization header (matching API_TOKEN). Mount before the
+// `/api` guard since it's at /mcp, not under /api.
+app.all('/mcp', mcpAuth, mcpHandler);
+
 app.get('/', (_req, res) => {
   res.json({
     service: 'household-os-api',
@@ -74,6 +80,7 @@ app.get('/', (_req, res) => {
     endpoints: {
       health: '/health',
       alexa_webhook: '/alexa',
+      mcp: '/mcp',
       api: [
         '/api/today',
         '/api/routines',

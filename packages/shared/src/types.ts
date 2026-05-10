@@ -500,7 +500,12 @@ export interface AdHocTask {
   ts: Date | string;
   zone: Zone;
   name: string;
-  source: 'zone_assessment';
+  /**
+   * What surface created this task. `zone_assessment` is the original
+   * pathway via `recordAssessment`; `voice`, `mcp`, `persona`, `manual` cover
+   * the direct-creation pathways added later.
+   */
+  source: 'zone_assessment' | 'voice' | 'mcp' | 'persona' | 'manual';
   source_assessment_id?: string;
   severity: ZoneStateLevel;
   estimate_minutes: number;

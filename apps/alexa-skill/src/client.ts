@@ -154,6 +154,13 @@ export const apiClient = {
       body: JSON.stringify({ zone, level, notes }),
     }),
 
+  // ----- ad-hoc tasks (direct creation, not via zone assessment) -----
+  addAdHocTask: (name: string, zone?: Zone, severity?: ZoneLevel) =>
+    request<{ _id: string; name: string; zone: Zone }>('/zones/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ name, zone, severity, source: 'voice' }),
+    }),
+
   // ----- check-ins -----
   pendingCheckIns: () => request<CheckIn[]>('/checkins/pending'),
   answerCheckIn: (id: string, answers: Record<string, string>) =>

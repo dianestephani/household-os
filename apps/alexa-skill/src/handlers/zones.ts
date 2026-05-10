@@ -44,6 +44,42 @@ function normalizeLevel(raw: string | undefined): ZoneLevel | null {
   return null;
 }
 
+/**
+ * "Alexa, ask Household OS to add a task." If the user didn't include the task
+ * name in their utterance, we elicit the slot rather than guess. After
+ * creation we read the name back so she knows it landed.
+ */
+export const AddTaskHandler: RequestHandler = {
+  canHandle(input) {
+    return (
+      getRequestType(input.requestEnvelope) === 'IntentRequest' &&
+      getIntentName(input.requestEnvelope) === 'AddTaskIntent'
+    );
+  },
+  async handle(input) {
+    const raw = getSlotValue(input.requestEnvelope, 'TaskName');
+    const name = raw?.trim();
+    if (!name) {
+      return input.responseBuilder
+        .speak('What task should I add?')
+        .reprompt('Tell me the task you want me to add.')
+        .addElicitSlotDirective('TaskName')
+        .getResponse();
+    }
+    try {
+      await apiClient.addAdHocTask(name);
+      return input.responseBuilder
+        .speak(`Got it. Added "${name}" to your tasks.`)
+        .getResponse();
+    } catch (err) {
+      console.error('[AddTaskHandler] failed', err);
+      return input.responseBuilder
+        .speak("Sorry, I couldn't add that task. Try again in a sec.")
+        .getResponse();
+    }
+  },
+};
+
 export const AssessZoneHandler: RequestHandler = {
   canHandle(input) {
     return (

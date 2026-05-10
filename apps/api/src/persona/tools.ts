@@ -20,6 +20,7 @@ import {
 } from '../services/checkins.js';
 import {
   cancelAdHocTask,
+  createAdHocTask,
   latestAssessmentByZone,
   listOpenAdHocTasks,
   listRecentAssessments,
@@ -39,6 +40,8 @@ import type {
   DeferReasonCode,
   EnergyLevel,
   MoodLevel,
+  Zone,
+  ZoneStateLevel,
   TriggerType,
   WorkoutSlotKey,
   WorkoutStatus,
@@ -125,6 +128,16 @@ export const householdTools: Record<string, ToolImpl> = {
 
   cancel_zone_task: async (input) =>
     cancelAdHocTask(input.task_id as string),
+
+  add_ad_hoc_task: async (input) =>
+    createAdHocTask({
+      name: input.name as string,
+      zone: input.zone as Zone | undefined,
+      severity: input.severity as ZoneStateLevel | undefined,
+      estimate_minutes: input.estimate_minutes as number | undefined,
+      energy: input.energy as EnergyLevel | undefined,
+      source: (input.source as string | undefined) ?? 'persona',
+    }),
 
   recent_activity: async (input) =>
     recentActivity(
