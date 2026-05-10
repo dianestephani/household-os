@@ -24,6 +24,8 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | Subsystem | Where it lives |
 | --- | --- |
 | **Daily plan generation** (rolling routines, fixed routines, zone rotation, event-driven triggers, skip_if + also_triggers, budget packing) | [apps/api/src/cron/morning-gen.ts](apps/api/src/cron/morning-gen.ts) |
+| **Schedule preview** (week / month look-ahead — calendar events + routines coming due, deterministic earliest-due-day bucketing, pending ad-hoc tasks) | [apps/api/src/services/schedule.ts](apps/api/src/services/schedule.ts), [apps/api/src/routes/schedule.ts](apps/api/src/routes/schedule.ts), [apps/dashboard/src/components/SchedulePanel.tsx](apps/dashboard/src/components/SchedulePanel.tsx) |
+| **Calendar (today's events)** (passthrough to Google Calendar with normalized event shape, click-through to event + day permalinks) | [apps/api/src/services/calendar.ts](apps/api/src/services/calendar.ts), [apps/api/src/routes/calendar.ts](apps/api/src/routes/calendar.ts), [apps/dashboard/src/components/CalendarDayPanel.tsx](apps/dashboard/src/components/CalendarDayPanel.tsx) |
 | **Calendar trigger ingestion** (Airbnb, dogsit, landscaper, cleaner) | [apps/api/src/cron/calendar-ingest.ts](apps/api/src/cron/calendar-ingest.ts) |
 | **Publisher** (debounced fan-out to Google Calendar + Alexa app cards) | [apps/api/src/publisher/](apps/api/src/publisher/) |
 | **Mood + energy logging** | [apps/api/src/services/mood.ts](apps/api/src/services/mood.ts), [apps/api/src/services/energy.ts](apps/api/src/services/energy.ts) |
@@ -31,12 +33,14 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | **Zone assessments → ad-hoc tasks** (rotates 1 zone per day, severity + age priority) | [apps/api/src/services/zones.ts](apps/api/src/services/zones.ts) |
 | **Check-in system** (morning intent / evening retro / weekly review / pattern interrupts / zone assessments) | [apps/api/src/services/checkins.ts](apps/api/src/services/checkins.ts), [apps/api/src/services/checkin-generators.ts](apps/api/src/services/checkin-generators.ts) |
 | **Pattern detection** (frequent deferrals, missed workout streaks) | [apps/api/src/services/patterns.ts](apps/api/src/services/patterns.ts) |
-| **Persistent activity log** (unified timeline, all events) | [apps/api/src/services/activity.ts](apps/api/src/services/activity.ts) |
+| **Persistent activity log** (unified timeline, all events incl. `context_logged`) | [apps/api/src/services/activity.ts](apps/api/src/services/activity.ts) |
 | **Finance module** (gross-income profile, 2025 federal/FICA/state tax estimator, outsourceable monthly cost rollup, greedy-fit affordability report, RocketMoney free-text breakdown) | [apps/api/src/services/finance.ts](apps/api/src/services/finance.ts), [apps/api/src/routes/finance.ts](apps/api/src/routes/finance.ts), [apps/dashboard/src/components/FinancePanel.tsx](apps/dashboard/src/components/FinancePanel.tsx) |
 | **Context journal** (shared narrative log for both personas; free-form text + structured `dogsit_count` / `energy` / `mood` / `blocked_activities` / `tags` / `related_persona`) | [apps/api/src/services/context.ts](apps/api/src/services/context.ts), [apps/api/src/routes/context.ts](apps/api/src/routes/context.ts), [apps/dashboard/src/components/JournalPanel.tsx](apps/dashboard/src/components/JournalPanel.tsx) |
-| **Persona chat** (Household Ops + Finance both live via Claude Opus 4.7 with tool use + prompt caching; Nutrition is the only remaining stub) | [apps/api/src/persona/](apps/api/src/persona/), [packages/shared/src/personas/](packages/shared/src/personas/) |
+| **Persona launchers** (Household Ops + Finance — system-prompt copy + per-persona Claude Project URL persisted in localStorage; opens in claude.ai instead of running in-dashboard chat, so no Anthropic API key is required) | [apps/dashboard/src/components/PersonaLauncher.tsx](apps/dashboard/src/components/PersonaLauncher.tsx), [packages/shared/src/personas/](packages/shared/src/personas/) |
+| **Persona API chat** (kept for completeness — Household Ops + Finance both have full tool definitions and runner; not currently wired to the dashboard UI but the route exists at `/api/chat/:persona` for re-enabling later) | [apps/api/src/persona/](apps/api/src/persona/) |
 | **Alexa skill** (15 voice intents + multi-turn morning check-in + proactive app cards) | [apps/alexa-skill/](apps/alexa-skill/) |
-| **Dashboard** (Today + context strip, Workouts, Activity, Household Ops chat, Finance, Routines editor, Journal, How-To Guide) | [apps/dashboard/](apps/dashboard/) |
+| **Theme + typography** (light/dark toggle persisted in localStorage with prefers-color-scheme fallback, Inter body + Fraunces display from Google Fonts, strict-grayscale palette + muted semantic colors) | [apps/dashboard/src/styles.css](apps/dashboard/src/styles.css), [apps/dashboard/src/components/ThemeToggle.tsx](apps/dashboard/src/components/ThemeToggle.tsx), [apps/dashboard/index.html](apps/dashboard/index.html) |
+| **Dashboard** (Today + Calendar strip + Context strip, Schedule, Workouts, Activity, Household Ops launcher, Finance, Routines editor, Journal, How-To Guide) | [apps/dashboard/](apps/dashboard/) |
 
 ## Quick start (local)
 
@@ -46,15 +50,21 @@ npm install
 
 # 2. environment
 cp .env.example .env
-# (edit .env — at minimum: MONGO_URL, ANTHROPIC_API_KEY. API_TOKEN can be empty for local dev.)
+# (edit .env — at minimum: MONGO_URL. API_TOKEN can be empty for local dev.
+#  ANTHROPIC_API_KEY is no longer required — persona chat happens on claude.ai now.
+#  GOOGLE_CALENDAR_* envs only needed if you want calendar/trigger ingestion.)
 
 # 3. local mongo
 brew services start mongodb-community
 
-# 4. seed the 49 routines from inventory.json
+# 4. seed the 48 routines from inventory.json
 npm run seed
 
-# 5. API + dashboard in two shells
+# 5. (one-time) backdate every rolling routine so nothing is overdue and
+#    the first occurrences are spread naturally across each cadence cycle
+npm -w @household-os/api run start-tomorrow
+
+# 6. API + dashboard in two shells
 npm run dev:api          # :3000
 npm run dev:dashboard    # :5173 (proxies /api → :3000)
 ```
@@ -64,7 +74,7 @@ Open <http://localhost:5173>. The Today tab is the landing page. The **❔ Guide
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 158 tests (148 API + 10 alexa-skill)
+npm test                 # all workspaces — currently 178 tests (168 API + 10 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 
@@ -72,11 +82,13 @@ API tests use a separate `household_os_test` database on local Mongo (set via `M
 
 Coverage spans:
 
-- **Services** — finance (profile + tax estimator + outsourceable + affordability), context journal, today/swap/defer/pull, zones (assessments + ad-hoc tasks), checkins, mood/energy, workouts, patterns, activity log
+- **Services** — finance (profile + tax estimator + outsourceable + affordability), context journal, calendar (day-range + URL helpers + event normalization + connected/disconnected states), schedule (rolling/fixed/event-driven/zone-rotation bucketing + skip_if + window clamping + pending ad-hoc), today/swap/defer/pull, zones (assessments + ad-hoc tasks), checkins, mood/energy, workouts, patterns, activity log
 - **Cron** — morning-gen (rolling + fixed + zone rotation + event-driven + skip_if + ad-hoc), calendar-ingest, deferral edge cases
-- **Persona wiring** — every tool declared in the persona schemas has a matching implementation in [apps/api/src/persona/tools.ts](apps/api/src/persona/tools.ts) (catches schema/impl drift)
-- **Activity-log fan-out** — every action site that should log an event does
+- **Persona wiring** — every tool declared in the persona schemas has a matching implementation in [apps/api/src/persona/tools.ts](apps/api/src/persona/tools.ts) (catches schema/impl drift; this matters even with launcher-mode personas because the API tool runtime is still maintained)
+- **Activity-log fan-out** — every action site that should log an event does (incl. `context_logged`)
 - **Alexa client** — token-fallback, base-URL resolution, header construction
+
+Test environment isolation: `NODE_ENV=test` short-circuits Google Calendar reads/writes (see [apps/api/src/utils/google-calendar.ts](apps/api/src/utils/google-calendar.ts)) so day-classification and trigger-ingest specs don't depend on the developer's actual calendar contents.
 
 ## Voice / Alexa
 
@@ -86,7 +98,7 @@ Setup, deployment paths, intent reference, and troubleshooting all live in [apps
 
 Render hosts the API (Express + cron + Alexa webhook). MongoDB lives separately on Atlas free tier. The dashboard can stay local — only the API needs to be public so Alexa can reach it.
 
-**Cost:** ~$7/mo (Render Starter Web Service) + $0 (Mongo Atlas free tier) + ~$0–2/mo Anthropic API.
+**Cost:** ~$7/mo (Render Starter Web Service) + $0 (Mongo Atlas free tier). Persona chat now runs on claude.ai (no Anthropic API charges) — the in-dashboard chat windows have been replaced with launchers that hand off to per-persona Claude Projects.
 
 > The free Render tier won't work for this project — it sleeps after 15 min idle, which breaks every cron job (morning-gen, calendar-ingest, check-in generators). Starter ($7/mo) keeps the process always-on.
 
@@ -105,13 +117,14 @@ Render hosts the API (Express + cron + Alexa webhook). MongoDB lives separately 
    - Fill in the secret env vars Render prompts for:
      - `MONGO_URL` — your Atlas connection string (must end with `/household_os?...`)
      - `API_TOKEN` — `openssl rand -hex 32` (optional; leave blank for no auth on a single-user system)
-     - `ANTHROPIC_API_KEY` — `sk-ant-...`
+     - `ANTHROPIC_API_KEY` — **no longer required** since persona chat happens on claude.ai. Leave blank unless you want to re-enable the in-dashboard `/api/chat/:persona` route.
      - `ALEXA_SKILL_ID`, `ALEXA_CLIENT_ID`, `ALEXA_CLIENT_SECRET` — from the Alexa Developer Console (LWA pair only needed for proactive app-card push)
    - Click **Apply**. Render builds + deploys (~3-5 minutes).
 
 3. **Seed the production database**
-   - Locally: `MONGO_URL='<your atlas string>' npm run seed` → `seeded 49 routines`.
+   - Locally: `MONGO_URL='<your atlas string>' npm run seed` → `seeded 48 routines`.
    - Or run `npm run seed` from the Render Shell.
+   - For a clean launch with nothing overdue: also run `npm -w @household-os/api run start-tomorrow` once. That backdates each rolling routine's `last_done` so first occurrences are spread naturally across each cadence cycle.
 
 4. **Repoint Alexa**
    - Alexa Developer Console → your skill → Build → Endpoint → swap your ngrok URL for `https://<your-render-url>.onrender.com/alexa` → Save → Build Model.
@@ -123,12 +136,12 @@ Push to `master` → Render auto-deploys. Logs are in the Render dashboard.
 
 ### Costs after first month
 
-| Service            | Tier                            | Monthly         |
-| ------------------ | ------------------------------- | --------------- |
-| Render Web Service | Starter (always-on)             | $7              |
-| MongoDB Atlas      | M0 (free, 512 MB)               | $0              |
-| Anthropic API      | pay-per-use, persona chat only  | ~$0–2 (typical) |
-| **Total**          |                                 | **~$7–9**       |
+| Service            | Tier                                    | Monthly  |
+| ------------------ | --------------------------------------- | -------- |
+| Render Web Service | Starter (always-on)                     | $7       |
+| MongoDB Atlas      | M0 (free, 512 MB)                       | $0       |
+| Anthropic API      | not used — persona chat is on claude.ai | $0       |
+| **Total**          |                                         | **~$7**  |
 
 ### Hosting the dashboard too
 

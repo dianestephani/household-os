@@ -1016,8 +1016,153 @@ If you (Claude) do work on this project: respect these — they're the substrate
 
 1. Read this whole HANDOFF (Part A for design, Part B for current truth).
 2. `git status` + `git log --oneline -20` to see what's been touched recently.
-3. `npm test` should be green (158 tests). `npm run typecheck` should be clean.
+3. `npm test` should be green (178 tests). `npm run typecheck` should be clean.
 4. Ask Diane what she wants to work on. Default to small, contained changes — she has the hyperfixate-burnout pattern noted in §1, so don't propose multi-week refactors unprompted.
-5. If she shares qualitative context in conversation, log it via the journal (the Household Ops persona has the `log_context` tool — but Claude-the-engineer can also `POST /api/context` directly). Don't lose context to a session boundary.
+5. If she shares qualitative context in conversation, log it via the journal — `POST /api/context` directly. Don't lose context to a session boundary.
 6. The end-user reference is the **Dashboard → ❔ Guide tab**. If Diane asks "how do I X" and the answer is in there, point her at it before re-explaining.
+
+---
+
+## 31. Calendar (today's events) subsystem
+
+A small read-only passthrough to Google Calendar so the Today view shows the day's events alongside the routine plan. **Reuses the existing OAuth + `listEvents` already used by trigger ingestion** — no new auth, no new env vars.
+
+### Service ([apps/api/src/services/calendar.ts](apps/api/src/services/calendar.ts))
+
+Pure helpers + one orchestrator, all unit-testable:
+
+- `dayRange(now)` → `{ startIso, endIso }` for local-midnight to next-local-midnight
+- `openInCalendarUrl(date, view = 'day' | 'week' | 'month')` → a `https://calendar.google.com/calendar/u/0/r/<view>/Y/M/D` permalink (the `/u/0/` path means "first signed-in account" — works for Diane's single-account setup)
+- `normalizeEvent(googleEvent)` → trimmed `CalendarEvent` (`id`, `summary`, `start`, `end`, `is_all_day`, optional `location` + `html_link`); returns `null` for events missing required bits. Detects all-day from `event.start.date` (vs `event.start.dateTime`).
+- `todaysEvents(now = new Date())` → `CalendarDayResponse` combining the above; uses `isCalendarConnected()` to short-circuit when OAuth isn't set up
+
+### Connection helper ([apps/api/src/utils/google-calendar.ts](apps/api/src/utils/google-calendar.ts))
+
+`isCalendarConnected()` returns `false` in `NODE_ENV=test` (deterministic test behavior regardless of local creds) and otherwise just checks that `getCalendarClient()` returns non-null.
+
+### Route + dashboard
+
+- `GET /api/calendar/today`
+- `CalendarDayPanel` ([apps/dashboard/src/components/CalendarDayPanel.tsx](apps/dashboard/src/components/CalendarDayPanel.tsx)) shown on the **Today** view above the context strip. Three states: connected with events, connected with no events ("Nothing scheduled today"), not connected (with the exact `npm -w @household-os/api run google-auth` command). Each event row links to its `htmlLink`; the panel header has an "Open in Google Calendar →" link to the day permalink.
+
+### Tests
+
+7 tests in [apps/api/src/services/calendar.test.ts](apps/api/src/services/calendar.test.ts): `dayRange` math, URL zero-padding, normalization (timed / all-day / no-summary fallback / missing-required → null), and an integration smoke that `todaysEvents` returns `connected: false` in test mode with the right URL shape.
+
+## 32. Schedule preview (week / month look-ahead)
+
+Diane explicitly asked for the ability to look ahead at the week or month, not just today. Built on the same data already in Mongo — no future-energy prediction, no morning-gen-for-future-days side effects.
+
+**Design call:** I deliberately do *not* run morning-gen for each future date, because morning-gen persists, logs activity, and publishes. Instead the schedule service walks each routine source independently and buckets each due routine on its **earliest due day** in the window, with anything already overdue collapsed onto day 0. Each routine appears at most once per response.
+
+### Service ([apps/api/src/services/schedule.ts](apps/api/src/services/schedule.ts))
+
+- `buildWindow(now, days)` → `{ start, end }` at local midnight, exclusive upper bound
+- `rollingDueByDay(start, end)` — for each rolling routine: normalize `last_done` to local midnight (avoids time-of-day off-by-one bugs we hit on first build), compute `nextDue = last_done + interval`. Bucket on `start` if already overdue (note `overdue Nd`), on `nextDue` if it lands in window (`due`), or skip. **`last_done = null` → bucket on `start` with `never done`.** Honors `skip_if: 'landscaper_this_week'` by pre-fetching landscaper triggers in `[window − 7d, window + 7d]`.
+- `fixedDueByDay(start, end)` — walk every day in window, match `day_of_week`, apply biweekly cycle parity using the same `FIXED_EPOCH = new Date(2026, 0, 1)` anchor as morning-gen.
+- `zoneRotationByDay(start, end)` — same Sat/Sun + week-since-cleaner-visit logic as morning-gen.
+- `eventDrivenByDay(start, end)` — query triggers in `[window − 7d, window + 7d]`, look up each event-driven routine's offset (e.g. `airbnb_checkin_minus_1d` → `airbnb_checkin` trigger, `−1` day offset) via the `TRIGGER_OFFSETS` map, bucket on `triggerDate + offsetDays` if it lands in window. Friendly notes per trigger type ("Airbnb checkin tomorrow," "Landscaper today").
+- `pendingAdHocTasks()` — open `AdHocTask`s sorted by ts ascending; **not date-anchored**, returned at the top of the response so the UI can show them as a separate "pull these in when energy allows" list.
+- `scheduleRange(now, days)` — orchestrates everything in parallel, runs calendar event lookup using `listEvents(start, end)`, buckets events by their start day. Days clamped to `[1, 60]`. Picks `view` (`day` / `week` / `month`) for `open_in_calendar_url` based on day count.
+
+### Route + dashboard
+
+- `GET /api/schedule?days=N`
+- New top-level **Schedule** tab in [App.tsx](apps/dashboard/src/App.tsx) with a Week (7) / Month (30) pill toggle. Compact mode collapses empty days to `—`. Each day shows calendar events first (with click-through to event), then routine-due rows with a small source badge (`Rolling` / `Fixed` / `Zone` / `Event`) and the cadence note. Pending ad-hoc tasks rendered above the day list.
+
+### Tests
+
+13 tests in [apps/api/src/services/schedule.test.ts](apps/api/src/services/schedule.test.ts): rolling never-done / overdue at window start / due in window / past window end / `skip_if`; fixed weekly / biweekly cycle parity; event-driven `airbnb_pre` (-1d) and `landscaper` (same day); window clamping (1 / 60); `is_today` flag; calendar disconnected in test mode; pending ad-hoc tasks listed.
+
+**Two real bugs the tests caught while being written:**
+
+1. `nextDue < start` was false when both equaled `start` for never-done routines — fixed by special-casing `last == null`.
+2. `last_done` carries the time-of-day from `markDone(new Date())`, which made `diffDays(start, nextDue)` floor to 2 instead of 3 for a 10-day-old `last_done` with 7-day interval. Fixed by normalizing `last_done` to midnight before any interval math.
+
+Both are documented in the file header.
+
+## 33. Theme + typography
+
+Built when Diane asked for "more elegant" styling with a light/dark toggle. Strict-grayscale palette (the `--accent` is just the foreground text color in each theme, so "active" states are pure contrast — no hue).
+
+- [apps/dashboard/src/styles.css](apps/dashboard/src/styles.css) — token sets keyed by `[data-theme='light' | 'dark']`. Light: `#fafaf9` bg, `#0a0a0a` text. Dark: `#0d0d0d` bg, `#f5f5f4` text. Both have `color-scheme` set so native form controls + scrollbars match. `--good` / `--bad` kept as muted semantic colors.
+- **Inter** (body, with stylistic features `cv11` + `ss01` for the refined `1` / `l` distinction) and **Fraunces** (h1–h4 display serif) loaded from Google Fonts via `<link>` in [apps/dashboard/index.html](apps/dashboard/index.html).
+- `<head>` inline script reads `localStorage.theme` (or `prefers-color-scheme` on first run) and sets `document.documentElement.dataset.theme` **before paint** — prevents the flash-of-wrong-theme.
+- [ThemeToggle.tsx](apps/dashboard/src/components/ThemeToggle.tsx) — pill button in the app header that flips `data-theme` and persists to localStorage.
+
+Component code didn't need to change because everything was already token-driven (`var(--…)`), so the new palette cascaded for free.
+
+## 34. Persona handoff to claude.ai (replaces in-dashboard chat)
+
+Diane decided she'd rather chat with personas on **claude.ai** instead of paying for an Anthropic API key for in-dashboard tool-use chat. New design:
+
+### Trade-off (made explicit to her before building)
+
+Claude.ai can't call our custom tools (`swap_task`, `affordability_report`, etc.). So personas become **advisory only** when used through the launcher — they can think with her and reference data she pastes, but can't mutate the system. She accepted this trade-off.
+
+### The launcher ([PersonaLauncher.tsx](apps/dashboard/src/components/PersonaLauncher.tsx))
+
+Three panels per persona:
+
+1. Name + one-line blurb + primary "Open in Claude.ai →" button. The button uses a **saved Claude Project URL** (per-persona, persisted in `localStorage` under `persona-project-url-<name>`); falls back to `https://claude.ai/new` if no URL is saved yet.
+2. "Saved Claude Project URL" input with one-time setup instructions (create a Claude Project, paste system prompt into Project instructions, save Project URL here).
+3. The full system prompt rendered in a scrollable `<pre>` with a "Copy" button (`navigator.clipboard.writeText`, fallback to `Selection` API). Includes a heads-up that the prompt references tools that won't exist on claude.ai.
+
+The launcher imports persona configs directly from `@household-os/shared/personas/household` and `@household-os/shared/personas/finance` (these are already exported from the shared package's `package.json` `exports` field — no API roundtrip needed).
+
+### What changed in the dashboard
+
+- Household tab → `<PersonaLauncher persona="household" />`
+- Finance tab → keeps the profile + outsourceable + affordability sections (those still need the API), with `<PersonaLauncher persona="finance" />` swapped in at the bottom in place of the inline ChatPanel
+- Nutrition tab → small inline "not built yet" panel (it was already a stub)
+- `ChatPanel.tsx` is **still in the repo** but no longer rendered. `/api/chat/:persona`, the persona runner, and all tool implementations are also intact. If a future Claude wants to re-enable in-dashboard chat (e.g., once Anthropic offers MCP access from claude.ai), no backend work is needed — just re-add the component.
+
+### What changed in operational config
+
+- `ANTHROPIC_API_KEY` is **no longer required** for the dashboard to function. The README and HANDOFF call this out. Diane can leave the env var blank locally and on Render. The `/api/chat/:persona` route would still try to use it if hit, but nothing in the UI hits that route.
+- Total monthly cost dropped to ~$7 (Render Starter only — Atlas free, no Anthropic spend).
+
+## 35. The "official launch tomorrow" moment
+
+Diane asked to "officially start the app tomorrow" with nothing overdue and routines spread naturally. Done with [apps/api/scripts/start-tomorrow.ts](apps/api/scripts/start-tomorrow.ts) (npm script `start-tomorrow`):
+
+For each rolling routine where `last_done` is null:
+
+1. Compute a deterministic offset: `FNV-1a-style hash of routine.key, mod interval_days`
+2. Set `last_done = startOfTomorrow − (interval − offset)` so `next_due = startOfTomorrow + offset`
+3. Daily routines (interval=1) always fire tomorrow (offset always 0)
+4. Routines with a real `last_done` are left untouched — re-running the script later will not clobber actual completion history
+
+Also clears any existing `TodayPlan` doc so the next morning-gen builds fresh against the new dates.
+
+**Real-DB run on 2026-05-09 produced** (selected highlights):
+
+- Daily (4 routines): all fire 2026-05-10
+- Weekly (~7d): water_fountain 5/10, mirror_glass 5/14, pet_brushing 5/14
+- Monthly-ish (30d): shower_scrub 5/17, fridge_cleanout 6/7, monthly_meds 5/16
+- Quarterly: oven_clean 7/24, floor_specialty 7/3
+- Air filter (180d): air_purifier_filter 9/24
+- 365d: registration_renewal 5/20, car_inspection 2027-04-24
+
+**One thing flagged but not fixed:** `regular_cleaning` (21d, $380 outsourced) got bucketed on 2026-05-10 by the deterministic spread, but Diane has a real `cleaner_visit` trigger on file from 2026-04-25, which would put the actual next visit on **2026-05-16**. If a future Claude wants to anchor `regular_cleaning` to the real cleaner schedule rather than the arbitrary spread, it's a one-line `last_done` override.
+
+## 36. Updated route cheat sheet (current as of this Part B)
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/today`, `/today/regenerate`, `/today/swap`, `/today/mark-done`, `/today/pull-from-pool` | GET / POST | Same as v1 |
+| `/api/routines`, `/api/routines/:key` | GET / PATCH | |
+| `/api/energy`, `/api/mood` | POST | |
+| `/api/workouts/today`, `/api/workouts` | GET / POST | |
+| `/api/zones`, `/api/zones/assess`, `/api/zones/tasks` | various | |
+| `/api/checkins/pending`, `/api/checkins/:id/answer`, `…/skip` | various | |
+| `/api/triggers` | GET / POST | |
+| `/api/patterns/deferrals`, `/api/patterns/workouts` | GET | |
+| `/api/activity` | GET | |
+| `/api/finance/profile`, `/api/finance/outsourceable`, `/api/finance/affordability`, `/api/finance/estimate-tax` | GET / PATCH / POST | |
+| `/api/context`, `/api/context/today` | GET / POST | journal |
+| **`/api/calendar/today`** | **GET** | **new — today's Google Calendar events normalized for the dashboard** |
+| **`/api/schedule?days=N`** | **GET** | **new — week / month look-ahead, calendar events + routines coming due** |
+| `/api/chat/:persona` | POST | Persona chat (still wired backend-side; no longer hit from the UI) |
+| `/alexa` | POST | Alexa webhook |
 
