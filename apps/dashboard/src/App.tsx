@@ -74,6 +74,15 @@ export default function App() {
       <header className="app-header">
         <h1>Household OS</h1>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => window.location.reload()}
+            title="Refresh — re-fetch all data"
+            aria-label="Refresh"
+          >
+            ↻ Refresh
+          </button>
           {session && (
             <button
               type="button"
