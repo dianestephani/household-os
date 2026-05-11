@@ -406,6 +406,190 @@ th {
   letter-spacing: 0.01em;
 }
 
+/* ---------- Widget grid (Home tab) ---------- */
+
+.widget-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .widget-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Widgets the user scans first read more naturally full-width. */
+  .widget.full-width {
+    grid-column: 1 / -1;
+  }
+}
+
+.widget {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.widget-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.widget-head strong {
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+}
+
+.widget-head .widget-link {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-decoration: none;
+  letter-spacing: 0.02em;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.widget-head .widget-link:hover {
+  color: var(--text);
+}
+
+.widget-head .widget-refresh {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0 0.15rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.widget-head .widget-refresh:hover {
+  color: var(--text);
+}
+
+.widget-empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: flex-start;
+}
+
+.widget-empty .empty-cta {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.widget-empty .empty-cta:hover {
+  background: var(--hover);
+  border-color: var(--border-strong);
+}
+
+/* ---------- Skeleton loaders ---------- */
+
+@keyframes skeleton-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 0.95; }
+  100% { opacity: 0.6; }
+}
+
+.skeleton {
+  display: block;
+  background: var(--hover);
+  border-radius: 4px;
+  height: 0.85rem;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton + .skeleton {
+  margin-top: 0.5rem;
+}
+
+.skeleton.short { width: 40%; }
+.skeleton.med { width: 65%; }
+.skeleton.long { width: 90%; }
+
+/* ---------- Header icon buttons (demoted destinations) ---------- */
+
+.header-icon {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.32rem 0.6rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.header-icon:hover,
+.header-icon.active {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+
+.header-icon.active {
+  font-weight: 600;
+}
+
+.header-icon-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ---------- Inline pill toggle (Log tab Activity/Journal toggle, etc.) ---------- */
+
+.pill-toggle {
+  display: inline-flex;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.15rem;
+  gap: 0.1rem;
+}
+
+.pill-toggle button {
+  background: none;
+  border: 0;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.pill-toggle button.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.pill-toggle button:hover:not(.active) {
+  color: var(--text);
+}
+
 /* ---------- Scrollbar (subtle, theme-aware) ---------- */
 
 ::-webkit-scrollbar {

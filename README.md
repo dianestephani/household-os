@@ -47,7 +47,8 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | **Alexa skill** (15 voice intents + multi-turn morning check-in + proactive app cards) | [apps/alexa-skill/](apps/alexa-skill/) |
 | **Theme + typography** (light/dark toggle persisted in localStorage with prefers-color-scheme fallback, Inter body + Fraunces display from Google Fonts, strict-grayscale palette + muted semantic colors) | [apps/dashboard/src/styles.css](apps/dashboard/src/styles.css), [apps/dashboard/src/components/ThemeToggle.tsx](apps/dashboard/src/components/ThemeToggle.tsx), [apps/dashboard/index.html](apps/dashboard/index.html) |
 | **Google sign-in wall** (Google Identity Services button on the dashboard, email allowlist, short-lived signed-JWT session in `sessionStorage` so the user re-auths on every fresh tab; API middleware accepts either the legacy `API_TOKEN` *or* a valid session JWT) | [apps/dashboard/src/components/LoginScreen.tsx](apps/dashboard/src/components/LoginScreen.tsx), [apps/dashboard/src/auth.ts](apps/dashboard/src/auth.ts), [apps/api/src/services/session.ts](apps/api/src/services/session.ts), [apps/api/src/middleware/auth.ts](apps/api/src/middleware/auth.ts), [apps/api/src/routes/auth.ts](apps/api/src/routes/auth.ts) |
-| **Dashboard** (Today + Calendar strip + Context strip, Schedule, Workouts, Activity, Household Ops launcher, Finance, Routines editor, Journal, How-To Guide) | [apps/dashboard/](apps/dashboard/) |
+| **Dashboard** (6 tabs — Home widget grid as default landing surface, Today drill-down, Schedule, Workouts, Finance, Log; + 4 header icons — Household Ops 💬, Food 🛒, Routines ⚙️, Guide ❔) | [apps/dashboard/](apps/dashboard/) |
+| **Home widget grid** (7 independently-loading cards: Today summary, Calendar today, Workouts week, Finance discretionary, Recent activity ticker w/ relative timestamps, today's Journal w/ inline quick-add, rotating Zone-check chip) | [apps/dashboard/src/components/HomePanel.tsx](apps/dashboard/src/components/HomePanel.tsx), [apps/dashboard/src/utils/relativeTime.ts](apps/dashboard/src/utils/relativeTime.ts) |
 
 ## Quick start (local)
 
@@ -79,7 +80,7 @@ npm run dev:api          # :3000
 npm run dev:dashboard    # :5173 (proxies /api → :3000)
 ```
 
-Open <http://localhost:5173>. The Today tab is the landing page. The **❔ Guide** tab in the top nav has the full how-to.
+Open <http://localhost:5173>. The Home tab (widget grid) is the landing page; Today is the drill-down for actively managing today's plan. The **❔ Guide** icon in the header has the full how-to.
 
 ## Tests
 

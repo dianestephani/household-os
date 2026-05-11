@@ -1658,6 +1658,7 @@ Recent additions since the initial Part B write-up:
 | §45 Grocery Manager | (no count change — renames updated existing tests) | 0 | 251 |
 | §47 Phase 1 cleanup | runner.test.ts deleted | −4 | 247 |
 | §47 Phase 2 data model | finance-history.test.ts + finance.test.ts additions | +16 | 263 |
+| §47 Phase 3 visual refactor | UI-only (no dashboard test infra) | 0 | 263 |
 
 **Deliberately not tested** (with rationale, so a fresh Claude doesn't try to backfill these):
 
@@ -1749,7 +1750,7 @@ New collections, no breaking changes to existing data.
 1. **`SnapshotSource` extended to include `'restore'`** beyond the spec's `'dashboard_edit' | 'csv_import'`. Without it, `restoreSnapshot` couldn't tag the chained snapshot honestly. Future paste-vs-csv distinction in Phase 5 can extend further (`'paste_import'`) without breaking shape.
 2. **`saveSnapshot` reads the `FinancialProfile` model directly**, not via `getFinancialProfile()`, to avoid a circular import between `finance.ts ↔ finance-history.ts`. When no profile exists yet, it snapshots a default-shaped record rather than refusing — keeps the history honest about "what did the profile look like at this moment."
 
-### Phase 3 — Visual refactor: Home + tab compression (~3-4 hr)
+### Phase 3 — Visual refactor: Home + tab compression (~3-4 hr) — **SHIPPED 2026-05-10**
 
 **Tab structure becomes:**
 
@@ -1785,6 +1786,33 @@ Result: **6 top-level tabs** (Home, Today, Schedule, Workouts, Finance, Log) + 3
 - Refresh button (§43 mobile) on every widget header.
 
 Test delta: 0 (no dashboard tests today; documented in §46).
+
+**What actually shipped in Phase 3:**
+
+- ✅ New [apps/dashboard/src/components/HomePanel.tsx](apps/dashboard/src/components/HomePanel.tsx) — `widget-grid` CSS grid (1-col mobile → 2-col desktop) with 7 widgets, each loading independently so a single slow endpoint doesn't block first paint:
+  - `TodayWidget` (full-width) — "N of M done" + next 2 incomplete; refresh + "Open today →"
+  - `CalendarWidget` — top 3 today's events, "Schedule →" link
+  - `WorkoutsWidget` — week pattern (`patterns.workouts(7)`) + today's slot
+  - `FinanceWidget` — discretionary $/mo + top 2 not-covered outsourceables. The spec's "last RocketMoney import date" sub-line is deferred to Phase 5 along with the import HTTP route.
+  - `ActivityWidget` (full-width) — last 6 ActivityLog entries with relative timestamps via new [utils/relativeTime.ts](apps/dashboard/src/utils/relativeTime.ts)
+  - `JournalWidget` — today's `ContextEntry` text + inline "+" quick-add (textarea → `api.context.add`)
+  - `ZoneChipWidget` — rotates through `ZONE_ROTATION` (day-of-year mod 6); 3 buttons (fine/meh/rough) → new `api.zones.assess` → POST `/api/zones/assess`
+- ✅ New [apps/dashboard/src/components/LogPanel.tsx](apps/dashboard/src/components/LogPanel.tsx) — pill-toggle wrapper over `ActivityFeed` + `JournalPanel`. Mode persists in `localStorage` under `household-os.log-mode`. Sub-panels keep their own date controls.
+- ✅ [App.tsx](apps/dashboard/src/App.tsx) refactored: 6 tabs (Home, Today, Schedule, Workouts, Finance, Log). Default view is now `home` (was `today`). Routines / Food / Guide + **Household Ops** demoted to header icons (`💬 Ops`, `🛒 Food`, `⚙️ Routines`, `❔ Guide`). The spec called for 3 header icons but didn't account for Household Ops, which previously had its own tab — adding a 4th icon kept it accessible without regressing.
+- ✅ Legacy `localStorage.household-os.view` migration in `readSavedView()` — `activity` and `journal` map onto `log`; all other legacy values remain valid because they still exist as header-icon routes.
+- ✅ New CSS classes in [styles.css](apps/dashboard/src/styles.css): `.widget-grid` / `.widget` (12px radius per spec) / `.widget-head` / `.widget-link` / `.widget-refresh` / `.widget-empty` / `.skeleton` (with `short/med/long` widths + pulse animation) / `.header-icon` / `.header-icon-label` / `.pill-toggle`.
+- ✅ New `api.zones.assess(zone, level, notes?)` method exposing the existing `POST /api/zones/assess` route — surfaces the zone-check from the Home chip widget.
+- ✅ Dead `api.chat()` method removed from [api.ts](apps/dashboard/src/api.ts) (was calling `/api/chat/:persona` which was deleted in Phase 1; had no consumers).
+
+**Verified headlessly:** `npm run typecheck` clean across 4 workspaces, `npm run build` produces 265 KB JS / 8 KB CSS gzipped, Vite dev server boots clean and serves all new modules with HTTP 200. **NOT verified (Claude can't open a browser):** actual visual layout, click interactions (tab switches, quick-add, zone chip), responsive breakpoints, dark-mode rendering of widgets. Diane needs to spot-check those.
+
+**Spec deviations worth knowing:**
+
+1. **4 header icons, not 3** — added Household Ops launcher as a 4th icon. The spec only listed Routines/Food/Guide but the existing Household Ops persona launcher had to go somewhere — making it a 4th icon kept the spec's intent (demote secondary surfaces to icons) without losing access.
+2. **Finance widget omits "last RocketMoney import date"** — Phase 2 deliberately shipped no HTTP routes for `RocketMoneyImport`. The widget shows discretionary + top 2 not-covered only; Phase 5 will wire the import-date sub-line when the route exists.
+3. **Zone chip uses day-of-year rotation, not random** — deterministic so the prompt feels stable across refreshes within a day.
+
+Test delta: 0 (no dashboard test infra exists in this repo; documented in §46). If we ever add Vitest + Testing Library, the first regression candidates are: `readSavedView` legacy migration, `relativeTime` unit bucketing, `todayZone` day-of-year rotation, and the `JournalWidget` quick-add path.
 
 ### Phase 4 — Per-appointment Calendar events + reconciliation (~4-6 hr)
 

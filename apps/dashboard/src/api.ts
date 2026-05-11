@@ -217,6 +217,20 @@ export const api = {
         body: JSON.stringify({ ...entry, source: entry.source ?? 'dashboard' }),
       }),
   },
+  zones: {
+    assess: (
+      zone: string,
+      level: 'fine' | 'meh' | 'rough',
+      notes?: string,
+    ) =>
+      request<{
+        assessment: { zone: string; level: string };
+        tasks: { _id: string; name: string }[];
+      }>('/zones/assess', {
+        method: 'POST',
+        body: JSON.stringify({ zone, level, notes }),
+      }),
+  },
   finance: {
     profile: () => request<FinancialProfile>('/finance/profile'),
     setProfile: (patch: Partial<FinancialProfile>) =>
@@ -237,12 +251,4 @@ export const api = {
         body: JSON.stringify(input),
       }),
   },
-  chat: (
-    persona: string,
-    messages: { role: 'user' | 'assistant'; content: string }[],
-  ) =>
-    request<{ reply: string; messages: { role: string; content: string }[] }>(
-      `/chat/${persona}`,
-      { method: 'POST', body: JSON.stringify({ messages }) },
-    ),
 };
