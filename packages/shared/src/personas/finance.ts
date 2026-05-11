@@ -3,6 +3,7 @@ import type { PersonaConfig } from '../types.js';
 export const finance: PersonaConfig = {
   name: 'Finance',
   model: 'claude-sonnet-4-6',
+  projectUrl: 'https://claude.ai/project/019e1024-e34d-7631-9a50-83a964f5921c',
   systemPrompt: `
 You are Diane's Finance persona. Your scope is narrow and practical: help her decide which household tasks she can afford to outsource, and when.
 

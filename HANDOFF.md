@@ -827,7 +827,7 @@ Section numbers in Part B are append-order, so they're not always sequential. Us
 
 The v1 plan is shipped and the system is running. The API is on Render (Starter $7/mo); MongoDB lives on Atlas free tier; the dashboard is also on Render as a free static site; the Alexa skill is mounted on the API at `POST /alexa` via `ask-sdk-express-adapter`. There's no separate Lambda. Google Calendar OAuth is wired and working (with the `tasks` scope added in §40). Google sign-in is the login wall on the deployed dashboard (§38). The Food tab is the Grocery Manager launcher (§45) — replacing the old Nutrition stub.
 
-**Current test status: 303 tests across 32 files (293 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
+**Current test status: 307 tests across 32 files (297 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
 
 The for-end-user reference is the **in-app Guide tab** (Dashboard → ❔ Guide); this HANDOFF is just for engineers/Claude.
 
@@ -1065,7 +1065,7 @@ If you (Claude) do work on this project: respect these — they're the substrate
 1. **Read the Part B Index** above for navigation. §1–§17 is the original v1 design; §18 onward is current truth. When they conflict, current truth wins.
 2. **Read the memory** at `~/.claude/projects/-Users-dianestephani-Documents-Projects-Personal-Projects-household-os/memory/MEMORY.md` — the index there lists 12+ memory files including ADHD/energy patterns, dietary constraints, beauty maintenance, finance tools, the chat-interface and session-persistence decisions, and the two-emails-distinction (`reference_emails.md`: personal Gmail for OAuth, work email for OMG context — NOT interchangeable).
 3. `git status` + `git log --oneline -20` to see what's been touched recently.
-4. **`npm test` should pass 303 tests across 32 files** (293 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
+4. **`npm test` should pass 307 tests across 32 files** (297 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
 5. Skim the subsystem sections relevant to whatever Diane asks about. §36 is the canonical route cheat sheet — bookmark that.
 6. Ask Diane what she wants to work on. **Default to small, contained changes** — she has the hyperfixate-burnout pattern noted in §1 and `hyperfixate_burnout` memory. Don't propose multi-week refactors unprompted. **Don't push chat-style interfaces** — she declined Claude.ai connectors, Claude Desktop, AND re-adding dashboard chat on 2026-05-10 (see `feedback_chat_interface_decision` memory). Voice (Alexa) + dashboard buttons + per-persona Claude.ai launchers is the chosen interaction model.
 7. If she shares qualitative context in conversation, log it via the journal — `POST /api/context` directly with `related_persona` and any extractable structured fields. Don't lose context to a session boundary.
@@ -1160,11 +1160,20 @@ Claude.ai can't call our custom tools (`swap_task`, `affordability_report`, etc.
 
 ### The launcher ([PersonaLauncher.tsx](apps/dashboard/src/components/PersonaLauncher.tsx))
 
-Three panels per persona:
+**Updated 2026-05-10: project URLs are hardcoded on each persona config.** All three live personas have `projectUrl` set in [packages/shared/src/personas/](packages/shared/src/personas/); the launcher reads `config.projectUrl` directly. The earlier "Saved Claude Project URL" localStorage input was removed — it was a placeholder from when only grocery had a hardcoded URL. Any old `persona-project-url-*` keys in localStorage become inert (harmless dead data).
 
-1. Name + one-line blurb + primary "Open in Claude.ai →" button. The button uses a **saved Claude Project URL** (per-persona, persisted in `localStorage` under `persona-project-url-<name>`); falls back to `https://claude.ai/new` if no URL is saved yet.
-2. "Saved Claude Project URL" input with one-time setup instructions (create a Claude Project, paste system prompt into Project instructions, save Project URL here).
-3. The full system prompt rendered in a scrollable `<pre>` with a "Copy" button (`navigator.clipboard.writeText`, fallback to `Selection` API). Includes a heads-up that the prompt references tools that won't exist on claude.ai.
+Two panels per persona now:
+
+1. Name + one-line blurb + primary "Open in Claude.ai →" button → `config.projectUrl ?? 'https://claude.ai/new'`. On iOS, tapping the link triggers Universal Links → Claude app prompt when the app is installed (no per-platform code needed — plain `<a href>` with `target="_blank"`).
+2. The full system prompt rendered in a scrollable `<pre>` with a "Copy" button (`navigator.clipboard.writeText`, fallback to `Selection` API). Heads-up text reminds Diane to paste an updated prompt back into the Claude Project settings when she changes it here.
+
+**Current project URLs** (also asserted in [apps/api/src/persona/tools.test.ts](apps/api/src/persona/tools.test.ts) so renames fail loud at build time):
+
+| Persona | Project URL |
+| --- | --- |
+| Household Ops | `https://claude.ai/project/019e1022-63c0-752f-a25c-38f80dbc6cc2` |
+| Finance | `https://claude.ai/project/019e1024-e34d-7631-9a50-83a964f5921c` |
+| Grocery Manager | `https://claude.ai/project/019e141a-8cbc-720d-843a-0732ad1293c2` |
 
 The launcher imports persona configs directly from `@household-os/shared/personas/household` and `@household-os/shared/personas/finance` (these are already exported from the shared package's `package.json` `exports` field — no API roundtrip needed).
 
@@ -1651,7 +1660,7 @@ All `/api/*` routes gated by `requireToken` middleware ([middleware/auth.ts](app
 
 ## 46. Latest test count + coverage delta (running tally)
 
-As of 2026-05-10 end-of-day, post-§47 Phase 4 (appointments): **303 tests across 32 files** (293 API + 10 alexa-skill). Was 251 pre-Phase 1, dropped to 247 after Phase 1 cleanup, 263 after Phase 2 data-model tests, 285 after §48 meal-weeks, 303 after Phase 4 appointments. Phase 3 was UI-only and didn't move the count.
+As of 2026-05-10 end-of-day, post-Phase 4 + persona Project URL hardcoding: **307 tests across 32 files** (297 API + 10 alexa-skill). Was 251 pre-Phase 1, dropped to 247 after Phase 1 cleanup, 263 after Phase 2 data-model tests, 285 after §48 meal-weeks, 303 after Phase 4 appointments, 307 after persona URL hardcoding. Phase 3 was UI-only and didn't move the count.
 
 Recent additions since the initial Part B write-up:
 
@@ -1671,6 +1680,7 @@ Recent additions since the initial Part B write-up:
 | §47 Phase 3 visual refactor | UI-only (no dashboard test infra) | 0 | 263 |
 | §48 Meal week calendar | meal-weeks.test.ts | +22 | 285 |
 | §47 Phase 4 appointments | appointments.test.ts | +18 | 303 |
+| Hardcoded persona Project URLs | tools.test.ts | +4 | 307 |
 
 **Deliberately not tested** (with rationale, so a fresh Claude doesn't try to backfill these):
 

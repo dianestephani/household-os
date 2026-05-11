@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { household } from '@household-os/shared/personas/household';
 import { finance } from '@household-os/shared/personas/finance';
 import { grocery } from '@household-os/shared/personas/grocery';
@@ -22,49 +22,18 @@ const BLURB: Record<PersonaName, string> = {
 };
 
 /**
- * Per-persona hardcoded Project URL. The launcher uses this when no
- * user-saved URL exists in localStorage. Means the "Open in Claude.ai"
- * button always lands somewhere sensible even on first use. Users can
- * still override via the "Saved Project URL" input.
+ * Hosted fallback for personas without a `projectUrl` set on their config.
+ * In practice all three live personas have one; this is just defensive.
  */
-const DEFAULT_PROJECT_URL: Partial<Record<PersonaName, string>> = {
-  grocery: 'https://claude.ai/project/019e141a-8cbc-720d-843a-0732ad1293c2',
-};
-
 const HOSTED_FALLBACK = 'https://claude.ai/new';
 
 export default function PersonaLauncher({ persona }: { persona: PersonaName }) {
   const config = CONFIGS[persona];
   const blurb = BLURB[persona];
-  const storageKey = `persona-project-url-${persona}`;
+  const target = config.projectUrl ?? HOSTED_FALLBACK;
 
-  const [projectUrl, setProjectUrl] = useState('');
-  const [savedHint, setSavedHint] = useState(false);
   const [copied, setCopied] = useState(false);
   const promptRef = useRef<HTMLPreElement | null>(null);
-
-  useEffect(() => {
-    try {
-      setProjectUrl(localStorage.getItem(storageKey) ?? '');
-    } catch {
-      /* localStorage unavailable */
-    }
-  }, [storageKey]);
-
-  const target =
-    projectUrl.trim() || DEFAULT_PROJECT_URL[persona] || HOSTED_FALLBACK;
-
-  function saveProjectUrl() {
-    try {
-      const v = projectUrl.trim();
-      if (v) localStorage.setItem(storageKey, v);
-      else localStorage.removeItem(storageKey);
-      setSavedHint(true);
-      setTimeout(() => setSavedHint(false), 1500);
-    } catch {
-      /* localStorage unavailable */
-    }
-  }
 
   async function copyPrompt() {
     try {
@@ -117,40 +86,9 @@ export default function PersonaLauncher({ persona }: { persona: PersonaName }) {
             Open in Claude.ai →
           </a>
           <span className="muted" style={{ fontSize: '0.82rem' }}>
-            {projectUrl.trim()
-              ? 'Goes to your saved Project.'
-              : DEFAULT_PROJECT_URL[persona]
-                ? 'Goes to the linked Claude Project. Set a custom URL below to override.'
-                : 'Goes to claude.ai/new — set up a Project below for a persistent chat.'}
+            Opens this persona's Claude Project. On iOS, prompts to open in the
+            Claude app if installed.
           </span>
-        </div>
-      </div>
-
-      <div className="panel">
-        <strong>Saved Claude Project URL (optional)</strong>
-        <p className="muted" style={{ marginTop: '0.25rem', fontSize: '0.88rem' }}>
-          One-time setup: on Claude.ai, create a new Project, paste the system prompt below into the
-          Project's instructions, save it, copy that Project's URL, and paste it here. After that the
-          launcher takes you straight into the Project (history stays organized per persona).
-        </p>
-        <div
-          style={{
-            display: 'flex',
-            gap: '0.5rem',
-            marginTop: '0.5rem',
-            flexWrap: 'wrap',
-          }}
-        >
-          <input
-            type="url"
-            value={projectUrl}
-            onChange={(e) => setProjectUrl(e.target.value)}
-            placeholder="https://claude.ai/project/…"
-            style={{ flex: 1, minWidth: '20rem' }}
-          />
-          <button onClick={saveProjectUrl} data-variant="ghost">
-            {savedHint ? 'Saved' : 'Save'}
-          </button>
         </div>
       </div>
 
@@ -170,10 +108,9 @@ export default function PersonaLauncher({ persona }: { persona: PersonaName }) {
           </button>
         </div>
         <p className="muted" style={{ marginTop: '0.25rem', fontSize: '0.84rem' }}>
-          Heads up: this prompt assumes the persona can call tools (e.g. <code>get_today</code>,{' '}
-          <code>affordability_report</code>). On Claude.ai those tools won't exist, so the persona is
-          advisory only — it can think with you but can't change anything in this dashboard. If you
-          want, trim out the tool-specific sentences before pasting.
+          This is the system prompt the Project should be configured with. If
+          you ever update the prompt here, re-paste it into the Claude Project
+          settings so the live chats stay in sync.
         </p>
         <pre
           ref={promptRef}

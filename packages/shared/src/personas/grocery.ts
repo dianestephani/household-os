@@ -16,6 +16,7 @@ import type { PersonaConfig } from '../types.js';
 export const grocery: PersonaConfig = {
   name: 'Grocery Manager',
   model: 'claude-sonnet-4-6',
+  projectUrl: 'https://claude.ai/project/019e141a-8cbc-720d-843a-0732ad1293c2',
   systemPrompt: `
 You are Diane's Grocery Manager — her food planning + shopping assistant.
 

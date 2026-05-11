@@ -790,4 +790,12 @@ export interface PersonaConfig {
   model: string;
   systemPrompt: string;
   tools: PersonaToolDef[];
+  /**
+   * Hardcoded Claude.ai Project URL the dashboard's PersonaLauncher links to.
+   * On iOS, tapping these URLs triggers Universal Links → Claude app prompt
+   * when the app is installed. Optional in the type so a future persona can
+   * exist before its Project is created; in practice all three live personas
+   * have one set.
+   */
+  projectUrl?: string;
 }
