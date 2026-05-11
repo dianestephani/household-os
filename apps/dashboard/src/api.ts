@@ -272,6 +272,25 @@ export const api = {
         method: 'DELETE',
       }),
   },
+  alexa: {
+    authStatus: () =>
+      request<{ configured: boolean }>('/alexa/auth-status'),
+    addToShoppingList: (items: string[]) =>
+      request<{
+        results: {
+          text: string;
+          status: 'added' | 'error';
+          id?: string;
+          error?: string;
+        }[];
+        added: number;
+        failed: number;
+        status: 'ok' | 'no_token';
+      }>('/alexa/shopping-list/add', {
+        method: 'POST',
+        body: JSON.stringify({ items }),
+      }),
+  },
   zones: {
     assess: (
       zone: string,

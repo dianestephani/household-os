@@ -827,7 +827,7 @@ Section numbers in Part B are append-order, so they're not always sequential. Us
 
 The v1 plan is shipped and the system is running. The API is on Render (Starter $7/mo); MongoDB lives on Atlas free tier; the dashboard is also on Render as a free static site; the Alexa skill is mounted on the API at `POST /alexa` via `ask-sdk-express-adapter`. There's no separate Lambda. Google Calendar OAuth is wired and working (with the `tasks` scope added in §40). Google sign-in is the login wall on the deployed dashboard (§38). The Food tab is the Grocery Manager launcher (§45) — replacing the old Nutrition stub.
 
-**Current test status: 339 tests across 33 files (329 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
+**Current test status: 359 tests across 38 files (349 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
 
 The for-end-user reference is the **in-app Guide tab** (Dashboard → ❔ Guide); this HANDOFF is just for engineers/Claude.
 
@@ -1065,7 +1065,7 @@ If you (Claude) do work on this project: respect these — they're the substrate
 1. **Read the Part B Index** above for navigation. §1–§17 is the original v1 design; §18 onward is current truth. When they conflict, current truth wins.
 2. **Read the memory** at `~/.claude/projects/-Users-dianestephani-Documents-Projects-Personal-Projects-household-os/memory/MEMORY.md` — the index there lists 12+ memory files including ADHD/energy patterns, dietary constraints, beauty maintenance, finance tools, the chat-interface and session-persistence decisions, and the two-emails-distinction (`reference_emails.md`: personal Gmail for OAuth, work email for OMG context — NOT interchangeable).
 3. `git status` + `git log --oneline -20` to see what's been touched recently.
-4. **`npm test` should pass 339 tests across 33 files** (329 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
+4. **`npm test` should pass 359 tests across 38 files** (349 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
 5. Skim the subsystem sections relevant to whatever Diane asks about. §36 is the canonical route cheat sheet — bookmark that.
 6. Ask Diane what she wants to work on. **Default to small, contained changes** — she has the hyperfixate-burnout pattern noted in §1 and `hyperfixate_burnout` memory. Don't propose multi-week refactors unprompted. **Don't push chat-style interfaces** — she declined Claude.ai connectors, Claude Desktop, AND re-adding dashboard chat on 2026-05-10 (see `feedback_chat_interface_decision` memory). Voice (Alexa) + dashboard buttons + per-persona Claude.ai launchers is the chosen interaction model.
 7. If she shares qualitative context in conversation, log it via the journal — `POST /api/context` directly with `related_persona` and any extractable structured fields. Don't lose context to a session boundary.
@@ -1608,6 +1608,7 @@ All `/api/*` routes gated by `requireToken` middleware ([middleware/auth.ts](app
 | `/mcp` | ALL | MCP server endpoint via Streamable HTTP transport. Auth via `?token=` query or Authorization header against `API_TOKEN`. Built but unwired-by-design (§41). |
 | `/api/today` | GET | Current TodayPlan (auto-generates if missing) |
 | `/api/today/regenerate` | POST | Force re-gen + activity log entry |
+| `/api/today/whats-left` | GET | Open items + summed minutes (§47 Phase 6c, powers Alexa WhatsLeftIntent) |
 | `/api/today/swap` | POST | Move item to swap_pool, optionally pull replacement |
 | `/api/today/mark-done` | POST | Mark plan item complete |
 | `/api/today/pull-from-pool` | POST | Bring item from swap_pool back into today |
@@ -1659,12 +1660,15 @@ All `/api/*` routes gated by `requireToken` middleware ([middleware/auth.ts](app
 | `/api/appointments/:routine_key` | POST / DELETE | Schedule a calendar appointment / unlink it (§47 Phase 4) |
 | `/api/appointments/:routine_key/reconcile` | POST | Force reconcile against Google Calendar |
 | `/api/appointments/reconcile-all` | POST | Admin trigger for the hourly cron logic |
+| `/api/alexa/auth-status` | GET | `{configured: boolean}` — has LWA been bootstrapped? (§47 Phase 6) |
+| `/api/alexa/shopping-list/add` | POST | Bulk-add `{items: string[]}` to the Alexa shopping list (read-only; never touches Amazon cart) |
+| `/api/alexa/lwa/save-token` | POST | One-time LWA bootstrap; persists `{access_token, refresh_token, expires_in, scope}` |
 
 ---
 
 ## 46. Latest test count + coverage delta (running tally)
 
-As of 2026-05-10 end-of-day, post-Phase 5 (RocketMoney workflow): **339 tests across 33 files** (329 API + 10 alexa-skill). Was 251 pre-Phase 1, dropped to 247 after Phase 1 cleanup, 263 after Phase 2 data-model tests, 285 after §48 meal-weeks, 303 after Phase 4 appointments, 307 after persona URL hardcoding, 339 after Phase 5. Phase 3 was UI-only and didn't move the count.
+As of 2026-05-10 end-of-day, post-Phase 6 (Alexa surfaces): **359 tests across 38 files** (349 API + 10 alexa-skill). Was 251 pre-Phase 1, dropped to 247 after Phase 1 cleanup, 263 after Phase 2 data-model tests, 285 after §48 meal-weeks, 303 after Phase 4 appointments, 307 after persona URL hardcoding, 339 after Phase 5, 359 after Phase 6. Phase 3 was UI-only and didn't move the count.
 
 Recent additions since the initial Part B write-up:
 
@@ -1686,6 +1690,7 @@ Recent additions since the initial Part B write-up:
 | §47 Phase 4 appointments | appointments.test.ts | +18 | 303 |
 | Hardcoded persona Project URLs | tools.test.ts | +4 | 307 |
 | §47 Phase 5 RocketMoney workflow | csv-parser.test.ts + finance-history.test.ts | +32 | 339 |
+| §47 Phase 6 Alexa surfaces | grocery-list-parser + today.whats-left + alexa-shopping-list + alexa-reminders | +20 | 359 |
 
 **Deliberately not tested** (with rationale, so a fresh Claude doesn't try to backfill these):
 
@@ -1991,7 +1996,7 @@ Test delta: +~12 tests (finance-history, import, csv-parser).
 5. **`window.confirm()` on Restore** — destructive operation that overwrites live profile values. A modal would be nicer; `confirm` is the minimum viable safety rail and adds zero code. Snapshot history itself is the real safety net (every restore writes a new snapshot, so it's reversible).
 6. **No dashboard test infra** — same situation as Phases 3 + 4. The high-value seam is the pure CSV parser, which gets exhaustively covered. Component flows aren't unit-tested; manual smoke needed.
 
-### Phase 6 — Alexa: Reminders + Shopping List + WhatsLeftIntent (~4-6 hr)
+### Phase 6 — Alexa: Reminders + Shopping List + WhatsLeftIntent (~4-6 hr) — **SHIPPED 2026-05-10 (code-complete; LWA activation pending Diane)**
 
 **6a. Alexa Reminders integration** (replaces ad-hoc custom notifications for time-based items)
 
@@ -2016,6 +2021,72 @@ Test delta: +~12 tests (finance-history, import, csv-parser).
 - Add to skill manifest sample utterances: "what am I still missing for the day", "what's left", "what do I have left today".
 
 Test delta: +~12 tests (alexa-reminders, shopping-list route, whats-left handler).
+
+**What actually shipped in Phase 6:**
+
+- ✅ **6c: WhatsLeftIntent (fully active)** — `whatsLeftToday()` in [apps/api/src/services/today.ts](apps/api/src/services/today.ts) returns `{items: [{name, estimate_minutes, routine_key}], total_minutes}` for plan items where `status !== 'done'`, sorted by `order`. Exposed at `GET /api/today/whats-left`. New `WhatsLeftHandler` in [apps/alexa-skill/src/handlers/today.ts](apps/alexa-skill/src/handlers/today.ts) speaks an Oxford-joined list: *"You have 3 items left: bins to curb, scoop litter, and the kitchen reset. About 35 minutes total."* Says *"You're done for today."* when zero. Interaction model gets 7 new sample utterances ("what am I still missing", "what's left to do", "what do I have left", etc.). Wired into `skill.ts`. **This one needs no Amazon-side setup beyond a skill model rebuild — it works immediately.**
+- ✅ **6b: Shopping List integration (code-complete; LWA pending)** — Pure parser [apps/api/src/services/grocery-list-parser.ts](apps/api/src/services/grocery-list-parser.ts) handles `## Section` headers + `-`/`*`/`•` bullet rows + ```` ``` ```` fences + optional `GROCERY LIST` title line + sections-as-h1-through-h6. Service [apps/api/src/services/alexa-shopping-list.ts](apps/api/src/services/alexa-shopping-list.ts) finds the user's default shopping list via `GET /v2/householdlists/`, then `POST`s items one at a time. Returns `{results, added, failed, status: 'ok' | 'no_token'}`. When LWA isn't configured (NODE_ENV=test OR no stored token), returns `status: 'no_token'` so the route can return a clear 503. **Hard rule** restated at the top of the service, the route, and the dashboard panel: this only writes to the Alexa shopping list — never an Amazon cart, never orders, never spends money. Route at `POST /api/alexa/shopping-list/add` with a 100-item cap and a 413 for over-cap. Dashboard [ShoppingListPanel.tsx](apps/dashboard/src/components/ShoppingListPanel.tsx) lives on the Food tab between the meal calendar and the persona launcher: paste textarea → live-parse preview grouped by section → "Send to Alexa" button with auth-status guard.
+- ✅ **6a: Reminders integration (code-complete; LWA pending)** — `createReminderForAppointment` in [apps/api/src/services/alexa-reminders.ts](apps/api/src/services/alexa-reminders.ts) is idempotent via the new `AlexaReminder` Mongo collection keyed on `calendar_event_id`. Posts to `/v1/alerts/reminders` with `SCHEDULED_ABSOLUTE` 30 min before the appointment. Returns `null` (clean no-op) when LWA isn't configured. Wired into the existing hourly `reconcileAppointmentsCron` ([apps/api/src/cron/appointment-reconcile.ts](apps/api/src/cron/appointment-reconcile.ts)) as a second pass: for every appointment-enabled routine with `last_event_start` within the next 24h, ensure a reminder exists. `clearLocalReminderForEvent` for cleanup when events are removed externally.
+- ✅ **LWA token plumbing** — [apps/api/src/services/alexa-lwa.ts](apps/api/src/services/alexa-lwa.ts) wraps the Login-with-Amazon token lifecycle. `getValidAccessToken()` returns the stored token, auto-refreshing via `https://api.amazon.com/auth/o2/token` (grant_type=refresh_token) if within 5 min of expiry. `saveAccessToken()` upserts the new `AlexaAuth` singleton. `alexaLwaConfigured()` for clean 503 routing. Returns `null` in NODE_ENV=test or when `ALEXA_CLIENT_ID`/`SECRET` aren't set. Manual token-save endpoint at `POST /api/alexa/lwa/save-token` for one-time bootstrap.
+- ✅ **Skill manifest updated** — [apps/alexa-skill/skill.json](apps/alexa-skill/skill.json) now declares `alexa::devices:all:reminders:write` + `alexa::household:lists:write` alongside the existing notifications permission. Diane needs to deploy this manifest (Alexa Developer Console → Build → Permissions section will show the new entries) before she can grant them in the Alexa app.
+- ✅ **Routes added** to `/api/alexa`:
+  - `GET /api/alexa/auth-status` — `{configured: boolean}` for the dashboard to decide whether to grey out the Send button
+  - `POST /api/alexa/shopping-list/add` — body `{items: string[]}`, caps 100
+  - `POST /api/alexa/lwa/save-token` — bootstrap LWA storage
+- ✅ **3 new Mongo models** — `AlexaAuth` (singleton token store), `AlexaReminder` (per-calendar-event idempotency key). No third — the second one carries both responsibilities I was planning.
+
+**Test delta:** **+20 tests** (8 grocery-list-parser, 2 whats-left, 4 alexa-shopping-list, 4 alexa-reminders, 2 from added vocabularies). New API total: **349** (was 329). Comfortably above the spec's +~12.
+
+**📋 Operational TODO for Diane to fully activate 6a + 6b:**
+
+Once-only setup (the code is shipped, but Amazon needs to know the skill wants these permissions):
+
+1. **Bump the deployed skill model** so the new permissions + WhatsLeftIntent take effect:
+   - In the Alexa Developer Console, open the Household Ops skill → **Build** → click **Save Model** then **Build Model**. (The local `skill.json` + `interaction-model.en-US.json` need to be uploaded via ASK CLI or pasted in.)
+   - Under **Build → Permissions**, you'll now see "Reminders" and "Lists Read/Write" checkboxes — ensure both are toggled on. Save.
+2. **Re-link the skill in the Alexa app** so it picks up the new permission scopes:
+   - Alexa app → Skills & Games → Your Skills → Household Ops → Disable → Enable.
+   - When re-enabling, accept the new permission prompts (Reminders + Lists).
+3. **(Optional, only if you want full out-of-session reminders)** Stand up a one-time LWA token bootstrap:
+   - In the Amazon Developer Console → **Login with Amazon** → create / find the security profile linked to your skill. Grab the `client_id` + `client_secret`. Make sure `ALEXA_CLIENT_ID` + `ALEXA_CLIENT_SECRET` are set in Render (you already use them for Proactive Events, so they should already be there).
+   - Run an interactive LWA OAuth flow once to get the initial `access_token` + `refresh_token` (a small CLI script or curl against `/auth/o2/token` with `grant_type=authorization_code`).
+   - POST the response body to `https://<your-render-url>.onrender.com/api/alexa/lwa/save-token` with the bearer token.
+   - After that the refresh loop maintains itself.
+
+Until step 3 is done, the dashboard ShoppingListPanel + reminders cron will gracefully no-op with clean 503s / null returns. **Nothing is broken without it; the new surfaces just don't actually push to Alexa yet.**
+
+**Design calls worth knowing:**
+
+1. **CSV/file uploads were not added to the shopping list flow** — only paste. The MealWeekCalendar already handles CSV-shaped data; adding a separate CSV upload for grocery lists felt redundant when the paste textarea handles GM's output verbatim.
+2. **Reminders use absolute time (`SCHEDULED_ABSOLUTE`), 30 min before the appointment** — feels right for haircut/oil-change cadence. If Diane wants different lead time per category (e.g. 24h before head_spa for prep), it'd go on the routine's appointment subdoc as a `lead_minutes` field — a small Phase 4.5 follow-up.
+3. **Tests deliberately exercise the no-token path** — `NODE_ENV=test` short-circuits LWA, same isolation pattern as Google Calendar + Tasks. The actual Amazon API calls would need network mocking to test, and historically that's been more brittle than valuable. Validate the live path by re-linking the skill and watching the reconcile cron logs.
+4. **`AlexaReminder` is keyed on `calendar_event_id`, not routine_key** — because a single routine may have multiple appointments over time (Diane reschedules head_spa quarterly). Idempotency at the event level prevents duplicate buzzes for the same booking; new bookings get fresh reminders.
+
+---
+
+## 49. Mobile responsive audit (2026-05-10 evening)
+
+After Phase 6, a quick pass to tighten layout on phones:
+
+- **`.app` padding** — adds `@media (max-width: 520px)` block in [styles.css](apps/dashboard/src/styles.css) that shrinks app padding from `2rem 1.25rem 5rem` → `1rem 0.75rem 4rem`, drops `h1` font-size from `1.85rem` → `1.5rem`, and tightens `.panel` + `.widget` padding by ~0.3rem. Visual: more horizontal real estate on a 375px-wide viewport.
+- **Finance outsourceable table** — wrapped in `<div style={{overflowX: 'auto'}}>` with `min-width: 24rem` on the table so it horizontally scrolls instead of forcing the whole page wider. Cells stay readable.
+- **What was already good** — `.tabs` and the header icon row already use `flex-wrap: wrap`, so they reflow on mobile. `.widget-grid` collapses to single-column under 640px. MealWeekCalendar has its own `@media (max-width: 600px)` breakpoint stacking the recipe body. ShoppingListPanel uses `width: 100%` textareas. PersonaLauncher's launcher button + system prompt textarea were already responsive.
+
+## 50. Home widget reorder + Journal full-width (2026-05-10 evening)
+
+Diane's request: Zone Check belongs right after Finance (it's a quick-pulse action that pairs naturally with the discretionary widget), and the Journal widget should take the full width since today's entries can be longer than half a card.
+
+[HomePanel.tsx](apps/dashboard/src/components/HomePanel.tsx) new order:
+
+1. TodayWidget (`.full-width`)
+2. CalendarWidget
+3. WorkoutsWidget
+4. FinanceWidget
+5. **ZoneChipWidget** (moved up from #7)
+6. ActivityWidget (`.full-width`)
+7. **JournalWidget (`.full-width`)** (was half-width)
+
+On desktop (≥640px) the grid is now: 1 full row + 2-up CalendarWidget+WorkoutsWidget + 2-up FinanceWidget+ZoneChipWidget + 2 full-width rows. On mobile: linear single column, same order.
 
 ### Phase 7 — Timestamp visibility (~1-2 hr)
 

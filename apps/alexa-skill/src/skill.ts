@@ -12,6 +12,7 @@ import {
   PullFromPoolHandler,
   SwapTaskHandler,
   TodayBriefHandler,
+  WhatsLeftHandler,
 } from './handlers/today.js';
 import {
   LogMoodHandler,
@@ -34,6 +35,7 @@ const builder = SkillBuilders.custom()
   .addRequestHandlers(
     LaunchRequestHandler,
     TodayBriefHandler,
+    WhatsLeftHandler,
     SwapTaskHandler,
     MarkDoneHandler,
     PullFromPoolHandler,

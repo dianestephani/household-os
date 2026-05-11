@@ -278,7 +278,14 @@ export default function FinancePanel() {
         {report.outsourceable.items.length === 0 ? (
           <div className="muted">No outsourceable routines tagged yet.</div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.5rem' }}>
+          <div
+            style={{
+              overflowX: 'auto',
+              marginTop: '0.5rem',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '24rem' }}>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '0.3rem 0', borderBottom: '1px solid var(--border)' }}>Routine</th>
@@ -312,6 +319,7 @@ export default function FinancePanel() {
               })}
             </tbody>
           </table>
+          </div>
         )}
         <p className="muted" style={{ marginTop: '0.5rem' }}>
           {report.rationale}

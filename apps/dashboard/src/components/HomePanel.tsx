@@ -77,9 +77,9 @@ export default function HomePanel({ onNavigate }: HomePanelProps) {
       <CalendarWidget onNavigate={onNavigate} />
       <WorkoutsWidget onNavigate={onNavigate} />
       <FinanceWidget onNavigate={onNavigate} />
+      <ZoneChipWidget />
       <ActivityWidget onNavigate={onNavigate} />
       <JournalWidget onNavigate={onNavigate} />
-      <ZoneChipWidget />
     </div>
   );
 }
@@ -509,7 +509,7 @@ function JournalWidget({ onNavigate }: HomePanelProps) {
   }
 
   return (
-    <div className="widget">
+    <div className="widget full-width">
       <div className="widget-head">
         <strong>Today's journal</strong>
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline' }}>

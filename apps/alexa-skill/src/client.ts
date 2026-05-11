@@ -123,6 +123,11 @@ export const apiClient = {
       method: 'POST',
       body: JSON.stringify({ item_key }),
     }),
+  whatsLeft: () =>
+    request<{
+      items: { name: string; estimate_minutes: number; routine_key: string }[];
+      total_minutes: number;
+    }>('/today/whats-left'),
 
   // ----- wellbeing -----
   setEnergy: (level: EnergyLevel) =>

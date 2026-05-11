@@ -15,8 +15,20 @@
             "what's on today",
             "what's the plan",
             "today's brief",
-            "what do I need to do today",
-            "what's left today"
+            "what do I need to do today"
+          ]
+        },
+        {
+          "name": "WhatsLeftIntent",
+          "slots": [],
+          "samples": [
+            "what am I still missing",
+            "what am I missing for the day",
+            "what's left to do",
+            "what do I have left",
+            "what do I have left today",
+            "what am I missing today",
+            "what's left for the day"
           ]
         },
         {

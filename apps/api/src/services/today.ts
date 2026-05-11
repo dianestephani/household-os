@@ -29,6 +29,32 @@ export async function getToday() {
   return ensureTodayPlan();
 }
 
+/**
+ * Compact "what's still pending today" snapshot. Returns plan items where
+ * `status !== 'done'`, sorted by `order`, plus the sum of their estimates.
+ * Powers the Alexa WhatsLeftIntent (§47 Phase 6c) and is useful anywhere
+ * that wants a quick "how much have I got left" read without the full plan.
+ */
+export async function whatsLeftToday(): Promise<{
+  items: { name: string; estimate_minutes: number; routine_key: string }[];
+  total_minutes: number;
+}> {
+  const plan = await ensureTodayPlan();
+  const items = (plan?.items ?? [])
+    .filter((i) => i.status !== 'done')
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((i) => ({
+      name: i.name,
+      estimate_minutes: i.estimate_minutes ?? 0,
+      routine_key: i.routine_key,
+    }));
+  const total_minutes = items.reduce(
+    (acc, i) => acc + (i.estimate_minutes ?? 0),
+    0,
+  );
+  return { items, total_minutes };
+}
+
 export async function regenerateToday() {
   const { planId } = await generateTodayPlan(new Date(), { force: true });
   await logActivity('plan_regenerated', "Regenerated today's plan");

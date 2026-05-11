@@ -4,6 +4,7 @@ import HomePanel from './components/HomePanel.js';
 import WorkoutPanel from './components/WorkoutPanel.js';
 import LogPanel from './components/LogPanel.js';
 import MealWeekCalendar from './components/MealWeekCalendar.js';
+import ShoppingListPanel from './components/ShoppingListPanel.js';
 import PersonaLauncher from './components/PersonaLauncher.js';
 import RoutinesPage from './components/RoutinesPage.js';
 import HowToGuide from './components/HowToGuide.js';
@@ -263,6 +264,7 @@ export default function App() {
       {view === 'food' && (
         <>
           <MealWeekCalendar />
+          <ShoppingListPanel />
           <PersonaLauncher persona="grocery" />
         </>
       )}
