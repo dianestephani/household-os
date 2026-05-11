@@ -3,6 +3,7 @@ import { FinancialProfile } from '../db/models/FinancialProfile.js';
 import { FinancialProfileSnapshot } from '../db/models/FinancialProfileSnapshot.js';
 import { RocketMoneyImport } from '../db/models/RocketMoneyImport.js';
 import { logActivity } from './activity.js';
+import { formatParsedAsBreakdown } from './csv-parser.js';
 import type {
   FinancialProfile as FinancialProfileType,
   ImportKind,
@@ -214,4 +215,77 @@ export async function listImports(limit = 50): Promise<RocketMoneyImportType[]> 
     .limit(Math.max(1, Math.min(limit, 200)))
     .lean();
   return docs as unknown as RocketMoneyImportType[];
+}
+
+/**
+ * Applies a stored import to the financial profile's `expense_breakdown`
+ * field, writes a fresh snapshot tagged with the import's source kind, and
+ * links the import doc to that snapshot.
+ *
+ * Bypasses `setFinancialProfile` deliberately — we want the snapshot's
+ * `source` to be `paste_import` / `csv_import`, not `dashboard_edit`, so the
+ * history view can distinguish "Diane typed in the profile form" from
+ * "Diane applied a RocketMoney import."
+ */
+export async function applyImportToProfile(
+  importId: string,
+): Promise<{
+  profile: FinancialProfileType;
+  snapshot_id: string;
+  import_id: string;
+}> {
+  if (!Types.ObjectId.isValid(importId)) {
+    throw new Error(`invalid import id: ${importId}`);
+  }
+  const imp = await RocketMoneyImport.findById(importId).lean();
+  if (!imp) {
+    throw new Error(`import not found: ${importId}`);
+  }
+
+  const newBreakdown =
+    imp.kind === 'csv' && imp.parsed
+      ? formatParsedAsBreakdown(imp.parsed as ParsedImport)
+      : imp.raw;
+
+  const updated = await FinancialProfile.findOneAndUpdate(
+    { key: 'self' },
+    {
+      $set: { expense_breakdown: newBreakdown, updated_at: new Date() },
+      $setOnInsert: { key: 'self' },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  ).lean();
+
+  const snap = await saveSnapshot({
+    source: imp.kind === 'csv' ? 'csv_import' : 'paste_import',
+  });
+
+  await RocketMoneyImport.findByIdAndUpdate(importId, {
+    $set: { applied_to_snapshot_id: new Types.ObjectId(snap._id) },
+  });
+
+  await logActivity(
+    'routine_edited',
+    `Applied RocketMoney ${imp.kind} import to profile`,
+    {
+      metadata: {
+        fields: ['expense_breakdown'],
+        import_id: importId,
+        import_kind: imp.kind,
+        snapshot_id: snap._id,
+        diff: {
+          expense_breakdown: {
+            before: null,
+            after: `${newBreakdown.slice(0, 80)}${newBreakdown.length > 80 ? '…' : ''}`,
+          },
+        },
+      },
+    },
+  );
+
+  return {
+    profile: updated as unknown as FinancialProfileType,
+    snapshot_id: snap._id,
+    import_id: importId,
+  };
 }

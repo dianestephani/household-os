@@ -827,7 +827,7 @@ Section numbers in Part B are append-order, so they're not always sequential. Us
 
 The v1 plan is shipped and the system is running. The API is on Render (Starter $7/mo); MongoDB lives on Atlas free tier; the dashboard is also on Render as a free static site; the Alexa skill is mounted on the API at `POST /alexa` via `ask-sdk-express-adapter`. There's no separate Lambda. Google Calendar OAuth is wired and working (with the `tasks` scope added in §40). Google sign-in is the login wall on the deployed dashboard (§38). The Food tab is the Grocery Manager launcher (§45) — replacing the old Nutrition stub.
 
-**Current test status: 307 tests across 32 files (297 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
+**Current test status: 339 tests across 33 files (329 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
 
 The for-end-user reference is the **in-app Guide tab** (Dashboard → ❔ Guide); this HANDOFF is just for engineers/Claude.
 
@@ -1065,7 +1065,7 @@ If you (Claude) do work on this project: respect these — they're the substrate
 1. **Read the Part B Index** above for navigation. §1–§17 is the original v1 design; §18 onward is current truth. When they conflict, current truth wins.
 2. **Read the memory** at `~/.claude/projects/-Users-dianestephani-Documents-Projects-Personal-Projects-household-os/memory/MEMORY.md` — the index there lists 12+ memory files including ADHD/energy patterns, dietary constraints, beauty maintenance, finance tools, the chat-interface and session-persistence decisions, and the two-emails-distinction (`reference_emails.md`: personal Gmail for OAuth, work email for OMG context — NOT interchangeable).
 3. `git status` + `git log --oneline -20` to see what's been touched recently.
-4. **`npm test` should pass 307 tests across 32 files** (297 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
+4. **`npm test` should pass 339 tests across 33 files** (329 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
 5. Skim the subsystem sections relevant to whatever Diane asks about. §36 is the canonical route cheat sheet — bookmark that.
 6. Ask Diane what she wants to work on. **Default to small, contained changes** — she has the hyperfixate-burnout pattern noted in §1 and `hyperfixate_burnout` memory. Don't propose multi-week refactors unprompted. **Don't push chat-style interfaces** — she declined Claude.ai connectors, Claude Desktop, AND re-adding dashboard chat on 2026-05-10 (see `feedback_chat_interface_decision` memory). Voice (Alexa) + dashboard buttons + per-persona Claude.ai launchers is the chosen interaction model.
 7. If she shares qualitative context in conversation, log it via the journal — `POST /api/context` directly with `related_persona` and any extractable structured fields. Don't lose context to a session boundary.
@@ -1648,6 +1648,10 @@ All `/api/*` routes gated by `requireToken` middleware ([middleware/auth.ts](app
 | `/api/finance/outsourceable` | GET | Outsourceable routines with monthly cost math |
 | `/api/finance/affordability` | GET | Greedy-fit affordability report |
 | `/api/finance/estimate-tax` | POST | Pure compute — federal/FICA/state estimator |
+| `/api/finance/imports` | GET / POST | List or create RocketMoney imports (§47 Phase 5; POST 1MB byte cap) |
+| `/api/finance/imports/:id/apply` | POST | Apply an import → write profile + snapshot + link |
+| `/api/finance/snapshots` | GET | Profile snapshot history newest-first |
+| `/api/finance/snapshots/:id/restore` | POST | Restore from snapshot (writes a chained `restore` snapshot) |
 | `/api/meal-weeks` | GET / POST | List newest-first / upsert by `start_date` (§48) |
 | `/api/meal-weeks/by-date/:date` | GET | Find the meal week containing any day |
 | `/api/meal-weeks/:start_date` | GET / DELETE | Exact week / remove by Monday-of-week |
@@ -1660,7 +1664,7 @@ All `/api/*` routes gated by `requireToken` middleware ([middleware/auth.ts](app
 
 ## 46. Latest test count + coverage delta (running tally)
 
-As of 2026-05-10 end-of-day, post-Phase 4 + persona Project URL hardcoding: **307 tests across 32 files** (297 API + 10 alexa-skill). Was 251 pre-Phase 1, dropped to 247 after Phase 1 cleanup, 263 after Phase 2 data-model tests, 285 after §48 meal-weeks, 303 after Phase 4 appointments, 307 after persona URL hardcoding. Phase 3 was UI-only and didn't move the count.
+As of 2026-05-10 end-of-day, post-Phase 5 (RocketMoney workflow): **339 tests across 33 files** (329 API + 10 alexa-skill). Was 251 pre-Phase 1, dropped to 247 after Phase 1 cleanup, 263 after Phase 2 data-model tests, 285 after §48 meal-weeks, 303 after Phase 4 appointments, 307 after persona URL hardcoding, 339 after Phase 5. Phase 3 was UI-only and didn't move the count.
 
 Recent additions since the initial Part B write-up:
 
@@ -1681,6 +1685,7 @@ Recent additions since the initial Part B write-up:
 | §48 Meal week calendar | meal-weeks.test.ts | +22 | 285 |
 | §47 Phase 4 appointments | appointments.test.ts | +18 | 303 |
 | Hardcoded persona Project URLs | tools.test.ts | +4 | 307 |
+| §47 Phase 5 RocketMoney workflow | csv-parser.test.ts + finance-history.test.ts | +32 | 339 |
 
 **Deliberately not tested** (with rationale, so a fresh Claude doesn't try to backfill these):
 
@@ -1940,7 +1945,7 @@ Test delta: 0 (no dashboard test infra exists in this repo; documented in §46).
 
 Test delta: **+18 tests** (15 in [apps/api/src/services/appointments.test.ts](apps/api/src/services/appointments.test.ts)). 6 exhaustive `diffAppointment` cases (transient failure / event gone two ways / past_completed two ways / rescheduled three ways / past beats reschedule). 9 I/O wrapper tests (createAppointment happy path + default duration + 4 reject paths; reconcile skip-paths; clearAppointmentLink). Reconcile happy paths through the Google API itself are NOT tested — that needs network mocking, same rationale as §40 Google Tasks. Service-layer + pure-decision coverage is the high-value testable seam.
 
-### Phase 5 — RocketMoney workflow: paste + CSV + history (~2-3 hr)
+### Phase 5 — RocketMoney workflow: paste + CSV + history (~2-3 hr) — **SHIPPED 2026-05-10**
 
 **Finance tab gains 3 sub-sections** (replacing the current single `expense_breakdown` paste box):
 
@@ -1956,6 +1961,35 @@ Test delta: **+18 tests** (15 in [apps/api/src/services/appointments.test.ts](ap
 **File storage**: store CSV content as a UTF-8 string field on `RocketMoneyImport.raw` directly in Mongo. Keep it simple; CSVs are small (KB, not MB). Add a guard if raw > 1MB → reject with a clear error.
 
 Test delta: +~12 tests (finance-history, import, csv-parser).
+
+**What actually shipped in Phase 5:**
+
+- ✅ **CSV parser** ([apps/api/src/services/csv-parser.ts](apps/api/src/services/csv-parser.ts)) — pure module, no DB / no side effects. `parseRocketMoneyCsv(raw) → ParsedImport | null`. Detects required columns case-insensitively (`Date`, `Category`, `Amount`), tolerates extra columns, honors quoted CSV fields with embedded commas + escaped quotes, handles negative amounts in `-12.34` or `($12.34)` form, strips `$` and `,` from amounts. **Only counts outflows** (negative rows) so positive income/refunds don't skew the spending breakdown. Returns `null` when required columns are missing OR when no outflow rows exist — both cases preserve the raw payload upstream so nothing is lost. Plus exported helpers: `parseCsvLine`, `parseImportDate` (YYYY-MM-DD + M/D/YYYY, with overflow rejection via component round-trip), `parseAmount`, `formatParsedAsBreakdown` (renders ParsedImport as readable text for `expense_breakdown`).
+- ✅ **`applyImportToProfile(importId)`** added to [apps/api/src/services/finance-history.ts](apps/api/src/services/finance-history.ts). Bypasses `setFinancialProfile` deliberately so the resulting snapshot is tagged `paste_import` or `csv_import` (not `dashboard_edit`). Writes the import's text (raw for paste; `formatParsedAsBreakdown(parsed)` for CSV with `parsed`; fallback to raw for unparseable CSV) into `FinancialProfile.expense_breakdown`, calls `saveSnapshot`, sets `applied_to_snapshot_id` on the import doc, and logs `routine_edited` with `{import_id, import_kind, snapshot_id, fields: ['expense_breakdown']}` metadata. Throws on invalid ObjectId or missing import.
+- ✅ **`SnapshotSource` extended** to include `'paste_import'` alongside the existing `'dashboard_edit' | 'csv_import' | 'restore'` (Phase 2 commentary explicitly anticipated this).
+- ✅ **5 new HTTP routes** in [apps/api/src/routes/finance.ts](apps/api/src/routes/finance.ts):
+  - `GET /api/finance/imports?limit=N`
+  - `POST /api/finance/imports` — body `{kind, raw, filename?}`. Server attempts CSV parse, persists either way (raw is authoritative). **1MB `raw` byte-length guard** rejects with `413` per spec.
+  - `POST /api/finance/imports/:id/apply` — runs `applyImportToProfile`; returns `{profile, snapshot_id, import_id}`. 404 vs 400 routing based on error message.
+  - `GET /api/finance/snapshots?limit=N`
+  - `POST /api/finance/snapshots/:id/restore`
+- ✅ **Dashboard rebuild** ([apps/dashboard/src/components/FinancePanel.tsx](apps/dashboard/src/components/FinancePanel.tsx)):
+  - Removed the inline `expense_breakdown` textarea (the old "Save breakdown" button is gone — breakdowns now flow through the imports system).
+  - **`<FinanceImports>` panel** — pill toggle between **Paste** (textarea) and **CSV upload** (file input, `.csv` accept, 1MB client-side guard mirroring the server). Save button creates an import; the new import appears in the history list immediately (optimistic prepend). History rows show kind + filename + parsed summary (`N categories · $total`) or `parse failed (raw saved)` for CSVs that didn't match the expected columns. Each row has **View** (toggles a `<pre>` of `raw`) and **Apply to profile** buttons. An `applied` badge marks the row once it's been applied. Below the history, a collapsed `<details>` shows the current `expense_breakdown` for reference.
+  - **`<FinanceSnapshots>` panel** — chronological list of `FinancialProfileSnapshot` entries newest-first. Each row shows source label (`profile edit` / `paste` / `CSV` / `restore`) + a quick snapshot summary (gross + fixed). **View** toggles a JSON-formatted view of the full `profile` snapshot. **Restore** confirms via `window.confirm` (because restore overwrites the live profile) then calls the route; on success refreshes the profile form + snapshots list.
+  - Reload coordination: `FinancePanel` owns `importsReloadKey` + `snapshotsReloadKey` counters. Profile saves bump the snapshots key. Applying an import bumps both. Restoring bumps both + refreshes form fields. The sub-components consume the key as a `useEffect` dependency.
+- ✅ **`api.finance.imports.list/create/apply` + `api.finance.snapshots.list/restore`** in [apps/dashboard/src/api.ts](apps/dashboard/src/api.ts).
+
+**Test delta:** **+32 tests** (24 in `csv-parser.test.ts` + 7 `applyImportToProfile` in `finance-history.test.ts` + 1 from a parseImportDate edge case caught during dev). Comfortably above the spec's +~12 target — CSV parsing has more edge cases than route logic, and getting the parser right matters because if it silently misreads a CSV, applying it to the profile feeds bad data into the persona. New API total: **329** (vs 297 entering Phase 5).
+
+**Notable design calls:**
+
+1. **CSV parsing ignores positive rows** (income/refunds) — the spec said "Parse by category, sum amounts." Including income would mix categories Diane probably doesn't want to discuss with the Finance persona (e.g. "Income: $5,200" landing in expense_breakdown) and the refund case is even worse (it makes a category look cheaper than reality). Outflows only. If she wants income in the breakdown she can use the paste mode.
+2. **`parseImportDate` rejects out-of-range components** — JS's `Date` silently rolls overflow (`2026/13/40` → `2027-02-09`). Tests caught this. Fixed by round-tripping components after construction.
+3. **`applyImportToProfile` does NOT use `setFinancialProfile`** — that path tags snapshots `dashboard_edit`, which would make the history view lie about provenance. Applying writes the profile fields directly and calls `saveSnapshot('paste_import' | 'csv_import')` explicitly.
+4. **CSV uploads are read client-side as text and POSTed as JSON `{raw}`** rather than as `multipart/form-data`. Avoids adding a multer-style dep to the API; CSVs are KB-scale; 1MB guard is enforced on both ends. If we ever want truly big files (we shouldn't), revisit.
+5. **`window.confirm()` on Restore** — destructive operation that overwrites live profile values. A modal would be nicer; `confirm` is the minimum viable safety rail and adds zero code. Snapshot history itself is the real safety net (every restore writes a new snapshot, so it's reversible).
+6. **No dashboard test infra** — same situation as Phases 3 + 4. The high-value seam is the pure CSV parser, which gets exhaustively covered. Component flows aren't unit-tested; manual smoke needed.
 
 ### Phase 6 — Alexa: Reminders + Shopping List + WhatsLeftIntent (~4-6 hr)
 

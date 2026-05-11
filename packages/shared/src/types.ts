@@ -155,7 +155,11 @@ export interface FinancialProfile {
  * singleton profile writes one of these so Diane can browse historical state
  * and restore a prior snapshot.
  */
-export type SnapshotSource = 'dashboard_edit' | 'csv_import' | 'restore';
+export type SnapshotSource =
+  | 'dashboard_edit'
+  | 'paste_import'
+  | 'csv_import'
+  | 'restore';
 
 export interface FinancialProfileSnapshot {
   _id?: string;

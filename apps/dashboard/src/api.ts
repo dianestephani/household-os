@@ -21,8 +21,11 @@ import type {
   ContextRelatedPersona,
   DayView,
   FilingStatus,
+  FinancialProfileSnapshot,
+  ImportKind,
   MealWeek,
   MoodLog,
+  RocketMoneyImport,
   ScheduleRangeResponse,
   FinancialProfile,
   OutsourceableSummary,
@@ -302,5 +305,31 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(input),
       }),
+    imports: {
+      list: (limit = 50) =>
+        request<RocketMoneyImport[]>(`/finance/imports?limit=${limit}`),
+      create: (input: { kind: ImportKind; raw: string; filename?: string }) =>
+        request<RocketMoneyImport>('/finance/imports', {
+          method: 'POST',
+          body: JSON.stringify(input),
+        }),
+      apply: (importId: string) =>
+        request<{
+          profile: FinancialProfile;
+          snapshot_id: string;
+          import_id: string;
+        }>(`/finance/imports/${importId}/apply`, { method: 'POST' }),
+    },
+    snapshots: {
+      list: (limit = 50) =>
+        request<FinancialProfileSnapshot[]>(
+          `/finance/snapshots?limit=${limit}`,
+        ),
+      restore: (snapshotId: string) =>
+        request<FinancialProfile>(
+          `/finance/snapshots/${snapshotId}/restore`,
+          { method: 'POST' },
+        ),
+    },
   },
 };

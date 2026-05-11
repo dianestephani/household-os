@@ -5,6 +5,7 @@ import { FinancialProfileSnapshot } from '../db/models/FinancialProfileSnapshot.
 import { RocketMoneyImport } from '../db/models/RocketMoneyImport.js';
 import {
   addImport,
+  applyImportToProfile,
   listImports,
   listSnapshots,
   restoreSnapshot,
@@ -211,5 +212,95 @@ describe('finance-history.listImports', () => {
     expect(list.length).toBe(2);
     expect(String(list[0]?._id)).toBe(second._id);
     expect(String(list[1]?._id)).toBe(first._id);
+  });
+});
+
+describe('finance-history.applyImportToProfile', () => {
+  it('applies a paste import — copies raw text into expense_breakdown', async () => {
+    const imp = await addImport({
+      kind: 'paste',
+      raw: 'Groceries $420\nGas $80\n',
+    });
+    const result = await applyImportToProfile(imp._id);
+    expect(result.profile.expense_breakdown).toContain('Groceries $420');
+    expect(result.snapshot_id).toBeTruthy();
+    expect(result.import_id).toBe(imp._id);
+
+    // Snapshot should be tagged 'paste_import'
+    const snap = await FinancialProfileSnapshot.findById(
+      result.snapshot_id,
+    ).lean();
+    expect(snap?.source).toBe('paste_import');
+
+    // Import doc should now link to the snapshot
+    const persisted = await RocketMoneyImport.findById(imp._id).lean();
+    expect(String(persisted?.applied_to_snapshot_id)).toBe(result.snapshot_id);
+  });
+
+  it('applies a CSV import — formats parsed categories as expense_breakdown', async () => {
+    const imp = await addImport({
+      kind: 'csv',
+      raw: 'Date,Description,Category,Amount\n2026-05-01,X,Groceries,-100',
+      filename: 'april.csv',
+      parsed: {
+        categories: [
+          { name: 'Groceries', amount: 420, count: 12 },
+          { name: 'Gas', amount: 80, count: 3 },
+        ],
+        total: 500,
+        period_start: new Date('2026-04-01'),
+        period_end: new Date('2026-04-30'),
+      },
+    });
+    const result = await applyImportToProfile(imp._id);
+    expect(result.profile.expense_breakdown).toContain('Total: $500.00');
+    expect(result.profile.expense_breakdown).toContain('Groceries: $420.00');
+    expect(result.profile.expense_breakdown).toContain('Gas: $80.00');
+
+    const snap = await FinancialProfileSnapshot.findById(
+      result.snapshot_id,
+    ).lean();
+    expect(snap?.source).toBe('csv_import');
+  });
+
+  it('falls back to raw when CSV import has no parsed payload', async () => {
+    const imp = await addImport({
+      kind: 'csv',
+      raw: 'just some raw text\nanother line',
+      // no parsed
+    });
+    const result = await applyImportToProfile(imp._id);
+    expect(result.profile.expense_breakdown).toBe(
+      'just some raw text\nanother line',
+    );
+  });
+
+  it('logs a routine_edited activity entry linked to the import + snapshot', async () => {
+    const imp = await addImport({ kind: 'paste', raw: 'sample' });
+    const result = await applyImportToProfile(imp._id);
+
+    const entry = await ActivityLog.findOne({
+      kind: 'routine_edited',
+      'metadata.import_id': imp._id,
+    }).lean();
+    expect(entry).toBeTruthy();
+    const meta = entry?.metadata as {
+      import_kind?: string;
+      snapshot_id?: string;
+      fields?: string[];
+    };
+    expect(meta?.import_kind).toBe('paste');
+    expect(meta?.snapshot_id).toBe(result.snapshot_id);
+    expect(meta?.fields).toEqual(['expense_breakdown']);
+  });
+
+  it('throws on invalid import id', async () => {
+    await expect(applyImportToProfile('not-an-objectid')).rejects.toThrow();
+  });
+
+  it('throws when import is not found', async () => {
+    await expect(
+      applyImportToProfile('507f1f77bcf86cd799439011'),
+    ).rejects.toThrow(/not found/);
   });
 });
