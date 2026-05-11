@@ -1165,7 +1165,7 @@ Claude.ai can't call our custom tools (`swap_task`, `affordability_report`, etc.
 Two panels per persona now:
 
 1. Name + one-line blurb + primary "Open in Claude.ai →" button → `config.projectUrl ?? 'https://claude.ai/new'`. On iOS, tapping the link triggers Universal Links → Claude app prompt when the app is installed (no per-platform code needed — plain `<a href>` with `target="_blank"`).
-2. The full system prompt rendered in a scrollable `<pre>` with a "Copy" button (`navigator.clipboard.writeText`, fallback to `Selection` API). Heads-up text reminds Diane to paste an updated prompt back into the Claude Project settings when she changes it here.
+2. **System prompt panel — read-only by default, compact.** Renders the prompt in a small (`rows={6}`) textarea that's `readOnly` until you click **Edit**. Header buttons: `Edit` / `Done` toggle (flips `readOnly`), `Reset` (only visible in edit mode, restores `draft` to `config.systemPrompt`), and `Copy` (always available, copies the current draft via `navigator.clipboard.writeText` with a `textarea.select()` fallback). Edits are local-only — they live in component state, never persist to localStorage or back to the repo. Use case: tweak the protein target or constraints for a one-off copy-paste into the Claude Project settings without committing a config change. Hot-reload of the canonical prompt or a persona switch clears any in-flight draft via a `useEffect` keyed to `config.systemPrompt`.
 
 **Current project URLs** (also asserted in [apps/api/src/persona/tools.test.ts](apps/api/src/persona/tools.test.ts) so renames fail loud at build time):
 

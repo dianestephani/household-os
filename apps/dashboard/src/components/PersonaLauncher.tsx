@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { household } from '@household-os/shared/personas/household';
 import { finance } from '@household-os/shared/personas/finance';
 import { grocery } from '@household-os/shared/personas/grocery';
@@ -32,24 +32,40 @@ export default function PersonaLauncher({ persona }: { persona: PersonaName }) {
   const blurb = BLURB[persona];
   const target = config.projectUrl ?? HOSTED_FALLBACK;
 
+  // The prompt is shown read-only by default so it can't be accidentally
+  // edited while Diane is just scrolling / copying. `Edit` flips the textarea
+  // editable; edits are local to this session (not persisted, not synced back
+  // to the persona config in the repo). She can copy the edited text into the
+  // Claude Project settings if she wants a one-off variant.
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(config.systemPrompt);
   const [copied, setCopied] = useState(false);
-  const promptRef = useRef<HTMLPreElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // When the persona changes (or the canonical prompt updates on hot reload),
+  // discard any in-flight draft so we don't display stale text under a new
+  // persona's header.
+  useEffect(() => {
+    setDraft(config.systemPrompt);
+    setEditing(false);
+  }, [config.systemPrompt]);
 
   async function copyPrompt() {
     try {
-      await navigator.clipboard.writeText(config.systemPrompt);
+      await navigator.clipboard.writeText(draft);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // Fallback: select the <pre> for manual copy
-      const node = promptRef.current;
+      // Fallback: select the textarea for manual copy
+      const node = textareaRef.current;
       if (!node) return;
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(range);
+      node.focus();
+      node.select();
     }
+  }
+
+  function resetDraft() {
+    setDraft(config.systemPrompt);
   }
 
   return (
@@ -103,33 +119,60 @@ export default function PersonaLauncher({ persona }: { persona: PersonaName }) {
           }}
         >
           <strong>System prompt</strong>
-          <button onClick={copyPrompt} data-variant="ghost" style={{ fontSize: '0.82rem' }}>
-            {copied ? 'Copied' : 'Copy'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+            {editing && (
+              <button
+                onClick={resetDraft}
+                data-variant="ghost"
+                style={{ fontSize: '0.82rem' }}
+                title="Restore the prompt to the canonical version from the repo"
+              >
+                Reset
+              </button>
+            )}
+            <button
+              onClick={() => setEditing((v) => !v)}
+              data-variant="ghost"
+              style={{ fontSize: '0.82rem' }}
+            >
+              {editing ? 'Done' : 'Edit'}
+            </button>
+            <button
+              onClick={copyPrompt}
+              data-variant="ghost"
+              style={{ fontSize: '0.82rem' }}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
         </div>
-        <p className="muted" style={{ marginTop: '0.25rem', fontSize: '0.84rem' }}>
-          This is the system prompt the Project should be configured with. If
-          you ever update the prompt here, re-paste it into the Claude Project
-          settings so the live chats stay in sync.
+        <p className="muted" style={{ marginTop: '0.25rem', fontSize: '0.82rem' }}>
+          {editing
+            ? "Edits are local to this page — they don't change the canonical prompt in the repo. Copy your edited version and paste it into the Claude Project settings."
+            : 'Read-only. Hit Edit to tweak before copying.'}
         </p>
-        <pre
-          ref={promptRef}
+        <textarea
+          ref={textareaRef}
+          readOnly={!editing}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={6}
+          spellCheck={false}
           style={{
             marginTop: '0.5rem',
-            padding: '0.75rem',
-            background: 'var(--bg)',
+            width: '100%',
+            padding: '0.65rem',
+            background: editing ? 'var(--panel)' : 'var(--bg)',
             border: '1px solid var(--border)',
             borderRadius: '6px',
             fontFamily: 'ui-monospace, Menlo, monospace',
-            fontSize: '0.82rem',
+            fontSize: '0.8rem',
             lineHeight: 1.5,
-            whiteSpace: 'pre-wrap',
-            maxHeight: '24rem',
-            overflowY: 'auto',
+            resize: 'vertical',
+            color: editing ? 'var(--text)' : 'var(--muted)',
+            cursor: editing ? 'text' : 'default',
           }}
-        >
-          {config.systemPrompt}
-        </pre>
+        />
       </div>
     </>
   );
