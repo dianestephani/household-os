@@ -8,7 +8,6 @@ import todayRouter from './routes/today.js';
 import routinesRouter from './routes/routines.js';
 import energyRouter from './routes/energy.js';
 import triggersRouter from './routes/triggers.js';
-import chatRouter from './routes/chat.js';
 import moodRouter from './routes/mood.js';
 import workoutsRouter from './routes/workouts.js';
 import patternsRouter from './routes/patterns.js';
@@ -21,11 +20,15 @@ import calendarRouter from './routes/calendar.js';
 import scheduleRouter from './routes/schedule.js';
 import dayRouter from './routes/day.js';
 import tasksRouter from './routes/tasks.js';
+import mealWeeksRouter from './routes/meal-weeks.js';
+import appointmentsRouter from './routes/appointments.js';
+import alexaRouter from './routes/alexa.js';
 import authRouter from './routes/auth.js';
 import { requireToken } from './middleware/auth.js';
 import { mcpAuth, mcpHandler } from './mcp/route.js';
 import { generateTodayPlan } from './cron/morning-gen.js';
 import { ingestCalendarTriggers } from './cron/calendar-ingest.js';
+import { reconcileAppointmentsCron } from './cron/appointment-reconcile.js';
 import {
   generateEveningRetro,
   generateMorningIntent,
@@ -98,8 +101,10 @@ app.get('/', (_req, res) => {
         '/api/schedule',
         '/api/day/:YYYY-MM-DD',
         '/api/tasks',
+        '/api/meal-weeks',
+        '/api/appointments',
+        '/api/alexa',
         '/api/auth/google',
-        '/api/chat/:persona',
       ],
     },
   });
@@ -114,7 +119,6 @@ app.use('/api/today', todayRouter);
 app.use('/api/routines', routinesRouter);
 app.use('/api/energy', energyRouter);
 app.use('/api/triggers', triggersRouter);
-app.use('/api/chat', chatRouter);
 app.use('/api/mood', moodRouter);
 app.use('/api/workouts', workoutsRouter);
 app.use('/api/patterns', patternsRouter);
@@ -127,6 +131,9 @@ app.use('/api/calendar', calendarRouter);
 app.use('/api/schedule', scheduleRouter);
 app.use('/api/day', dayRouter);
 app.use('/api/tasks', tasksRouter);
+app.use('/api/meal-weeks', mealWeeksRouter);
+app.use('/api/appointments', appointmentsRouter);
+app.use('/api/alexa', alexaRouter);
 
 cron.schedule('30 5 * * *', () => {
   console.log('[cron] ingesting calendar triggers');
@@ -152,6 +159,13 @@ cron.schedule('0 7 * * *', () => {
 cron.schedule('0 12 * * *', () => {
   console.log('[cron] zone assessment check-in');
   void generateZoneAssessment(new Date());
+});
+
+// Hourly — reconcile linked Google Calendar appointments against routine
+// state (catches reschedules/deletions/past-completions). Skipped when
+// Calendar isn't configured. See §47 Phase 4.
+cron.schedule('0 * * * *', () => {
+  void reconcileAppointmentsCron();
 });
 
 // 9:00 PM — evening retro (Mon–Sat); Sunday gets weekly review instead

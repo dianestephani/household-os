@@ -31,7 +31,9 @@
     },
     "manifestVersion": "1.0",
     "permissions": [
-      { "name": "alexa::devices:all:notifications:write" }
+      { "name": "alexa::devices:all:notifications:write" },
+      { "name": "alexa::devices:all:reminders:write" },
+      { "name": "alexa::household:lists:write" }
     ]
   }
 }

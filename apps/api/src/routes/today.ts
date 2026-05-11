@@ -5,6 +5,7 @@ import {
   swapTask,
   markDone,
   pullFromPool,
+  whatsLeftToday,
 } from '../services/today.js';
 
 const router: Router = Router();
@@ -12,6 +13,10 @@ const router: Router = Router();
 router.get('/', async (_req, res) => {
   const plan = await getToday();
   res.json(plan);
+});
+
+router.get('/whats-left', async (_req, res) => {
+  res.json(await whatsLeftToday());
 });
 
 router.post('/regenerate', async (_req, res) => {

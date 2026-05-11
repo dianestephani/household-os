@@ -21,7 +21,11 @@ import type {
   ContextRelatedPersona,
   DayView,
   FilingStatus,
+  FinancialProfileSnapshot,
+  ImportKind,
+  MealWeek,
   MoodLog,
+  RocketMoneyImport,
   ScheduleRangeResponse,
   FinancialProfile,
   OutsourceableSummary,
@@ -217,6 +221,90 @@ export const api = {
         body: JSON.stringify({ ...entry, source: entry.source ?? 'dashboard' }),
       }),
   },
+  appointments: {
+    create: (
+      routineKey: string,
+      startsAt: string,
+      durationMinutes?: number,
+    ) =>
+      request<{
+        routine: Routine;
+        calendar_event_id: string | null;
+        starts_at: string;
+        duration_minutes: number;
+        calendar_skipped: boolean;
+      }>(`/appointments/${routineKey}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          starts_at: startsAt,
+          duration_minutes: durationMinutes,
+        }),
+      }),
+    reconcile: (routineKey: string) =>
+      request<{
+        routine_key: string;
+        action: 'no_change' | 'rescheduled' | 'deleted' | 'past_completed';
+        applied: boolean;
+      }>(`/appointments/${routineKey}/reconcile`, { method: 'POST' }),
+    unlink: (routineKey: string) =>
+      request<Routine>(`/appointments/${routineKey}`, { method: 'DELETE' }),
+  },
+  mealWeeks: {
+    list: (limit = 26) =>
+      request<MealWeek[]>(`/meal-weeks?limit=${limit}`),
+    get: (startDate: string) =>
+      request<MealWeek>(`/meal-weeks/${startDate}`),
+    byDate: (date: string) =>
+      request<{ week: MealWeek | null; requested_date: string }>(
+        `/meal-weeks/by-date/${date}`,
+      ),
+    adjacent: (startDate: string) =>
+      request<{ prev: MealWeek | null; next: MealWeek | null }>(
+        `/meal-weeks/${startDate}/adjacent`,
+      ),
+    upsert: (input: { start_date: string; title?: string; meals: unknown[] }) =>
+      request<MealWeek>('/meal-weeks', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    remove: (startDate: string) =>
+      request<{ deleted: boolean }>(`/meal-weeks/${startDate}`, {
+        method: 'DELETE',
+      }),
+  },
+  alexa: {
+    authStatus: () =>
+      request<{ configured: boolean }>('/alexa/auth-status'),
+    addToShoppingList: (items: string[]) =>
+      request<{
+        results: {
+          text: string;
+          status: 'added' | 'error';
+          id?: string;
+          error?: string;
+        }[];
+        added: number;
+        failed: number;
+        status: 'ok' | 'no_token';
+      }>('/alexa/shopping-list/add', {
+        method: 'POST',
+        body: JSON.stringify({ items }),
+      }),
+  },
+  zones: {
+    assess: (
+      zone: string,
+      level: 'fine' | 'meh' | 'rough',
+      notes?: string,
+    ) =>
+      request<{
+        assessment: { zone: string; level: string };
+        tasks: { _id: string; name: string }[];
+      }>('/zones/assess', {
+        method: 'POST',
+        body: JSON.stringify({ zone, level, notes }),
+      }),
+  },
   finance: {
     profile: () => request<FinancialProfile>('/finance/profile'),
     setProfile: (patch: Partial<FinancialProfile>) =>
@@ -236,13 +324,31 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(input),
       }),
+    imports: {
+      list: (limit = 50) =>
+        request<RocketMoneyImport[]>(`/finance/imports?limit=${limit}`),
+      create: (input: { kind: ImportKind; raw: string; filename?: string }) =>
+        request<RocketMoneyImport>('/finance/imports', {
+          method: 'POST',
+          body: JSON.stringify(input),
+        }),
+      apply: (importId: string) =>
+        request<{
+          profile: FinancialProfile;
+          snapshot_id: string;
+          import_id: string;
+        }>(`/finance/imports/${importId}/apply`, { method: 'POST' }),
+    },
+    snapshots: {
+      list: (limit = 50) =>
+        request<FinancialProfileSnapshot[]>(
+          `/finance/snapshots?limit=${limit}`,
+        ),
+      restore: (snapshotId: string) =>
+        request<FinancialProfile>(
+          `/finance/snapshots/${snapshotId}/restore`,
+          { method: 'POST' },
+        ),
+    },
   },
-  chat: (
-    persona: string,
-    messages: { role: 'user' | 'assistant'; content: string }[],
-  ) =>
-    request<{ reply: string; messages: { role: string; content: string }[] }>(
-      `/chat/${persona}`,
-      { method: 'POST', body: JSON.stringify({ messages }) },
-    ),
 };

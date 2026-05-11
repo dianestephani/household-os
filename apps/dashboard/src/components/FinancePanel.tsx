@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type AffordabilityReport } from '../api.js';
 import type {
   ActivityLogEntry,
   ContextEntry,
   FilingStatus,
+  FinancialProfile,
+  FinancialProfileSnapshot,
+  ImportKind,
+  RocketMoneyImport,
+  SnapshotSource,
   TaxEstimate,
 } from '@household-os/shared/types';
 import PersonaLauncher from './PersonaLauncher.js';
@@ -24,8 +29,9 @@ export default function FinancePanel() {
   const [filing, setFiling] = useState<FilingStatus>('single');
   const [extra, setExtra] = useState<number | ''>('');
   const [notes, setNotes] = useState('');
-  const [breakdown, setBreakdown] = useState('');
   const [busy, setBusy] = useState(false);
+  const [importsReloadKey, setImportsReloadKey] = useState(0);
+  const [snapshotsReloadKey, setSnapshotsReloadKey] = useState(0);
   const [estimate, setEstimate] = useState<TaxEstimate | null>(null);
   const [estimating, setEstimating] = useState(false);
 
@@ -39,7 +45,6 @@ export default function FinancePanel() {
     setFiling((r.profile.filing_status as FilingStatus) ?? 'single');
     setExtra(r.profile.monthly_extra_withholding || '');
     setNotes(r.profile.notes ?? '');
-    setBreakdown(r.profile.expense_breakdown ?? '');
   }
 
   useEffect(() => {
@@ -57,13 +62,34 @@ export default function FinancePanel() {
         filing_status: filing,
         monthly_extra_withholding: typeof extra === 'number' ? extra : 0,
         notes,
-        expense_breakdown: breakdown,
       });
       await refresh();
+      // Profile saves write a snapshot — refresh that list too.
+      setSnapshotsReloadKey((k) => k + 1);
     } finally {
       setBusy(false);
     }
   }
+
+  const handleImportApplied = useCallback(
+    async (updatedProfile: FinancialProfile) => {
+      // Don't trash the in-progress form state — just refresh the report
+      // (discretionary, etc.) and bump both history lists. The
+      // `expense_breakdown` lives on the profile but isn't a form field
+      // anymore, so we don't sync it back into local state.
+      void updatedProfile;
+      const r = await api.finance.affordability();
+      setReport(r);
+      setImportsReloadKey((k) => k + 1);
+      setSnapshotsReloadKey((k) => k + 1);
+    },
+    [],
+  );
+
+  const handleSnapshotRestored = useCallback(async () => {
+    await refresh();
+    setSnapshotsReloadKey((k) => k + 1);
+  }, []);
 
   async function runEstimate() {
     if (typeof gross !== 'number' || gross <= 0) return;
@@ -233,35 +259,16 @@ export default function FinancePanel() {
         </div>
       </div>
 
-      <div className="panel">
-        <strong>RocketMoney context (free-form)</strong>
-        <p className="muted" style={{ marginTop: '0.25rem' }}>
-          Paste anything from RocketMoney that helps the persona reason about your money —
-          monthly category breakdown, recurring subscriptions, top spending lines, income split.
-          The persona reads this verbatim; no specific format required.
-        </p>
-        <textarea
-          value={breakdown}
-          onChange={(e) => setBreakdown(e.target.value)}
-          rows={10}
-          placeholder={
-            'Example:\n\nIncome:\n- Salary: $5,200/mo\n- Side gigs: avg $400/mo\n\nFixed:\n- Rent: $1,800\n- Car insurance: $140\n- Phone: $80\n\nVariable (RocketMoney monthly avg):\n- Groceries: $620\n- Dining out: $280\n- Gas: $180\n\nRecurring subscriptions:\n- Spotify: $11\n- Netflix: $18\n- Adobe: $55'
-          }
-          style={{
-            width: '100%',
-            padding: '0.5rem',
-            font: 'inherit',
-            fontFamily: 'ui-monospace, Menlo, monospace',
-            fontSize: '0.85rem',
-            border: '1px solid var(--border)',
-            borderRadius: '4px',
-            marginTop: '0.5rem',
-          }}
-        />
-        <button onClick={save} disabled={busy} style={{ marginTop: '0.5rem' }}>
-          {busy ? 'Saving…' : 'Save breakdown'}
-        </button>
-      </div>
+      <FinanceImports
+        reloadKey={importsReloadKey}
+        currentBreakdown={report.profile.expense_breakdown ?? ''}
+        onApplied={handleImportApplied}
+      />
+
+      <FinanceSnapshots
+        reloadKey={snapshotsReloadKey}
+        onRestored={handleSnapshotRestored}
+      />
 
       <div className="panel">
         <strong>Outsourceable routines</strong>
@@ -271,7 +278,14 @@ export default function FinancePanel() {
         {report.outsourceable.items.length === 0 ? (
           <div className="muted">No outsourceable routines tagged yet.</div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.5rem' }}>
+          <div
+            style={{
+              overflowX: 'auto',
+              marginTop: '0.5rem',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '24rem' }}>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '0.3rem 0', borderBottom: '1px solid var(--border)' }}>Routine</th>
@@ -305,6 +319,7 @@ export default function FinancePanel() {
               })}
             </tbody>
           </table>
+          </div>
         )}
         <p className="muted" style={{ marginTop: '0.5rem' }}>
           {report.rationale}
@@ -490,3 +505,467 @@ function FinanceDayLog() {
 }
 
 export { isFinanceActivity };
+
+// =====================================================================
+// FinanceImports — §47 Phase 5
+// =====================================================================
+
+const SOURCE_LABEL: Record<SnapshotSource, string> = {
+  dashboard_edit: 'profile edit',
+  paste_import: 'paste',
+  csv_import: 'CSV',
+  restore: 'restore',
+};
+
+function fmtTs(ts: Date | string): string {
+  const d = new Date(ts);
+  return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+}
+
+interface FinanceImportsProps {
+  reloadKey: number;
+  currentBreakdown: string;
+  onApplied: (profile: FinancialProfile) => void | Promise<void>;
+}
+
+function FinanceImports({
+  reloadKey,
+  currentBreakdown,
+  onApplied,
+}: FinanceImportsProps) {
+  const [mode, setMode] = useState<ImportKind>('paste');
+  const [paste, setPaste] = useState('');
+  const [csvText, setCsvText] = useState('');
+  const [csvFilename, setCsvFilename] = useState<string | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [imports, setImports] = useState<RocketMoneyImport[] | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    void api.finance.imports.list().then(setImports).catch(() => setImports([]));
+  }, [reloadKey]);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 1_000_000) {
+      setError(`File too large (${(file.size / 1024).toFixed(0)} KB) — max 1 MB`);
+      return;
+    }
+    setError(null);
+    const text = await file.text();
+    setCsvText(text);
+    setCsvFilename(file.name);
+  }
+
+  async function submit() {
+    setError(null);
+    setBusy(true);
+    try {
+      const isCsv = mode === 'csv';
+      const raw = isCsv ? csvText : paste;
+      if (!raw.trim()) {
+        throw new Error(isCsv ? 'Pick a CSV file first' : 'Paste something first');
+      }
+      const created = await api.finance.imports.create({
+        kind: mode,
+        raw,
+        filename: isCsv ? csvFilename : undefined,
+      });
+      // Reset inputs but stay on the same mode
+      if (isCsv) {
+        setCsvText('');
+        setCsvFilename(undefined);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      } else {
+        setPaste('');
+      }
+      setImports((prev) => [created, ...(prev ?? [])]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message.replace(/^[\d]+ /, '') : 'Save failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function apply(importId: string) {
+    setError(null);
+    setBusy(true);
+    try {
+      const result = await api.finance.imports.apply(importId);
+      await onApplied(result.profile);
+    } catch (err) {
+      setError(err instanceof Error ? err.message.replace(/^[\d]+ /, '') : 'Apply failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <strong>RocketMoney imports</strong>
+      <p className="muted" style={{ marginTop: '0.25rem' }}>
+        Drop a CSV from RocketMoney, or paste a free-form summary. The Finance
+        persona reads the applied breakdown to answer affordability questions.
+        Imports are kept as history — apply one to make it the active context.
+      </p>
+
+      <div
+        className="pill-toggle"
+        role="tablist"
+        style={{ marginTop: '0.6rem', marginBottom: '0.6rem' }}
+      >
+        <button
+          className={mode === 'paste' ? 'active' : ''}
+          onClick={() => setMode('paste')}
+          role="tab"
+          type="button"
+        >
+          Paste
+        </button>
+        <button
+          className={mode === 'csv' ? 'active' : ''}
+          onClick={() => setMode('csv')}
+          role="tab"
+          type="button"
+        >
+          CSV upload
+        </button>
+      </div>
+
+      {mode === 'paste' ? (
+        <textarea
+          value={paste}
+          onChange={(e) => setPaste(e.target.value)}
+          rows={6}
+          placeholder={
+            'Income:\n- Salary: $5,200/mo\n- Side gigs: avg $400/mo\n\nVariable (RocketMoney monthly avg):\n- Groceries: $620\n- Dining out: $280\n- Gas: $180'
+          }
+          style={{
+            width: '100%',
+            padding: '0.5rem',
+            fontFamily: 'ui-monospace, Menlo, monospace',
+            fontSize: '0.82rem',
+          }}
+        />
+      ) : (
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => void onFile(e)}
+            style={{ fontSize: '0.85rem' }}
+          />
+          {csvFilename && (
+            <div className="muted" style={{ fontSize: '0.8rem', marginTop: '0.4rem' }}>
+              Loaded {csvFilename} · {csvText.length.toLocaleString()} chars.
+              Parsing happens on the server; if the columns don't match
+              expectations, the raw is still saved.
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div style={{ color: 'var(--bad)', fontSize: '0.85rem', marginTop: '0.4rem' }}>
+          {error}
+        </div>
+      )}
+
+      <button
+        onClick={submit}
+        disabled={busy || (mode === 'paste' ? !paste.trim() : !csvText.trim())}
+        style={{ marginTop: '0.5rem' }}
+      >
+        {busy ? 'Saving…' : `Save ${mode === 'paste' ? 'paste' : 'CSV'} import`}
+      </button>
+
+      {/* History */}
+      <div style={{ marginTop: '1rem' }}>
+        <strong style={{ fontSize: '0.85rem' }}>History</strong>
+        {!imports ? (
+          <div className="muted" style={{ fontSize: '0.85rem', marginTop: '0.3rem' }}>
+            Loading…
+          </div>
+        ) : imports.length === 0 ? (
+          <div className="muted" style={{ fontSize: '0.85rem', marginTop: '0.3rem' }}>
+            No imports yet.
+          </div>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0, margin: '0.4rem 0 0 0' }}>
+            {imports.map((imp) => {
+              const id = String(imp._id);
+              const isExpanded = expanded === id;
+              const isApplied = !!imp.applied_to_snapshot_id;
+              return (
+                <li
+                  key={id}
+                  style={{
+                    padding: '0.4rem 0',
+                    borderBottom: '1px solid var(--border)',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '0.5rem',
+                      alignItems: 'baseline',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <span style={{ flex: 1 }}>
+                      <strong>{imp.kind === 'csv' ? '📄 CSV' : '📝 Paste'}</strong>
+                      {imp.filename && (
+                        <span className="muted"> · {imp.filename}</span>
+                      )}
+                      {imp.parsed && (
+                        <span className="muted">
+                          {' '}· {imp.parsed.categories.length} categories ·
+                          ${imp.parsed.total.toFixed(0)}
+                        </span>
+                      )}
+                      {imp.kind === 'csv' && !imp.parsed && (
+                        <span className="muted"> · parse failed (raw saved)</span>
+                      )}
+                      {isApplied && (
+                        <span style={{ color: 'var(--good)' }}> · applied</span>
+                      )}
+                    </span>
+                    <span className="muted" style={{ fontSize: '0.78rem' }}>
+                      {fmtTs(imp.ts)}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '0.3rem',
+                      marginTop: '0.3rem',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <button
+                      className="icon-btn"
+                      onClick={() => setExpanded(isExpanded ? null : id)}
+                    >
+                      {isExpanded ? 'Hide' : 'View'}
+                    </button>
+                    <button
+                      className="icon-btn"
+                      onClick={() => void apply(id)}
+                      disabled={busy}
+                      title="Replace expense_breakdown with this import + write a snapshot"
+                    >
+                      Apply to profile
+                    </button>
+                  </div>
+                  {isExpanded && (
+                    <pre
+                      style={{
+                        marginTop: '0.4rem',
+                        padding: '0.5rem',
+                        background: 'var(--bg)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        fontFamily: 'ui-monospace, Menlo, monospace',
+                        fontSize: '0.75rem',
+                        lineHeight: 1.4,
+                        whiteSpace: 'pre-wrap',
+                        maxHeight: '16rem',
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {imp.raw}
+                    </pre>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {currentBreakdown && (
+        <details style={{ marginTop: '0.8rem' }}>
+          <summary
+            className="muted"
+            style={{ fontSize: '0.82rem', cursor: 'pointer' }}
+          >
+            Current expense_breakdown (preview) ▾
+          </summary>
+          <pre
+            style={{
+              marginTop: '0.4rem',
+              padding: '0.5rem',
+              background: 'var(--bg)',
+              border: '1px solid var(--border)',
+              borderRadius: '4px',
+              fontFamily: 'ui-monospace, Menlo, monospace',
+              fontSize: '0.78rem',
+              whiteSpace: 'pre-wrap',
+              maxHeight: '10rem',
+              overflowY: 'auto',
+            }}
+          >
+            {currentBreakdown}
+          </pre>
+        </details>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// FinanceSnapshots — §47 Phase 5
+// =====================================================================
+
+interface FinanceSnapshotsProps {
+  reloadKey: number;
+  onRestored: () => void | Promise<void>;
+}
+
+function FinanceSnapshots({ reloadKey, onRestored }: FinanceSnapshotsProps) {
+  const [snapshots, setSnapshots] = useState<FinancialProfileSnapshot[] | null>(
+    null,
+  );
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void api.finance.snapshots
+      .list()
+      .then(setSnapshots)
+      .catch(() => setSnapshots([]));
+  }, [reloadKey]);
+
+  async function restore(id: string) {
+    if (
+      !window.confirm(
+        'Restore this snapshot? Current profile values will be overwritten and a new "restore" snapshot will be added to history.',
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    try {
+      await api.finance.snapshots.restore(id);
+      await onRestored();
+    } catch (err) {
+      setError(err instanceof Error ? err.message.replace(/^[\d]+ /, '') : 'Restore failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <strong>Profile history</strong>
+      <p className="muted" style={{ marginTop: '0.25rem' }}>
+        Every profile save, import apply, or restore writes a snapshot here.
+        Newest first. Click to view; restore reverts the live profile and
+        writes a new "restore" snapshot so you keep the trail.
+      </p>
+      {error && (
+        <div style={{ color: 'var(--bad)', fontSize: '0.85rem', marginTop: '0.4rem' }}>
+          {error}
+        </div>
+      )}
+      {!snapshots ? (
+        <div className="muted" style={{ fontSize: '0.85rem', marginTop: '0.3rem' }}>
+          Loading…
+        </div>
+      ) : snapshots.length === 0 ? (
+        <div className="muted" style={{ fontSize: '0.85rem', marginTop: '0.3rem' }}>
+          No snapshots yet — save the profile or apply an import to create one.
+        </div>
+      ) : (
+        <ul style={{ listStyle: 'none', padding: 0, margin: '0.4rem 0 0 0' }}>
+          {snapshots.map((s) => {
+            const id = String(s._id);
+            const isExpanded = expanded === id;
+            const src = s.source as SnapshotSource;
+            return (
+              <li
+                key={id}
+                style={{
+                  padding: '0.4rem 0',
+                  borderBottom: '1px solid var(--border)',
+                  fontSize: '0.85rem',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '0.5rem',
+                    alignItems: 'baseline',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <span style={{ flex: 1 }}>
+                    <strong>{SOURCE_LABEL[src] ?? src}</strong>
+                    {s.profile && (
+                      <span className="muted">
+                        {' '}· gross ${(s.profile.monthly_gross_income ?? 0).toLocaleString()}
+                        {' '}· fixed ${(s.profile.monthly_fixed_expenses ?? 0).toLocaleString()}
+                      </span>
+                    )}
+                  </span>
+                  <span className="muted" style={{ fontSize: '0.78rem' }}>
+                    {fmtTs(s.ts)}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '0.3rem',
+                    marginTop: '0.3rem',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <button
+                    className="icon-btn"
+                    onClick={() => setExpanded(isExpanded ? null : id)}
+                  >
+                    {isExpanded ? 'Hide' : 'View'}
+                  </button>
+                  <button
+                    className="icon-btn"
+                    onClick={() => void restore(id)}
+                    disabled={busy}
+                    title="Replace the live profile with this snapshot's values"
+                  >
+                    Restore
+                  </button>
+                </div>
+                {isExpanded && (
+                  <pre
+                    style={{
+                      marginTop: '0.4rem',
+                      padding: '0.5rem',
+                      background: 'var(--bg)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      fontFamily: 'ui-monospace, Menlo, monospace',
+                      fontSize: '0.75rem',
+                      lineHeight: 1.4,
+                      whiteSpace: 'pre-wrap',
+                      maxHeight: '16rem',
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {JSON.stringify(s.profile, null, 2)}
+                  </pre>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}

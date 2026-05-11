@@ -11,7 +11,7 @@ For end-user docs (every voice command, every dashboard tab, every cron job, eve
 ```text
 household-os/
   packages/shared/       — types + seed inventory + persona configs
-  apps/api/              — Express + Mongoose + cron + publisher + persona chat + Alexa webhook
+  apps/api/              — Express + Mongoose + cron + publisher + MCP + Alexa webhook
   apps/dashboard/        — React + Vite frontend (incl. the in-app How-to Guide)
   apps/alexa-skill/      — Alexa custom skill (handlers, interaction model, deploy docs)
   render.yaml            — Render Blueprint for one-click prod deploy
@@ -33,6 +33,7 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | **MCP server** (Model Context Protocol — exposes a focused subset of household tools to Claude.ai's Custom Connectors at `/mcp` via Streamable HTTP. `add_ad_hoc_task`, `mark_done`, `log_context`, `log_mood`, `update_energy`, `log_workout`, `swap_task` + read tools to ground responses. Auth via `?token=` query param.) | [apps/api/src/mcp/server.ts](apps/api/src/mcp/server.ts), [apps/api/src/mcp/route.ts](apps/api/src/mcp/route.ts) |
 | **Calendar (today's events)** (passthrough to Google Calendar with normalized event shape, click-through to event + day permalinks) | [apps/api/src/services/calendar.ts](apps/api/src/services/calendar.ts), [apps/api/src/routes/calendar.ts](apps/api/src/routes/calendar.ts), [apps/dashboard/src/components/CalendarDayPanel.tsx](apps/dashboard/src/components/CalendarDayPanel.tsx) |
 | **Calendar trigger ingestion** (Airbnb, dogsit, landscaper, cleaner) | [apps/api/src/cron/calendar-ingest.ts](apps/api/src/cron/calendar-ingest.ts) |
+| **Per-appointment Calendar events** (appointment-enabled routines like haircut/head spa/oil change get their own Google Calendar event; hourly cron reconciles reschedules + cancellations + past-completions back into routine state — Calendar wins) | [apps/api/src/services/appointments.ts](apps/api/src/services/appointments.ts), [apps/api/src/cron/appointment-reconcile.ts](apps/api/src/cron/appointment-reconcile.ts), [apps/api/src/routes/appointments.ts](apps/api/src/routes/appointments.ts), [apps/dashboard/src/components/RoutinesPage.tsx](apps/dashboard/src/components/RoutinesPage.tsx) |
 | **Publisher** (debounced fan-out to Google Calendar + Alexa app cards) | [apps/api/src/publisher/](apps/api/src/publisher/) |
 | **Mood + energy logging** | [apps/api/src/services/mood.ts](apps/api/src/services/mood.ts), [apps/api/src/services/energy.ts](apps/api/src/services/energy.ts) |
 | **Workouts module** (today's slot, log status, history) | [apps/api/src/services/workouts.ts](apps/api/src/services/workouts.ts) |
@@ -40,14 +41,19 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | **Check-in system** (morning intent / evening retro / weekly review / pattern interrupts / zone assessments) | [apps/api/src/services/checkins.ts](apps/api/src/services/checkins.ts), [apps/api/src/services/checkin-generators.ts](apps/api/src/services/checkin-generators.ts) |
 | **Pattern detection** (frequent deferrals, missed workout streaks) | [apps/api/src/services/patterns.ts](apps/api/src/services/patterns.ts) |
 | **Persistent activity log** (unified timeline, all events incl. `context_logged`) | [apps/api/src/services/activity.ts](apps/api/src/services/activity.ts) |
-| **Finance module** (gross-income profile, 2025 federal/FICA/state tax estimator, outsourceable monthly cost rollup, greedy-fit affordability report, RocketMoney free-text breakdown) | [apps/api/src/services/finance.ts](apps/api/src/services/finance.ts), [apps/api/src/routes/finance.ts](apps/api/src/routes/finance.ts), [apps/dashboard/src/components/FinancePanel.tsx](apps/dashboard/src/components/FinancePanel.tsx) |
+| **Finance module** (gross-income profile, 2025 federal/FICA/state tax estimator, outsourceable monthly cost rollup, greedy-fit affordability report) | [apps/api/src/services/finance.ts](apps/api/src/services/finance.ts), [apps/api/src/routes/finance.ts](apps/api/src/routes/finance.ts), [apps/dashboard/src/components/FinancePanel.tsx](apps/dashboard/src/components/FinancePanel.tsx) |
+| **RocketMoney imports + profile history** (paste-or-CSV ingestion with server-side CSV parser, every save writes a `FinancialProfileSnapshot` so the profile is append-only history; apply-an-import flow rewrites the persona-facing `expense_breakdown` and tags the snapshot with provenance; restore from any snapshot, which itself writes a new `restore` snapshot) | [apps/api/src/services/csv-parser.ts](apps/api/src/services/csv-parser.ts), [apps/api/src/services/finance-history.ts](apps/api/src/services/finance-history.ts) |
 | **Context journal** (shared narrative log for both personas; free-form text + structured `dogsit_count` / `energy` / `mood` / `blocked_activities` / `tags` / `related_persona`) | [apps/api/src/services/context.ts](apps/api/src/services/context.ts), [apps/api/src/routes/context.ts](apps/api/src/routes/context.ts), [apps/dashboard/src/components/JournalPanel.tsx](apps/dashboard/src/components/JournalPanel.tsx) |
-| **Persona launchers** (Household Ops + Finance + Grocery Manager — system-prompt copy + per-persona Claude Project URL persisted in localStorage with a hardcoded default fallback; opens in claude.ai instead of running in-dashboard chat, so no Anthropic API key is required. On iOS, tapping the link prompts to open in the Claude app via Universal Links if installed.) | [apps/dashboard/src/components/PersonaLauncher.tsx](apps/dashboard/src/components/PersonaLauncher.tsx), [packages/shared/src/personas/](packages/shared/src/personas/) |
-| **Persona API chat** (kept for completeness — Household Ops + Finance both have full tool definitions and runner; not currently wired to the dashboard UI but the route exists at `/api/chat/:persona` for re-enabling later) | [apps/api/src/persona/](apps/api/src/persona/) |
-| **Alexa skill** (15 voice intents + multi-turn morning check-in + proactive app cards) | [apps/alexa-skill/](apps/alexa-skill/) |
+| **Persona launchers** (Household Ops + Finance + Grocery Manager — each persona's `config.projectUrl` is hardcoded to its canonical Claude.ai Project. Opens in claude.ai with no Anthropic API key required; on iOS, tapping the link prompts to open in the Claude app via Universal Links if installed. The full system prompt is rendered alongside with a Copy button for re-pasting into the Project settings.) | [apps/dashboard/src/components/PersonaLauncher.tsx](apps/dashboard/src/components/PersonaLauncher.tsx), [packages/shared/src/personas/](packages/shared/src/personas/) |
+| **Meal Week Calendar** (interactive 7-day meal calendar on the Food tab — day-pill strip + recipe panel with ingredients/steps/notes; week navigator ±7 days; paste-JSON admin that ingests Grocery Manager's `MEAL WEEK JSON` block from claude.ai; scoped warm cream/terracotta palette distinct from the rest of the dashboard) | [apps/api/src/services/meal-weeks.ts](apps/api/src/services/meal-weeks.ts), [apps/api/src/routes/meal-weeks.ts](apps/api/src/routes/meal-weeks.ts), [apps/dashboard/src/components/MealWeekCalendar.tsx](apps/dashboard/src/components/MealWeekCalendar.tsx), [packages/shared/src/sample-meal-week.json](packages/shared/src/sample-meal-week.json) |
+| **Persona tool definitions** (Household Ops + Finance tool schemas + runtime implementations — consumed by the MCP server. No in-API chat loop; chat happens on claude.ai or via MCP.) | [apps/api/src/persona/tools.ts](apps/api/src/persona/tools.ts), [packages/shared/src/personas/](packages/shared/src/personas/) |
+| **Alexa skill** (16 voice intents including WhatsLeftIntent + multi-turn morning check-in + proactive app cards) | [apps/alexa-skill/](apps/alexa-skill/) |
+| **Alexa Shopping List integration** (Food tab "Send to Alexa Shopping List" — paste Grocery Manager's list, parse `## section` headers + bullet rows, bulk-add to your default Alexa list. **Read-only — never touches Amazon cart, never places orders.** Requires one-time LWA permission grant in the Alexa app) | [apps/api/src/services/alexa-shopping-list.ts](apps/api/src/services/alexa-shopping-list.ts), [apps/api/src/services/grocery-list-parser.ts](apps/api/src/services/grocery-list-parser.ts), [apps/dashboard/src/components/ShoppingListPanel.tsx](apps/dashboard/src/components/ShoppingListPanel.tsx) |
+| **Alexa Reminders for appointments** (hourly cron creates an Alexa Reminder 30 min before each scheduled appointment, idempotent per calendar event; requires same LWA permission grant) | [apps/api/src/services/alexa-reminders.ts](apps/api/src/services/alexa-reminders.ts), [apps/api/src/cron/appointment-reconcile.ts](apps/api/src/cron/appointment-reconcile.ts) |
 | **Theme + typography** (light/dark toggle persisted in localStorage with prefers-color-scheme fallback, Inter body + Fraunces display from Google Fonts, strict-grayscale palette + muted semantic colors) | [apps/dashboard/src/styles.css](apps/dashboard/src/styles.css), [apps/dashboard/src/components/ThemeToggle.tsx](apps/dashboard/src/components/ThemeToggle.tsx), [apps/dashboard/index.html](apps/dashboard/index.html) |
 | **Google sign-in wall** (Google Identity Services button on the dashboard, email allowlist, short-lived signed-JWT session in `sessionStorage` so the user re-auths on every fresh tab; API middleware accepts either the legacy `API_TOKEN` *or* a valid session JWT) | [apps/dashboard/src/components/LoginScreen.tsx](apps/dashboard/src/components/LoginScreen.tsx), [apps/dashboard/src/auth.ts](apps/dashboard/src/auth.ts), [apps/api/src/services/session.ts](apps/api/src/services/session.ts), [apps/api/src/middleware/auth.ts](apps/api/src/middleware/auth.ts), [apps/api/src/routes/auth.ts](apps/api/src/routes/auth.ts) |
-| **Dashboard** (Today + Calendar strip + Context strip, Schedule, Workouts, Activity, Household Ops launcher, Finance, Routines editor, Journal, How-To Guide) | [apps/dashboard/](apps/dashboard/) |
+| **Dashboard** (6 tabs — Home widget grid as default landing surface, Today drill-down, Schedule, Workouts, Finance, Log; + 4 header icons — Household Ops 💬, Food 🛒, Routines ⚙️, Guide ❔) | [apps/dashboard/](apps/dashboard/) |
+| **Home widget grid** (7 independently-loading cards: Today summary, Calendar today, Workouts week, Finance discretionary, Recent activity ticker w/ relative timestamps, today's Journal w/ inline quick-add, rotating Zone-check chip) | [apps/dashboard/src/components/HomePanel.tsx](apps/dashboard/src/components/HomePanel.tsx), [apps/dashboard/src/utils/relativeTime.ts](apps/dashboard/src/utils/relativeTime.ts) |
 
 ## Quick start (local)
 
@@ -59,7 +65,7 @@ npm install
 cp .env.example .env
 cp apps/dashboard/.env.example apps/dashboard/.env
 # (edit .env — at minimum: MONGO_URL. API_TOKEN can be empty for local dev.
-#  ANTHROPIC_API_KEY is no longer required — persona chat happens on claude.ai now.
+#  No Anthropic API key required — persona chat happens on claude.ai.
 #  GOOGLE_CALENDAR_* envs only needed if you want calendar/trigger ingestion.
 #  GOOGLE_OAUTH_CLIENT_ID + AUTH_ALLOWED_EMAIL + JWT_SECRET only needed if you
 #  want the Google login wall — leave blank locally to skip auth entirely.)
@@ -79,12 +85,12 @@ npm run dev:api          # :3000
 npm run dev:dashboard    # :5173 (proxies /api → :3000)
 ```
 
-Open <http://localhost:5173>. The Today tab is the landing page. The **❔ Guide** tab in the top nav has the full how-to.
+Open <http://localhost:5173>. The Home tab (widget grid) is the landing page; Today is the drill-down for actively managing today's plan. The **❔ Guide** icon in the header has the full how-to.
 
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 251 tests (241 API + 10 alexa-skill)
+npm test                 # all workspaces — currently 359 tests (349 API + 10 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 
@@ -149,7 +155,7 @@ Setup, deployment paths, intent reference, and troubleshooting all live in [apps
 
 Render hosts the API (Express + cron + Alexa webhook). MongoDB lives separately on Atlas free tier. The dashboard can stay local — only the API needs to be public so Alexa can reach it.
 
-**Cost:** ~$7/mo (Render Starter Web Service) + $0 (Mongo Atlas free tier). Persona chat now runs on claude.ai (no Anthropic API charges) — the in-dashboard chat windows have been replaced with launchers that hand off to per-persona Claude Projects.
+**Cost:** ~$7/mo (Render Starter Web Service) + $0 (Mongo Atlas free tier). Persona chat runs on claude.ai (no Anthropic API charges) — the dashboard has launchers that hand off to per-persona Claude Projects.
 
 > The free Render tier won't work for this project — it sleeps after 15 min idle, which breaks every cron job (morning-gen, calendar-ingest, check-in generators). Starter ($7/mo) keeps the process always-on.
 
@@ -168,7 +174,6 @@ Render hosts the API (Express + cron + Alexa webhook). MongoDB lives separately 
    - Fill in the secret env vars Render prompts for:
      - `MONGO_URL` — your Atlas connection string (must end with `/household_os?...`)
      - `API_TOKEN` — `openssl rand -hex 32` (optional; leave blank for no auth on a single-user system)
-     - `ANTHROPIC_API_KEY` — **no longer required** since persona chat happens on claude.ai. Leave blank unless you want to re-enable the in-dashboard `/api/chat/:persona` route.
      - `ALEXA_SKILL_ID`, `ALEXA_CLIENT_ID`, `ALEXA_CLIENT_SECRET` — from the Alexa Developer Console (LWA pair only needed for proactive app-card push)
    - Click **Apply**. Render builds + deploys (~3-5 minutes).
 

@@ -112,3 +112,75 @@ export async function upsertEvent(
     return existingId ?? null;
   }
 }
+
+/**
+ * Insert a new event and return the full event object (so callers can read
+ * back the assigned `id` + canonical `start.dateTime` Google may have
+ * adjusted). Returns null in NODE_ENV=test or when no client is configured.
+ */
+export async function createEvent(
+  eventBody: calendar_v3.Schema$Event,
+): Promise<calendar_v3.Schema$Event | null> {
+  if (process.env.NODE_ENV === 'test') return null;
+  const cal = getCalendarClient();
+  if (!cal) return null;
+  const calendarId = process.env.GOOGLE_CALENDAR_ID ?? 'primary';
+  try {
+    const res = await cal.events.insert({
+      calendarId,
+      requestBody: eventBody,
+    });
+    return res.data;
+  } catch (err) {
+    console.error('[calendar] insert failed', err);
+    return null;
+  }
+}
+
+/**
+ * Fetch a single event by ID. Returns:
+ *   - the event when it exists
+ *   - `'gone'` when the calendar API returns 404 or 410 (deleted)
+ *   - `null` for any other failure or when the client isn't configured
+ *
+ * The three-valued return lets the appointment reconcile cron distinguish
+ * "user deleted this event" from "request failed transiently."
+ */
+export async function getEvent(
+  eventId: string,
+): Promise<calendar_v3.Schema$Event | 'gone' | null> {
+  if (process.env.NODE_ENV === 'test') return null;
+  const cal = getCalendarClient();
+  if (!cal) return null;
+  const calendarId = process.env.GOOGLE_CALENDAR_ID ?? 'primary';
+  try {
+    const res = await cal.events.get({ calendarId, eventId });
+    // Google marks deletions with status='cancelled' but still returns 200.
+    if (res.data.status === 'cancelled') return 'gone';
+    return res.data;
+  } catch (err) {
+    const status = (err as { code?: number; status?: number }).code ??
+      (err as { code?: number; status?: number }).status;
+    if (status === 404 || status === 410) return 'gone';
+    console.error('[calendar] get failed', err);
+    return null;
+  }
+}
+
+export async function deleteEvent(eventId: string): Promise<boolean> {
+  if (process.env.NODE_ENV === 'test') return false;
+  const cal = getCalendarClient();
+  if (!cal) return false;
+  const calendarId = process.env.GOOGLE_CALENDAR_ID ?? 'primary';
+  try {
+    await cal.events.delete({ calendarId, eventId });
+    return true;
+  } catch (err) {
+    const status = (err as { code?: number; status?: number }).code ??
+      (err as { code?: number; status?: number }).status;
+    // Already gone = success-equivalent from our perspective.
+    if (status === 404 || status === 410) return true;
+    console.error('[calendar] delete failed', err);
+    return false;
+  }
+}

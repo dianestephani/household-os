@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
+import HomePanel from './components/HomePanel.js';
 import WorkoutPanel from './components/WorkoutPanel.js';
-import ActivityFeed from './components/ActivityFeed.js';
+import LogPanel from './components/LogPanel.js';
+import MealWeekCalendar from './components/MealWeekCalendar.js';
+import ShoppingListPanel from './components/ShoppingListPanel.js';
 import PersonaLauncher from './components/PersonaLauncher.js';
 import RoutinesPage from './components/RoutinesPage.js';
 import HowToGuide from './components/HowToGuide.js';
 import FinancePanel from './components/FinancePanel.js';
-import JournalPanel from './components/JournalPanel.js';
 import DayPanel from './components/DayPanel.js';
 import SchedulePanel from './components/SchedulePanel.js';
 import ThemeToggle from './components/ThemeToggle.js';
@@ -20,41 +22,64 @@ import {
 } from './auth.js';
 import type { TodayPlan } from '@household-os/shared/types';
 
+/**
+ * Phase 3 §47 — Tab structure refactor.
+ *
+ * Tabs (6): Home, Today, Schedule, Workouts, Finance, Log
+ * Header icons (4): Household Ops (💬), Food (🛒), Routines (⚙️), Guide (❔)
+ *
+ * Spec called for 3 header icons but didn't account for the existing
+ * "Household Ops" persona launcher — it was previously a top-level tab and
+ * would have lost its surface entirely. Demoting it to a 4th icon keeps the
+ * spec's intent ("demote secondary surfaces to icons") without regressing.
+ *
+ * `activity` and `journal` from the pre-refactor View union both fold into
+ * the new `log` tab; the legacy-localStorage migration in readSavedView()
+ * maps them.
+ */
 type View =
+  | 'home'
   | 'today'
   | 'schedule'
   | 'workouts'
-  | 'activity'
+  | 'finance'
+  | 'log'
   | 'household'
   | 'food'
-  | 'finance'
   | 'routines'
-  | 'journal'
   | 'guide';
 
 const VIEWS: readonly View[] = [
+  'home',
   'today',
   'schedule',
   'workouts',
-  'activity',
+  'finance',
+  'log',
   'household',
   'food',
-  'finance',
   'routines',
-  'journal',
   'guide',
 ] as const;
+
+/** Pre-refactor view IDs that now map onto the new structure. */
+const LEGACY_VIEW_MAP: Record<string, View> = {
+  activity: 'log',
+  journal: 'log',
+};
 
 const VIEW_KEY = 'household-os.view';
 
 function readSavedView(): View {
   try {
     const v = localStorage.getItem(VIEW_KEY);
-    if (v && (VIEWS as readonly string[]).includes(v)) return v as View;
+    if (!v) return 'home';
+    if ((VIEWS as readonly string[]).includes(v)) return v as View;
+    if (v in LEGACY_VIEW_MAP) return LEGACY_VIEW_MAP[v]!;
   } catch {
     /* localStorage unavailable */
   }
-  return 'today';
+  return 'home';
 }
 
 function writeSavedView(view: View): void {
@@ -110,7 +135,55 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <h1>Household OS</h1>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.4rem',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <button
+            type="button"
+            className={`header-icon${view === 'household' ? ' active' : ''}`}
+            onClick={() => setView('household')}
+            title="Open Household Ops persona launcher"
+            aria-label="Household Ops"
+          >
+            <span aria-hidden>💬</span>
+            <span className="header-icon-label">Ops</span>
+          </button>
+          <button
+            type="button"
+            className={`header-icon${view === 'food' ? ' active' : ''}`}
+            onClick={() => setView('food')}
+            title="Open Grocery Manager"
+            aria-label="Food"
+          >
+            <span aria-hidden>🛒</span>
+            <span className="header-icon-label">Food</span>
+          </button>
+          <button
+            type="button"
+            className={`header-icon${view === 'routines' ? ' active' : ''}`}
+            onClick={() => setView('routines')}
+            title="Manage routines"
+            aria-label="Routines"
+          >
+            <span aria-hidden>⚙️</span>
+            <span className="header-icon-label">Routines</span>
+          </button>
+          <button
+            type="button"
+            className={`header-icon${view === 'guide' ? ' active' : ''}`}
+            onClick={() => setView('guide')}
+            title="How-to guide"
+            aria-label="Guide"
+          >
+            <span aria-hidden>❔</span>
+            <span className="header-icon-label">Guide</span>
+          </button>
           <button
             type="button"
             className="theme-toggle"
@@ -135,7 +208,16 @@ export default function App() {
       </header>
 
       <div className="tabs">
-        <button className={view === 'today' ? 'active' : ''} onClick={() => setView('today')}>
+        <button
+          className={view === 'home' ? 'active' : ''}
+          onClick={() => setView('home')}
+        >
+          Home
+        </button>
+        <button
+          className={view === 'today' ? 'active' : ''}
+          onClick={() => setView('today')}
+        >
           Today
         </button>
         <button
@@ -151,48 +233,16 @@ export default function App() {
           Workouts
         </button>
         <button
-          className={view === 'activity' ? 'active' : ''}
-          onClick={() => setView('activity')}
-        >
-          Activity
-        </button>
-        <button
-          className={view === 'household' ? 'active' : ''}
-          onClick={() => setView('household')}
-        >
-          Household Ops
-        </button>
-        <button
-          className={view === 'food' ? 'active' : ''}
-          onClick={() => setView('food')}
-        >
-          Food
-        </button>
-        <button
           className={view === 'finance' ? 'active' : ''}
           onClick={() => setView('finance')}
         >
           Finance
         </button>
         <button
-          className={view === 'routines' ? 'active' : ''}
-          onClick={() => setView('routines')}
+          className={view === 'log' ? 'active' : ''}
+          onClick={() => setView('log')}
         >
-          Routines
-        </button>
-        <button
-          className={view === 'journal' ? 'active' : ''}
-          onClick={() => setView('journal')}
-        >
-          Journal
-        </button>
-        <button
-          className={view === 'guide' ? 'active' : ''}
-          onClick={() => setView('guide')}
-          title="How-to guide for everything Household OS can do"
-          style={{ marginLeft: 'auto' }}
-        >
-          ❔ Guide
+          Log
         </button>
       </div>
 
@@ -202,19 +252,23 @@ export default function App() {
         </div>
       )}
 
+      {view === 'home' && <HomePanel onNavigate={(v) => setView(v as View)} />}
       {view === 'today' && (
         <DayPanel initialPlan={plan} onPlanChange={setPlan} />
       )}
-
       {view === 'schedule' && <SchedulePanel />}
       {view === 'workouts' && <WorkoutPanel />}
-      {view === 'activity' && <ActivityFeed />}
-
-      {view === 'household' && <PersonaLauncher persona="household" />}
-      {view === 'food' && <PersonaLauncher persona="grocery" />}
       {view === 'finance' && <FinancePanel />}
+      {view === 'log' && <LogPanel />}
+      {view === 'household' && <PersonaLauncher persona="household" />}
+      {view === 'food' && (
+        <>
+          <MealWeekCalendar />
+          <ShoppingListPanel />
+          <PersonaLauncher persona="grocery" />
+        </>
+      )}
       {view === 'routines' && <RoutinesPage />}
-      {view === 'journal' && <JournalPanel />}
       {view === 'guide' && <HowToGuide />}
     </div>
   );

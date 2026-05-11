@@ -775,13 +775,59 @@ End of handoff. Start with §15 step 1.
 
 ---
 
-# Part B — Post-v1 update (current as of 2026-05-09)
+# Part B — Post-v1 update (current as of 2026-05-10)
 
 > **Reading instructions for a fresh Claude instance:** §1–§17 above is the original v1 design doc. Everything in this Part B reflects what has actually been built and changed since the v1 scaffold. When the design doc and this section disagree, **trust this section** — the design doc is historical. Diane wants you to be fully caught up before you write any code. Don't re-do the original §15 build order; it's done.
 
+## Part B Index
+
+Section numbers in Part B are append-order, so they're not always sequential. Use this index to navigate.
+
+**Status + onboarding**
+- §18 — State of the system (deployed, test counts, what's running where)
+- §19 — Personas — current truth (Household, Finance live; Grocery Manager launcher-only)
+- §30 — **How a fresh Claude should pick up** (start here)
+
+**Built subsystems** (each entry is a complete design + impl record)
+- §20 — Finance module (gross income, tax estimator, outsourceable + affordability)
+- §22 — Context journal (shared narrative log with structured fields)
+- §31 — Calendar (today's events via Google Calendar OAuth passthrough)
+- §32 — Schedule preview (week/month look-ahead)
+- §33 — Theme + typography (light/dark toggle, Inter + Fraunces)
+- §34 — Persona handoff to claude.ai (launcher pattern, replaced in-dashboard chat)
+- §38 — Google sign-in wall (login on deployed dashboard, session JWT)
+- §39 — Day navigator (Today tab is date-aware)
+- §40 — Google Tasks integration (read + mark-done from dashboard)
+- §41 — Ad-hoc task creation + MCP server (built-but-unused-by-design)
+- §42 — Mood/Energy UI confirmation pattern + persona clarification principle
+- §43 — Tab persistence + date-aware Workouts/Activity/Journal/Finance + mobile refresh button
+- §44 — Zone-assessment multi-task split (comma-separated → N tasks)
+- §45 — Grocery Manager persona + Food tab (replaced Nutrition stub) — and the **Alexa Shopping List** integration that's deliberately not built yet
+- §48 — **Meal Week Calendar** (interactive Food-tab calendar fed by GM's `MEAL WEEK JSON` paste; new `MealWeek` collection + routes; scoped warm palette)
+
+**Data + content**
+- §21 — Routines added since v1 (current count: 48–56 depending on seed timing)
+- §24 — Inventory cadences worth knowing
+- §23 — Tax + finance UI (FinancePanel structure)
+
+**Operational**
+- §25 — Tests — coverage map
+- §26 — Operational / deployment notes (Atlas TLS, OAuth path resolution, OverwriteModelError)
+- §27 — Skill API additions (older cheat sheet — superseded by §36)
+- §28 — Memory + design principles in active use
+- §29 — Known gaps / open work
+- §35 — "Official launch tomorrow" script (`start-tomorrow`)
+- §36 — **Route cheat sheet (canonical, current)** — appears in the middle of Part B due to append-order
+
+**Process notes**
+- §37 — Merge from second HANDOFF / second-instance memory (2026-05-10 morning)
+- §46 — Latest test count + coverage delta
+
 ## 18. State of the system
 
-The v1 plan is shipped and the system is running. The API is on Render (Starter $7/mo); MongoDB lives on Atlas free tier; the dashboard is also on Render as a free static site; the Alexa skill is mounted on the API at `POST /alexa` via `ask-sdk-express-adapter`. There's no separate Lambda. Google Calendar OAuth is wired and working. 158 tests pass green; typecheck is clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).
+The v1 plan is shipped and the system is running. The API is on Render (Starter $7/mo); MongoDB lives on Atlas free tier; the dashboard is also on Render as a free static site; the Alexa skill is mounted on the API at `POST /alexa` via `ask-sdk-express-adapter`. There's no separate Lambda. Google Calendar OAuth is wired and working (with the `tasks` scope added in §40). Google sign-in is the login wall on the deployed dashboard (§38). The Food tab is the Grocery Manager launcher (§45) — replacing the old Nutrition stub.
+
+**Current test status: 359 tests across 38 files (349 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
 
 The for-end-user reference is the **in-app Guide tab** (Dashboard → ❔ Guide); this HANDOFF is just for engineers/Claude.
 
@@ -795,7 +841,7 @@ The original §11 plan said Household Ops would be the only live persona, with N
 | **Finance** | Live (full tools) | Helps Diane decide what to outsource and answer "can I afford X" |
 | **Nutrition** | Still stub | Diane explicitly deprioritized; "Diane is starting with Household Ops; nutrition comes later" is the canned reply |
 
-Both live personas use Claude Opus 4.7 (`claude-opus-4-7`) with prompt caching on system prompt + tool definitions. Both have `log_context` and `recent_context` tools and call `recent_context` at the start of every conversation (see §22).
+Both live personas use Claude Sonnet 4.6 (`claude-sonnet-4-6`) — switched from Opus 4.7 on 2026-05-10 since persona chat now runs on claude.ai (the `model` field is documentation only; Claude Projects pick model in their own UI). Both have `log_context` and `recent_context` tools and call `recent_context` at the start of every conversation (see §22).
 
 ## 20. Finance subsystem (was a stub in v1; now real)
 
@@ -1011,15 +1057,27 @@ If you (Claude) do work on this project: respect these — they're the substrate
 - **Patterns-from-EnergyLog** — original §17 open question; still open.
 - **RocketMoney CSV import** — Diane currently pastes a free-form summary. Structured CSV ingestion is realistic but not built; expect 1099 + W-2 commingled rows.
 - **Multi-user** — single-user via shared bearer token. Original §17 open question; still open.
+- **Today/Schedule appointment time rendering** — appointment-enabled routines that have a linked Google Calendar event don't yet display the event's actual start time in the Today plan or Schedule preview; they still show as "due today" based on cadence math. Deferred from Phase 4 (see §47). Needs `appointment.last_event_start` threaded through `getDayView` + `scheduleRange` and the rendering panels updated.
+- **Re-seeding wipes appointment linkage** — once Diane has scheduled real Google Calendar appointments via Phase 4, re-running `seed.ts` blows away `appointment.calendar_event_id` + `last_event_start` (same delete+insert gotcha as `last_done`, §21). Switching `seed.ts` to upsert-by-key would fix this for both fields at once.
 
 ## 30. How a fresh Claude should pick up
 
-1. Read this whole HANDOFF (Part A for design, Part B for current truth).
-2. `git status` + `git log --oneline -20` to see what's been touched recently.
-3. `npm test` should be green (178 tests). `npm run typecheck` should be clean.
-4. Ask Diane what she wants to work on. Default to small, contained changes — she has the hyperfixate-burnout pattern noted in §1, so don't propose multi-week refactors unprompted.
-5. If she shares qualitative context in conversation, log it via the journal — `POST /api/context` directly. Don't lose context to a session boundary.
-6. The end-user reference is the **Dashboard → ❔ Guide tab**. If Diane asks "how do I X" and the answer is in there, point her at it before re-explaining.
+1. **Read the Part B Index** above for navigation. §1–§17 is the original v1 design; §18 onward is current truth. When they conflict, current truth wins.
+2. **Read the memory** at `~/.claude/projects/-Users-dianestephani-Documents-Projects-Personal-Projects-household-os/memory/MEMORY.md` — the index there lists 12+ memory files including ADHD/energy patterns, dietary constraints, beauty maintenance, finance tools, the chat-interface and session-persistence decisions, and the two-emails-distinction (`reference_emails.md`: personal Gmail for OAuth, work email for OMG context — NOT interchangeable).
+3. `git status` + `git log --oneline -20` to see what's been touched recently.
+4. **`npm test` should pass 359 tests across 38 files** (349 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
+5. Skim the subsystem sections relevant to whatever Diane asks about. §36 is the canonical route cheat sheet — bookmark that.
+6. Ask Diane what she wants to work on. **Default to small, contained changes** — she has the hyperfixate-burnout pattern noted in §1 and `hyperfixate_burnout` memory. Don't propose multi-week refactors unprompted. **Don't push chat-style interfaces** — she declined Claude.ai connectors, Claude Desktop, AND re-adding dashboard chat on 2026-05-10 (see `feedback_chat_interface_decision` memory). Voice (Alexa) + dashboard buttons + per-persona Claude.ai launchers is the chosen interaction model.
+7. If she shares qualitative context in conversation, log it via the journal — `POST /api/context` directly with `related_persona` and any extractable structured fields. Don't lose context to a session boundary.
+8. The end-user reference is the **Dashboard → ❔ Guide tab**. If Diane asks "how do I X" and the answer is in there, point her at it before re-explaining.
+
+### Top-of-mind operational gotchas
+
+- **Render env vars must use absolute `/etc/secrets/...` paths** for Google Calendar creds — not the `./google-creds.json` from `.env.example`. Diane hit this once.
+- **Atlas isn't seeded automatically.** After any inventory change, she has to run `npm -w @household-os/api run seed` against the Atlas connection string (or via Render Shell). `start-tomorrow` after that to space out cadences.
+- **Tasks API scope** was added to the Google OAuth token on 2026-05-10. If a future change requires re-consent, `npm -w @household-os/api run google-auth` regenerates the token; she must re-upload `google-token.json` to Render Secret Files afterward.
+- **MCP server is built but unwired** (§41). Don't try to wire it without an explicit ask — she declined this path twice.
+- **Session is 30-day localStorage** on the dashboard (§38, revised in §43 area). Don't switch to sessionStorage without an explicit ask — she reversed that decision after iOS 2FA friction.
 
 ---
 
@@ -1102,11 +1160,20 @@ Claude.ai can't call our custom tools (`swap_task`, `affordability_report`, etc.
 
 ### The launcher ([PersonaLauncher.tsx](apps/dashboard/src/components/PersonaLauncher.tsx))
 
-Three panels per persona:
+**Updated 2026-05-10: project URLs are hardcoded on each persona config.** All three live personas have `projectUrl` set in [packages/shared/src/personas/](packages/shared/src/personas/); the launcher reads `config.projectUrl` directly. The earlier "Saved Claude Project URL" localStorage input was removed — it was a placeholder from when only grocery had a hardcoded URL. Any old `persona-project-url-*` keys in localStorage become inert (harmless dead data).
 
-1. Name + one-line blurb + primary "Open in Claude.ai →" button. The button uses a **saved Claude Project URL** (per-persona, persisted in `localStorage` under `persona-project-url-<name>`); falls back to `https://claude.ai/new` if no URL is saved yet.
-2. "Saved Claude Project URL" input with one-time setup instructions (create a Claude Project, paste system prompt into Project instructions, save Project URL here).
-3. The full system prompt rendered in a scrollable `<pre>` with a "Copy" button (`navigator.clipboard.writeText`, fallback to `Selection` API). Includes a heads-up that the prompt references tools that won't exist on claude.ai.
+Two panels per persona now:
+
+1. Name + one-line blurb + primary "Open in Claude.ai →" button → `config.projectUrl ?? 'https://claude.ai/new'`. On iOS, tapping the link triggers Universal Links → Claude app prompt when the app is installed (no per-platform code needed — plain `<a href>` with `target="_blank"`).
+2. **System prompt panel — read-only by default, compact.** Renders the prompt in a small (`rows={6}`) textarea that's `readOnly` until you click **Edit**. Header buttons: `Edit` / `Done` toggle (flips `readOnly`), `Reset` (only visible in edit mode, restores `draft` to `config.systemPrompt`), and `Copy` (always available, copies the current draft via `navigator.clipboard.writeText` with a `textarea.select()` fallback). Edits are local-only — they live in component state, never persist to localStorage or back to the repo. Use case: tweak the protein target or constraints for a one-off copy-paste into the Claude Project settings without committing a config change. Hot-reload of the canonical prompt or a persona switch clears any in-flight draft via a `useEffect` keyed to `config.systemPrompt`.
+
+**Current project URLs** (also asserted in [apps/api/src/persona/tools.test.ts](apps/api/src/persona/tools.test.ts) so renames fail loud at build time):
+
+| Persona | Project URL |
+| --- | --- |
+| Household Ops | `https://claude.ai/project/019e1022-63c0-752f-a25c-38f80dbc6cc2` |
+| Finance | `https://claude.ai/project/019e1024-e34d-7631-9a50-83a964f5921c` |
+| Grocery Manager | `https://claude.ai/project/019e141a-8cbc-720d-843a-0732ad1293c2` |
 
 The launcher imports persona configs directly from `@household-os/shared/personas/household` and `@household-os/shared/personas/finance` (these are already exported from the shared package's `package.json` `exports` field — no API roundtrip needed).
 
@@ -1529,23 +1596,528 @@ Total: still **251 tests** (241 API + 10 alexa-skill).
 
 ---
 
-## 36. Route cheat sheet (current as of this Part B)
+## 36. Route cheat sheet (canonical — updated 2026-05-10)
+
+All `/api/*` routes gated by `requireToken` middleware ([middleware/auth.ts](apps/api/src/middleware/auth.ts)) — accepts `API_TOKEN` bearer, Google-issued session JWT (§38), or open-pass when neither is configured. Auth routes + `/mcp` have their own middleware.
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/api/today`, `/today/regenerate`, `/today/swap`, `/today/mark-done`, `/today/pull-from-pool` | GET / POST | Same as v1 |
-| `/api/routines`, `/api/routines/:key` | GET / PATCH | |
-| `/api/energy`, `/api/mood` | POST | |
-| `/api/workouts/today`, `/api/workouts` | GET / POST | |
-| `/api/zones`, `/api/zones/assess`, `/api/zones/tasks` | various | |
-| `/api/checkins/pending`, `/api/checkins/:id/answer`, `…/skip` | various | |
-| `/api/triggers` | GET / POST | |
-| `/api/patterns/deferrals`, `/api/patterns/workouts` | GET | |
-| `/api/activity` | GET | |
-| `/api/finance/profile`, `/api/finance/outsourceable`, `/api/finance/affordability`, `/api/finance/estimate-tax` | GET / PATCH / POST | |
-| `/api/context`, `/api/context/today` | GET / POST | journal |
-| **`/api/calendar/today`** | **GET** | **new — today's Google Calendar events normalized for the dashboard** |
-| **`/api/schedule?days=N`** | **GET** | **new — week / month look-ahead, calendar events + routines coming due** |
-| `/api/chat/:persona` | POST | Persona chat (still wired backend-side; no longer hit from the UI) |
-| `/alexa` | POST | Alexa webhook |
+| `/health` | GET | Health check (no auth) |
+| `/alexa` | POST | Alexa skill webhook (raw body, signature-verified) |
+| `/api/auth/google` | POST | Verify Google ID token → issue session JWT (mounted before `requireToken`, §38) |
+| `/mcp` | ALL | MCP server endpoint via Streamable HTTP transport. Auth via `?token=` query or Authorization header against `API_TOKEN`. Built but unwired-by-design (§41). |
+| `/api/today` | GET | Current TodayPlan (auto-generates if missing) |
+| `/api/today/regenerate` | POST | Force re-gen + activity log entry |
+| `/api/today/whats-left` | GET | Open items + summed minutes (§47 Phase 6c, powers Alexa WhatsLeftIntent) |
+| `/api/today/swap` | POST | Move item to swap_pool, optionally pull replacement |
+| `/api/today/mark-done` | POST | Mark plan item complete |
+| `/api/today/pull-from-pool` | POST | Bring item from swap_pool back into today |
+| `/api/day/:YYYY-MM-DD` | GET | DayView bundle (plan + forecast + events + tasks + context) — §39 |
+| `/api/schedule?days=N` | GET | Week/month look-ahead (events + routines coming due) — §32. Days clamped [1, 60]. |
+| `/api/calendar/today` | GET | Today's Google Calendar events normalized for dashboard — §31 |
+| `/api/tasks?date=YYYY-MM-DD` | GET | Google Tasks for that day — §40 |
+| `/api/tasks/backlog` | GET | Google Tasks with no due date |
+| `/api/tasks/complete`, `/api/tasks/uncomplete` | POST | Flip Google Task status |
+| `/api/routines` | GET | All active routines (optional `?category=` `?zone=` filters) |
+| `/api/routines/:key` | PATCH | Allow-list field update |
+| `/api/energy` | POST | Log energy + return suggested swaps |
+| `/api/energy?days=N` | GET | Recent energy logs |
+| `/api/mood` | POST / GET | Log mood / recent moods |
+| `/api/workouts` | GET | Recent workout logs |
+| `/api/workouts` | POST | Log a workout (upserts on date + slot_key) |
+| `/api/workouts/today` | GET | Today's slot + log |
+| `/api/workouts/by-date/:date` | GET | Same shape for any date — §43 |
+| `/api/zones/state` | GET | Latest assessment per zone |
+| `/api/zones/assessments?days=N` | GET | Recent assessments |
+| `/api/zones/tasks` | GET | Open ad-hoc tasks |
+| `/api/zones/tasks` | POST | **Direct ad-hoc task creation** (name + optional zone/severity/source) — §41 |
+| `/api/zones/tasks/:id/cancel` | POST | Cancel an ad-hoc task |
+| `/api/zones/assess` | POST | Record zone assessment; creates one ad-hoc task per comma-separated `notes` item — §44 |
+| `/api/checkins/pending` | GET | Currently pending check-ins |
+| `/api/checkins/:id/answer` | POST | Answer (also fires mood/energy side-effects) |
+| `/api/checkins/:id/skip` | POST | |
+| `/api/triggers` | GET / POST | Calendar/event triggers |
+| `/api/patterns/deferrals` | GET | Frequent-deferral pattern |
+| `/api/patterns/workouts` | GET | Workout summary + streaks |
+| `/api/activity?days=N&kind=…` | GET | Unified activity log (range) |
+| `/api/activity?date=YYYY-MM-DD` | GET | Activity for one day — §43 |
+| `/api/context?days=N` | GET | Journal entries (range) |
+| `/api/context?date=YYYY-MM-DD` | GET | Journal for one day — §43 |
+| `/api/context/today` | GET | Today's journal entries |
+| `/api/context` | POST | Add journal entry |
+| `/api/finance/profile` | GET / PATCH | Financial profile singleton |
+| `/api/finance/outsourceable` | GET | Outsourceable routines with monthly cost math |
+| `/api/finance/affordability` | GET | Greedy-fit affordability report |
+| `/api/finance/estimate-tax` | POST | Pure compute — federal/FICA/state estimator |
+| `/api/finance/imports` | GET / POST | List or create RocketMoney imports (§47 Phase 5; POST 1MB byte cap) |
+| `/api/finance/imports/:id/apply` | POST | Apply an import → write profile + snapshot + link |
+| `/api/finance/snapshots` | GET | Profile snapshot history newest-first |
+| `/api/finance/snapshots/:id/restore` | POST | Restore from snapshot (writes a chained `restore` snapshot) |
+| `/api/meal-weeks` | GET / POST | List newest-first / upsert by `start_date` (§48) |
+| `/api/meal-weeks/by-date/:date` | GET | Find the meal week containing any day |
+| `/api/meal-weeks/:start_date` | GET / DELETE | Exact week / remove by Monday-of-week |
+| `/api/meal-weeks/:start_date/adjacent` | GET | Nearest stored prev + next weeks for nav |
+| `/api/appointments/:routine_key` | POST / DELETE | Schedule a calendar appointment / unlink it (§47 Phase 4) |
+| `/api/appointments/:routine_key/reconcile` | POST | Force reconcile against Google Calendar |
+| `/api/appointments/reconcile-all` | POST | Admin trigger for the hourly cron logic |
+| `/api/alexa/auth-status` | GET | `{configured: boolean}` — has LWA been bootstrapped? (§47 Phase 6) |
+| `/api/alexa/shopping-list/add` | POST | Bulk-add `{items: string[]}` to the Alexa shopping list (read-only; never touches Amazon cart) |
+| `/api/alexa/lwa/save-token` | POST | One-time LWA bootstrap; persists `{access_token, refresh_token, expires_in, scope}` |
+
+---
+
+## 46. Latest test count + coverage delta (running tally)
+
+As of 2026-05-10 end-of-day, post-Phase 6 (Alexa surfaces): **359 tests across 38 files** (349 API + 10 alexa-skill). Was 251 pre-Phase 1, dropped to 247 after Phase 1 cleanup, 263 after Phase 2 data-model tests, 285 after §48 meal-weeks, 303 after Phase 4 appointments, 307 after persona URL hardcoding, 339 after Phase 5, 359 after Phase 6. Phase 3 was UI-only and didn't move the count.
+
+Recent additions since the initial Part B write-up:
+
+| When | Section | Tests added | Total after |
+|---|---|---|---|
+| Initial Part B | §25 | (baseline) | 178 |
+| §38 Google sign-in | session.test.ts + auth.test.ts | +16 | 194 |
+| §39 Day navigator | day.test.ts | +7 | 201 |
+| §40 Google Tasks | tasks.test.ts | +8 | 209 |
+| §41 Ad-hoc + MCP | zones.test.ts (createAdHocTask) | +5 | 214 |
+| §42 Coverage backfill | routines.test.ts + alexa-push.test.ts | +17 | 231 |
+| §43 Date-aware tabs | activity.test.ts + context.test.ts + workouts.test.ts | +10 | 241 |
+| §44 Zone multi-task | zones.test.ts (splitTaskNotes + multi) | +10 | 251 |
+| §45 Grocery Manager | (no count change — renames updated existing tests) | 0 | 251 |
+| §47 Phase 1 cleanup | runner.test.ts deleted | −4 | 247 |
+| §47 Phase 2 data model | finance-history.test.ts + finance.test.ts additions | +16 | 263 |
+| §47 Phase 3 visual refactor | UI-only (no dashboard test infra) | 0 | 263 |
+| §48 Meal week calendar | meal-weeks.test.ts | +22 | 285 |
+| §47 Phase 4 appointments | appointments.test.ts | +18 | 303 |
+| Hardcoded persona Project URLs | tools.test.ts | +4 | 307 |
+| §47 Phase 5 RocketMoney workflow | csv-parser.test.ts + finance-history.test.ts | +32 | 339 |
+| §47 Phase 6 Alexa surfaces | grocery-list-parser + today.whats-left + alexa-shopping-list + alexa-reminders | +20 | 359 |
+
+**Deliberately not tested** (with rationale, so a fresh Claude doesn't try to backfill these):
+
+- `mcp/server.ts` + `mcp/route.ts` — transport mocking via `@hono/node-server` is more brittle than the test would catch. Service-layer code the MCP tools delegate to is fully covered.
+- `services/triggers.ts` — thin Mongoose wrapper, indirectly tested via activity-wiring.test.ts.
+- `utils/google-calendar.ts` + `utils/google-tasks.ts` — `NODE_ENV=test` short-circuits prevent real API calls; service-layer wrappers normalize.
+- **All dashboard components** — no React testing infrastructure. If introducing it, first regression candidates: `EnergyButtons` cancel-modal refetch fix (§42), `MoodButtons` prefill (§42), `isFinanceActivity` filter logic (§43 finance day log).
+
+Run `npm test` from the repo root any time to verify.
+
+---
+
+## 48. Meal week calendar (Food tab — 2026-05-10 evening)
+
+Off-roadmap pivot during Phase 3. Diane wanted the Food tab to host an interactive meal week calendar that the Grocery Manager persona feeds (claude.ai chat → JSON paste → dashboard rendering).
+
+### Meal-week architecture
+
+The Grocery Manager runs on claude.ai (not in-API per §34) and now emits a `MEAL WEEK JSON` block after the grocery list (per the updated system prompt in [packages/shared/src/personas/grocery.ts](packages/shared/src/personas/grocery.ts)). Diane pastes that JSON into the dashboard's Food tab; the dashboard POSTs to `/api/meal-weeks` and re-renders the calendar.
+
+### Meal-week backend
+
+- **Model** ([apps/api/src/db/models/MealWeek.ts](apps/api/src/db/models/MealWeek.ts)) — `start_date` (YYYY-MM-DD, unique, Monday-of-week) + optional `title` + `meals: MealDay[]` (embedded subdoc). Schema timestamps map to `created_at` / `updated_at`.
+- **Service** ([apps/api/src/services/meal-weeks.ts](apps/api/src/services/meal-weeks.ts)) — pure helpers `startOfWeek(Date)` (Monday-of-week math, `(getDay() + 6) % 7` since-Monday) and `shiftWeek(ymd, weeks)` for navigation arithmetic; `upsertMealWeek` validates input shape (required string fields, `effort ∈ {cook,easy,grab}`); `getMealWeek` / `getMealWeekByDate` / `listMealWeeks` for reads; `adjacentMealWeeks` returns nearest stored neighbors for nav; `deleteMealWeek` for cleanup. All read methods short-circuit `null` on malformed YYYY-MM-DD instead of throwing.
+- **Routes** ([apps/api/src/routes/meal-weeks.ts](apps/api/src/routes/meal-weeks.ts)):
+  - `GET /api/meal-weeks?limit=N` — newest-first list (limit clamped to [1, 200])
+  - `GET /api/meal-weeks/by-date/:date` — find the week containing any day
+  - `GET /api/meal-weeks/:start_date` — exact week (404 if missing)
+  - `GET /api/meal-weeks/:start_date/adjacent` — nearest prev/next neighbors
+  - `POST /api/meal-weeks` — upsert by start_date (returns 400 on validation failure)
+  - `DELETE /api/meal-weeks/:start_date`
+- **New ActivityKind** — `meal_week_saved` fires on every upsert with `{start_date, meal_count}` metadata.
+- **Mongoose conflict gotcha (worth knowing)**: do NOT include `start_date` in both `$set` AND `$setOnInsert` on `findOneAndUpdate`. Mongoose throws "would create a conflict at 'start_date'". The pattern across this codebase (mirrors `setFinancialProfile`) is: filter `{start_date}` + `$set: {mutables}` + `$setOnInsert: {start_date}`. Tests caught this on first run.
+
+### Meal-week frontend
+
+- **Component** ([apps/dashboard/src/components/MealWeekCalendar.tsx](apps/dashboard/src/components/MealWeekCalendar.tsx)) — top-level renders:
+  - Eyebrow + serif title + divider
+  - Week navigator (prev / next ±7 days + "Jump to this week" link when off-current)
+  - 7-day pill strip with active state + per-day effort badge (`Cook` / `Easy` / `Grab`)
+  - Recipe panel for the selected day: terracotta header with title + meta chips (time / protein / servings); 2-col body (ingredients + steps) collapsing to 1-col under 600px; optional gold-bordered note; bottom day-nav (prev/next).
+  - Empty state when no week exists for that Monday (paste admin still available)
+  - Collapsible `<details>` paste-JSON admin with "Load sample (May 11)" button, "Save week" submit, parse-error display. `extractJson()` strips ```` ``` ```` fences and the literal "MEAL WEEK JSON" header so Diane can paste the whole block verbatim.
+- **Sample JSON** ([packages/shared/src/sample-meal-week.json](packages/shared/src/sample-meal-week.json)) — the May 11–17 week from Diane's HTML mockup, with mojibake fixed (the original encoding mangled emojis and em-dashes). Bundled into the dashboard via the shared package's `exports` map. The "Load sample" button writes it into the paste textarea so it's a 2-click first-run experience.
+- **api.ts methods** — `api.mealWeeks.list/get/byDate/adjacent/upsert/remove` mirror the routes 1:1.
+
+### Meal-week styling
+
+The calendar uses a **scoped warm palette** (cream / terracotta / sage / gold) under `.meal-cal`, intentionally distinct from the rest of the dashboard's strict-grayscale theme — Diane explicitly chose to keep the warmth from her HTML mockup. CSS variables are namespaced `--mc-*` so they can't leak. Dark-mode variant darkens the cream backdrop but keeps terracotta + gold vivid.
+
+### Grocery Manager prompt update
+
+A new section 6 in the system prompt instructs GM to emit a `MEAL WEEK JSON` block alongside its grocery list, with the literal header line + JSON shape inline. Schema requirements (strict effort enum, ASCII quotes for JSON parsing, free-form `day` labels, optional `note`) are documented in-prompt so GM produces parseable output the first time.
+
+### Food tab structure (post-refactor)
+
+The header `🛒 Food` icon (Phase 3) routes to a stacked view: `<MealWeekCalendar />` on top (new, primary surface), `<PersonaLauncher persona="grocery" />` unchanged below (kept per Diane's preference so she can still hop into Claude.ai to generate next week's plan).
+
+### Meal-week test coverage
+
+22 in [apps/api/src/services/meal-weeks.test.ts](apps/api/src/services/meal-weeks.test.ts): `startOfWeek` (Mon/Wed/Sun cases), `shiftWeek` (+/- 7d, month rollover, malformed input), `upsertMealWeek` (create + log, overwrite-by-start_date, bad start_date, empty meals, missing required field, invalid effort), `getMealWeek` + `getMealWeekByDate` (null when empty, exact match, find-by-any-day, malformed), `adjacentMealWeeks` (nearest neighbors skip empty Mondays, null when only one), `listMealWeeks` (newest-first), `deleteMealWeek` (success + false when missing). New total: **275 API + 10 alexa-skill = 285 tests across 31 files**.
+
+**Not tested (deliberately):**
+- The dashboard component — no React testing infra in this repo. First regression candidates if it's ever introduced: `extractJson()` JSON-fence stripping, `parseYmd`/`ymd` round-trips, `shortEffortLabel()` emoji extraction.
+- The route layer — thin Express handlers over the service; service is fully covered.
+
+---
+
+## 47. Refactor plan (2026-05-10 PM)
+
+Diane requested a holistic refactor focused on: (a) deeper integration with the tools she already uses (RocketMoney, Google Calendar, Alexa) without reinventing them, (b) two-way sync where missing, (c) a "one place to see everything" visual layout, (d) timestamping/tracking surfaced in the UI, (e) cleanup of unused code.
+
+This is broken into 7 phases. Each phase is independently shippable — Diane can stop at any phase and still have a coherent system. **Total estimated effort: ~15-25 hours.** Recommended order is as written; phases 4/5/6 are independent of each other.
+
+### Design principles for this refactor
+
+1. **Calendar is always source of truth for time-bound things.** Diane keeps it updated and uses Google Tasks regularly. When in conflict with our cadence math, Calendar wins.
+2. **Don't reprogram what Alexa/Google already do.** Use Alexa Reminders for time-based nudges (not custom notifications), Alexa Shopping Lists for the grocery handoff, Google Tasks for ad-hoc tasks where appropriate.
+3. **No automatic Amazon cart placements, ever.** Shopping list is a checklist for in-person shopping (TJ's, etc.). Hard rule.
+4. **Every submission is timestamped and historical.** Singletons that overwrite (`FinancialProfile` today) become append-only history with a "current view." User can browse + edit history.
+5. **Deletion of running infra requires the corresponding test/route also be deleted in the same change.** No dangling references.
+
+---
+
+### Phase 1 — Cleanup (~30 min) — **SHIPPED 2026-05-10**
+
+Verified dead from the audit (see §47 audit, this session):
+
+- ✅ **Deleted** `apps/dashboard/src/components/ChatPanel.tsx` — zero imports.
+- ✅ **Deleted** `apps/api/src/persona/runner.ts` and `apps/api/src/persona/runner.test.ts`. Chat moved to Claude.ai launchers per §34; in-API chat loop has no consumer.
+- ✅ **Deleted** `apps/api/src/routes/chat.ts`, unmounted `/api/chat/:persona` from [apps/api/src/index.ts](apps/api/src/index.ts), and dropped from §36 route cheat sheet + the root `/` endpoint docs list.
+- ✅ **Kept** `packages/shared/src/personas/{household,finance,grocery}.ts` — these define the system prompts Diane copy-pastes into each Claude.ai Project. They're documentation that compiles.
+- ✅ **Kept** `apps/api/src/persona/tools.ts` and `tools.test.ts` — MCP server uses these; the drift detector test is load-bearing.
+- ✅ **Removed** `@anthropic-ai/sdk` from `apps/api/package.json`. `npm install` removed 7 packages (SDK + transitive deps).
+- ✅ **Scrubbed README + .env.example** — removed `ANTHROPIC_API_KEY` row from `.env.example`, removed the "Persona API chat" subsystem row from README, replaced it with a "Persona tool definitions" row pointing at `persona/tools.ts` (consumed by MCP), updated the workspace blurb (`persona chat` → `MCP`), removed the `ANTHROPIC_API_KEY` line from the Render deploy section, and updated the test count line + cost-summary blurb.
+
+Test delta: −4 tests (runner.test.ts). New total: **247 tests across 30 files** (237 API + 10 alexa-skill). Typecheck clean across all four workspaces.
+
+### Phase 2 — Data model changes (~1-2 hr) — **SHIPPED 2026-05-10**
+
+New collections, no breaking changes to existing data.
+
+```ts
+// FinancialProfileSnapshot — append-only history of profile saves
+{
+  _id: ObjectId,
+  ts: Date,                                // when saved
+  source: 'dashboard_edit' | 'csv_import',
+  profile: { /* full snapshot of FinancialProfile fields at save time */ },
+  parent_snapshot_id?: ObjectId            // for edit-from-history flow
+}
+
+// RocketMoneyImport — every paste or CSV upload, raw + parsed
+{
+  _id: ObjectId,
+  ts: Date,
+  kind: 'paste' | 'csv',
+  filename?: string,                       // csv only
+  raw: string,                             // exact content as submitted
+  parsed?: {                               // best-effort categorization
+    categories: [{ name, amount, count? }],
+    total: number,
+    period_start?: Date,
+    period_end?: Date
+  },
+  applied_to_snapshot_id?: ObjectId        // if user clicked "apply to profile"
+}
+```
+
+**Shipped in Phase 2:**
+
+- ✅ Two new Mongoose models: [apps/api/src/db/models/FinancialProfileSnapshot.ts](apps/api/src/db/models/FinancialProfileSnapshot.ts) (append-only, fields: `ts`, `source: 'dashboard_edit' | 'csv_import' | 'restore'`, `profile` as `Mixed`, optional `parent_snapshot_id`) and [apps/api/src/db/models/RocketMoneyImport.ts](apps/api/src/db/models/RocketMoneyImport.ts) (`ts`, `kind: 'paste' | 'csv'`, optional `filename`, required `raw`, optional `parsed: { categories: [{name, amount, count?}], total, period_start?, period_end? }`, optional `applied_to_snapshot_id`).
+- ✅ `Routine.appointment` subdoc added in [apps/api/src/db/models/Routine.ts](apps/api/src/db/models/Routine.ts) with the spec shape (`enabled` / `calendar_event_id` / `default_duration_minutes` / `last_synced_at` / `last_event_start`). No routines have it populated yet — Phase 4 wires the per-appointment event lifecycle.
+- ✅ Shared types in [packages/shared/src/types.ts](packages/shared/src/types.ts): `RoutineAppointment`, `FinancialProfileSnapshot`, `RocketMoneyImport`, `ParsedImport`, `SnapshotSource`, `ImportKind`, and two new `ActivityKind` values (`finance_import_added`, `finance_snapshot_restored`).
+- ✅ New service [apps/api/src/services/finance-history.ts](apps/api/src/services/finance-history.ts) with `saveSnapshot`, `listSnapshots`, `restoreSnapshot`, `addImport`, `listImports`. Reads the `FinancialProfile` model directly (no import from `finance.ts`) to avoid a circular dep, since `setFinancialProfile` calls `saveSnapshot`.
+- ✅ Snapshot-on-PATCH wired into [apps/api/src/services/finance.ts](apps/api/src/services/finance.ts) `setFinancialProfile`. Captures before-state, performs the write, snapshots after, builds a per-field `diff: { field: { before, after } }` over `DIFFABLE_FIELDS` (excludes `key` + `updated_at`), and stores `snapshot_id` + `diff` in the `routine_edited` activity-log metadata. Snapshot failure is logged but does NOT break the PATCH — activity logging is observational.
+- ✅ Activity-log entries: every PATCH still logs `routine_edited` (now with diff + snapshot_id metadata); `addImport` logs `finance_import_added` with `{kind, filename, parsed: {total, category_count}, raw_length}`; `restoreSnapshot` logs `finance_snapshot_restored` with `{restored_from, restored_from_ts, new_snapshot_id}`.
+
+**Routes intentionally NOT added yet.** Phase 2 is data-layer only. The HTTP surfaces for snapshot list / restore / import paste / import CSV ship in Phase 5 alongside the Finance tab redesign.
+
+**Test delta:** +16 tests (13 in `finance-history.test.ts` + 3 in `finance.test.ts`). New total: **263 tests across 31 files** (253 API + 10 alexa-skill).
+
+**Two design calls worth knowing:**
+
+1. **`SnapshotSource` extended to include `'restore'`** beyond the spec's `'dashboard_edit' | 'csv_import'`. Without it, `restoreSnapshot` couldn't tag the chained snapshot honestly. Future paste-vs-csv distinction in Phase 5 can extend further (`'paste_import'`) without breaking shape.
+2. **`saveSnapshot` reads the `FinancialProfile` model directly**, not via `getFinancialProfile()`, to avoid a circular import between `finance.ts ↔ finance-history.ts`. When no profile exists yet, it snapshots a default-shaped record rather than refusing — keeps the history honest about "what did the profile look like at this moment."
+
+### Phase 3 — Visual refactor: Home + tab compression (~3-4 hr) — **SHIPPED 2026-05-10**
+
+**Tab structure becomes:**
+
+| Tab | Status | Notes |
+|---|---|---|
+| **Home** | NEW, default | Widget grid (below) |
+| Today | Keep | Drill-down from Home |
+| Schedule | Keep | Merge in calendar.today + tasks views |
+| Workouts | Keep | |
+| Finance | Keep | Adds history + import panel |
+| Log | NEW (merge) | Activity + Journal combined, with a toggle |
+| Routines | Demote | Move to a "Settings" gear icon in header, not a top-level tab |
+| Food | Demote | Move to a top-bar launcher icon (single button → opens Claude.ai project) |
+| Household (DayPanel) | DELETE or merge | Overlaps with Today + Home; absorb its zone-assessment trigger into Home widget |
+| Guide | Demote | Move to ❔ icon in header |
+
+Result: **6 top-level tabs** (Home, Today, Schedule, Workouts, Finance, Log) + 3 header icons (Routines/⚙️, Food/🛒, Guide/❔). Tab persistence (§43) still applies.
+
+**Home widget grid (mobile-friendly, single column → 2-col on desktop):**
+
+1. **Today summary** — N of M items done; one-tap to Today tab. Shows the next 2 incomplete items inline.
+2. **Calendar today strip** — Google Calendar events for today; one-tap to Schedule tab.
+3. **Workouts** — this week's hit count vs target; today's workout slot if any.
+4. **Finance** — discretionary $/mo, top 2 outsourceables not yet covered, last RocketMoney import date.
+5. **Recent activity ticker** — last 6 ActivityLog entries with relative timestamps ("3h ago", "yesterday"). Tap → Log tab.
+6. **Journal/context strip** — today's ContextEntry text if any; "+" to add one quickly.
+7. **Zone assessment chip** — "How's the kitchen look right now?" rotating prompt; one-tap to assess.
+
+**Visual polish:**
+- Card-based layout for widgets; consistent 12px radius; existing CSS tokens.
+- Skeleton loaders on first paint (not spinners).
+- Empty states with one-sentence help text + a single CTA button.
+- Refresh button (§43 mobile) on every widget header.
+
+Test delta: 0 (no dashboard tests today; documented in §46).
+
+**What actually shipped in Phase 3:**
+
+- ✅ New [apps/dashboard/src/components/HomePanel.tsx](apps/dashboard/src/components/HomePanel.tsx) — `widget-grid` CSS grid (1-col mobile → 2-col desktop) with 7 widgets, each loading independently so a single slow endpoint doesn't block first paint:
+  - `TodayWidget` (full-width) — "N of M done" + next 2 incomplete; refresh + "Open today →"
+  - `CalendarWidget` — top 3 today's events, "Schedule →" link
+  - `WorkoutsWidget` — week pattern (`patterns.workouts(7)`) + today's slot
+  - `FinanceWidget` — discretionary $/mo + top 2 not-covered outsourceables. The spec's "last RocketMoney import date" sub-line is deferred to Phase 5 along with the import HTTP route.
+  - `ActivityWidget` (full-width) — last 6 ActivityLog entries with relative timestamps via new [utils/relativeTime.ts](apps/dashboard/src/utils/relativeTime.ts)
+  - `JournalWidget` — today's `ContextEntry` text + inline "+" quick-add (textarea → `api.context.add`)
+  - `ZoneChipWidget` — rotates through `ZONE_ROTATION` (day-of-year mod 6); 3 buttons (fine/meh/rough) → new `api.zones.assess` → POST `/api/zones/assess`
+- ✅ New [apps/dashboard/src/components/LogPanel.tsx](apps/dashboard/src/components/LogPanel.tsx) — pill-toggle wrapper over `ActivityFeed` + `JournalPanel`. Mode persists in `localStorage` under `household-os.log-mode`. Sub-panels keep their own date controls.
+- ✅ [App.tsx](apps/dashboard/src/App.tsx) refactored: 6 tabs (Home, Today, Schedule, Workouts, Finance, Log). Default view is now `home` (was `today`). Routines / Food / Guide + **Household Ops** demoted to header icons (`💬 Ops`, `🛒 Food`, `⚙️ Routines`, `❔ Guide`). The spec called for 3 header icons but didn't account for Household Ops, which previously had its own tab — adding a 4th icon kept it accessible without regressing.
+- ✅ Legacy `localStorage.household-os.view` migration in `readSavedView()` — `activity` and `journal` map onto `log`; all other legacy values remain valid because they still exist as header-icon routes.
+- ✅ New CSS classes in [styles.css](apps/dashboard/src/styles.css): `.widget-grid` / `.widget` (12px radius per spec) / `.widget-head` / `.widget-link` / `.widget-refresh` / `.widget-empty` / `.skeleton` (with `short/med/long` widths + pulse animation) / `.header-icon` / `.header-icon-label` / `.pill-toggle`.
+- ✅ New `api.zones.assess(zone, level, notes?)` method exposing the existing `POST /api/zones/assess` route — surfaces the zone-check from the Home chip widget.
+- ✅ Dead `api.chat()` method removed from [api.ts](apps/dashboard/src/api.ts) (was calling `/api/chat/:persona` which was deleted in Phase 1; had no consumers).
+
+**Verified headlessly:** `npm run typecheck` clean across 4 workspaces, `npm run build` produces 265 KB JS / 8 KB CSS gzipped, Vite dev server boots clean and serves all new modules with HTTP 200. **NOT verified (Claude can't open a browser):** actual visual layout, click interactions (tab switches, quick-add, zone chip), responsive breakpoints, dark-mode rendering of widgets. Diane needs to spot-check those.
+
+**Spec deviations worth knowing:**
+
+1. **4 header icons, not 3** — added Household Ops launcher as a 4th icon. The spec only listed Routines/Food/Guide but the existing Household Ops persona launcher had to go somewhere — making it a 4th icon kept the spec's intent (demote secondary surfaces to icons) without losing access.
+2. **Finance widget omits "last RocketMoney import date"** — Phase 2 deliberately shipped no HTTP routes for `RocketMoneyImport`. The widget shows discretionary + top 2 not-covered only; Phase 5 will wire the import-date sub-line when the route exists.
+3. **Zone chip uses day-of-year rotation, not random** — deterministic so the prompt feels stable across refreshes within a day.
+
+Test delta: 0 (no dashboard test infra exists in this repo; documented in §46). If we ever add Vitest + Testing Library, the first regression candidates are: `readSavedView` legacy migration, `relativeTime` unit bucketing, `todayZone` day-of-year rotation, and the `JournalWidget` quick-add path.
+
+### Phase 4 — Per-appointment Calendar events + reconciliation (~4-6 hr) — **SHIPPED 2026-05-10**
+
+**Goals**:
+1. Appointment-style routines (head_spa, haircut, car maintenance, dogsit windows, Airbnb checkin/checkout) get their own real Google Calendar events.
+2. If Diane edits/moves/deletes one in Calendar, the system picks it up and updates the routine's `last_done`/`next_due`.
+3. The existing daily checklist event (§10 Publisher) stays — it's a summary, not appointment-level.
+
+**Build:**
+
+- Update `routines/seed.ts` (or add a migration) to mark appropriate routines `appointment.enabled = true` with default durations.
+- New service `apps/api/src/services/appointments.ts`:
+  - `createAppointment(routineKey, startsAt, durationMinutes?)` → inserts Google Calendar event, persists `routine.appointment.calendar_event_id`.
+  - `syncAppointmentFromCalendar(routineKey)` → fetches event by stored id, compares `event.start.dateTime` to `routine.appointment.last_event_start`. If different: update routine, log ActivityLog `appointment_rescheduled`. If event missing (404): clear `calendar_event_id`, log `appointment_deleted_externally`.
+- New cron `apps/api/src/cron/appointment-reconcile.ts` — runs hourly. Iterates routines with `appointment.enabled = true && calendar_event_id != null`, calls `syncAppointmentFromCalendar()`.
+- Optional but recommended: **Google Calendar push notifications (watch API)** for a dedicated "Household" calendar. Requires a public webhook (`POST /api/calendar/webhook`) and Google Calendar's `events.watch`. Eliminates the polling delay. **Skip this for v1 of the refactor** — hourly polling is fine.
+- UI: Routines page gets a "📅 Schedule appointment" button per appointment-enabled routine. Today/Schedule views show appointment routines with their actual time, not just "due today."
+
+**Conflict resolution**: Calendar wins always. The cadence math becomes a *suggestion* for next-appointment timing; the actual `last_done` is the calendar event's `start.dateTime` when it's in the past, regardless of what the system thought.
+
+**What actually shipped in Phase 4:**
+
+- ✅ **Pure decision function** [diffAppointment](apps/api/src/services/appointments.ts) — exhaustively unit-tested. Takes `{current: {calendar_event_id, last_event_start, last_done}, event: {start: Date|null} | 'gone' | null, now?}` and returns one of `{action: 'no_change' | 'rescheduled' | 'deleted' | 'past_completed', new_*?}`. Rules: transient lookup failure (event=null) → no_change; event gone + we had one → deleted; event start in past + last_done doesn't already cover it → past_completed (sets `last_done = event.start`, the "Calendar wins" rule); start differs from `last_event_start` → rescheduled; same → no_change. **Past_completed takes precedence over rescheduled.**
+- ✅ **I/O wrappers** ([apps/api/src/services/appointments.ts](apps/api/src/services/appointments.ts)):
+  - `createAppointment({routine_key, starts_at, duration_minutes?})` — validates routine exists + `appointment.enabled=true` + parseable ISO start. Builds Calendar event body (`📅 <routine.name>`, start/end), inserts via `createEvent`, persists `calendar_event_id` + `last_event_start` + `last_synced_at` + back-fills `default_duration_minutes` if not set. Logs `appointment_created` with `{routine_key, starts_at, duration_minutes, calendar_event_id, calendar_skipped}`. Falls back to `appointment.default_duration_minutes ?? 60` when caller omits `duration_minutes`. In `NODE_ENV=test` (or no Calendar client), Calendar is no-op and `calendar_event_id` lands as `null` with `calendar_skipped=true`.
+  - `reconcileAppointment(routineKey)` — calls `getEvent`, parses start, runs `diffAppointment`, applies the outcome to Mongo + logs `appointment_rescheduled` / `appointment_deleted_externally` / `task_done` (past_completed branch, actor='system', metadata.source='calendar_reconcile'). Always bumps `last_synced_at`.
+  - `reconcileAllAppointments()` — `Routine.find({appointment.enabled: true, appointment.calendar_event_id: {$ne: null}})` then reconciles each. Per-routine `try/catch` so one transient failure doesn't kill the batch.
+  - `clearAppointmentLink(routineKey)` — nulls `calendar_event_id` + `last_event_start` without touching the Google Calendar event itself. Used when Diane wants to detach but keep the event.
+- ✅ **Google Calendar util extended** ([apps/api/src/utils/google-calendar.ts](apps/api/src/utils/google-calendar.ts)): added `createEvent` (returns full event), `getEvent` (returns event | `'gone'` | `null` — 404/410/`status=cancelled` all map to `'gone'`; transient failures map to `null`), `deleteEvent` (idempotent — 404/410 count as success). All three short-circuit in `NODE_ENV=test`.
+- ✅ **Hourly cron** ([apps/api/src/cron/appointment-reconcile.ts](apps/api/src/cron/appointment-reconcile.ts)) — `cron.schedule('0 * * * *', ...)` in index.ts calls `reconcileAllAppointments()` once an hour. Logs the count of changes when nonzero, silent otherwise. Push notifications (`events.watch`) deliberately deferred per spec ("Skip this for v1 of the refactor — hourly polling is fine").
+- ✅ **Routes** ([apps/api/src/routes/appointments.ts](apps/api/src/routes/appointments.ts)):
+  - `POST /api/appointments/:routine_key` — schedule (body: `{starts_at, duration_minutes?}`)
+  - `POST /api/appointments/:routine_key/reconcile` — force reconcile (returns `{routine_key, action, applied}`)
+  - `DELETE /api/appointments/:routine_key` — unlink (Mongo only, doesn't touch Google)
+  - `POST /api/appointments/reconcile-all` — admin trigger for the cron logic
+- ✅ **Seed update** ([apps/api/src/seed.ts](apps/api/src/seed.ts)) — new `APPOINTMENT_DEFAULTS` map sets `appointment.enabled: true` + `default_duration_minutes` on: `haircut` (60), `head_spa` (90), `brazilian_wax` (30), `massage` (60), `nails_apply` (60), `oil_change` (60), `car_inspection` (30), `tire_rotation` (30), `regular_cleaning` (180 — cleaner visits the house ~3h). Other routines get no appointment field.
+- ✅ **Dashboard** ([apps/dashboard/src/components/RoutinesPage.tsx](apps/dashboard/src/components/RoutinesPage.tsx)) — Routines page now shows a `📅 schedule` / `📅 linked` button per appointment-enabled routine (only — others get just the edit button). Click opens a `ScheduleAppointmentModal` with native `<input type="datetime-local">` (default: tomorrow at 10am local) + duration input (defaults to routine's `default_duration_minutes`). Submitting creates the event; an `unlink` button appears on already-linked routines that detaches without deleting the Calendar event. Errors surface inline.
+- ✅ **api.appointments** in [apps/dashboard/src/api.ts](apps/dashboard/src/api.ts) — `create(key, isoStartsAt, durationMinutes?)`, `reconcile(key)`, `unlink(key)`.
+- ✅ **3 new ActivityKinds**: `appointment_created`, `appointment_rescheduled`, `appointment_deleted_externally` (the `past_completed` branch logs as plain `task_done` with `metadata.source='calendar_reconcile'` for consistency with how completions are tracked elsewhere).
+
+**Spec deviations / design calls worth knowing:**
+
+1. **Today/Schedule views NOT updated to surface appointment times** — spec mentions "Today/Schedule views show appointment routines with their actual time, not just 'due today'" but I deferred this. Reason: it would mean threading `appointment.last_event_start` through `getDayView` / `scheduleRange` and updating multiple panel components, which is its own non-trivial change. Phase 4's core mechanic (linkage + reconcile cron + UI to create) is independently useful; the read-side polish is a follow-up. Tracked as an open gap below.
+2. **Re-seeding wipes `appointment.calendar_event_id` linkage** — existing `seed.ts` does `deleteMany` + `insertMany`. Same gotcha already documented in §21 for `last_done`. Worth flagging here too: **once Diane has linked real appointments, do not re-seed without manually preserving `appointment.*` fields**. Eventually we should switch seed to upsert-by-key. For now, only `start-tomorrow` (which preserves `last_done`) is safe to re-run.
+3. **`createAppointment` does NOT delete a previously-linked event** — if you call create on an already-linked routine, it creates a NEW event and orphans the old one in Google Calendar. The modal copy warns about this. The Mongo linkage moves to the new event; the old one stays in Google for Diane to clean up by hand. Rationale: deleting an event the user already moved around feels worse than orphaning a tagged event with a known `📅` prefix.
+4. **`past_completed` logs as `task_done` (not a new kind)** — keeps the completion timeline coherent (same activity-feed icon, same filters) and avoids adding a 4th appointment kind for what's semantically just "task got completed, source=Calendar."
+
+Test delta: **+18 tests** (15 in [apps/api/src/services/appointments.test.ts](apps/api/src/services/appointments.test.ts)). 6 exhaustive `diffAppointment` cases (transient failure / event gone two ways / past_completed two ways / rescheduled three ways / past beats reschedule). 9 I/O wrapper tests (createAppointment happy path + default duration + 4 reject paths; reconcile skip-paths; clearAppointmentLink). Reconcile happy paths through the Google API itself are NOT tested — that needs network mocking, same rationale as §40 Google Tasks. Service-layer + pure-decision coverage is the high-value testable seam.
+
+### Phase 5 — RocketMoney workflow: paste + CSV + history (~2-3 hr) — **SHIPPED 2026-05-10**
+
+**Finance tab gains 3 sub-sections** (replacing the current single `expense_breakdown` paste box):
+
+1. **Current profile** (existing UI) — gross, fixed expenses, tax estimate, etc. Save button writes a `FinancialProfileSnapshot` per Phase 2.
+2. **RocketMoney imports** —
+   - "Paste latest breakdown" textarea + Save button → writes `RocketMoneyImport` (kind=`paste`).
+   - "Upload CSV" button → multipart upload, stored raw, attempted parse (simple category aggregation), preview before save. Writes `RocketMoneyImport` (kind=`csv`).
+   - History list: most-recent-first, each row shows ts, source, total, and "View / Apply to profile / Edit" buttons. "Apply to profile" copies the parsed categories into `expense_breakdown` and saves a snapshot.
+3. **Submission history** — chronological list of `FinancialProfileSnapshot` entries; click to view the full state at that time; "Restore" button reverts the current profile (and writes a new snapshot of the restoration). Edit-in-place opens the standard profile editor pre-filled.
+
+**CSV parser**: keep simple. Most RocketMoney CSVs have columns roughly like `Date, Description, Category, Amount`. Parse by category, sum amounts in the file's date range, return `{ categories, total, period_start, period_end }`. If columns don't match expectation, save raw + flag "parse failed" — the raw is still in the DB.
+
+**File storage**: store CSV content as a UTF-8 string field on `RocketMoneyImport.raw` directly in Mongo. Keep it simple; CSVs are small (KB, not MB). Add a guard if raw > 1MB → reject with a clear error.
+
+Test delta: +~12 tests (finance-history, import, csv-parser).
+
+**What actually shipped in Phase 5:**
+
+- ✅ **CSV parser** ([apps/api/src/services/csv-parser.ts](apps/api/src/services/csv-parser.ts)) — pure module, no DB / no side effects. `parseRocketMoneyCsv(raw) → ParsedImport | null`. Detects required columns case-insensitively (`Date`, `Category`, `Amount`), tolerates extra columns, honors quoted CSV fields with embedded commas + escaped quotes, handles negative amounts in `-12.34` or `($12.34)` form, strips `$` and `,` from amounts. **Only counts outflows** (negative rows) so positive income/refunds don't skew the spending breakdown. Returns `null` when required columns are missing OR when no outflow rows exist — both cases preserve the raw payload upstream so nothing is lost. Plus exported helpers: `parseCsvLine`, `parseImportDate` (YYYY-MM-DD + M/D/YYYY, with overflow rejection via component round-trip), `parseAmount`, `formatParsedAsBreakdown` (renders ParsedImport as readable text for `expense_breakdown`).
+- ✅ **`applyImportToProfile(importId)`** added to [apps/api/src/services/finance-history.ts](apps/api/src/services/finance-history.ts). Bypasses `setFinancialProfile` deliberately so the resulting snapshot is tagged `paste_import` or `csv_import` (not `dashboard_edit`). Writes the import's text (raw for paste; `formatParsedAsBreakdown(parsed)` for CSV with `parsed`; fallback to raw for unparseable CSV) into `FinancialProfile.expense_breakdown`, calls `saveSnapshot`, sets `applied_to_snapshot_id` on the import doc, and logs `routine_edited` with `{import_id, import_kind, snapshot_id, fields: ['expense_breakdown']}` metadata. Throws on invalid ObjectId or missing import.
+- ✅ **`SnapshotSource` extended** to include `'paste_import'` alongside the existing `'dashboard_edit' | 'csv_import' | 'restore'` (Phase 2 commentary explicitly anticipated this).
+- ✅ **5 new HTTP routes** in [apps/api/src/routes/finance.ts](apps/api/src/routes/finance.ts):
+  - `GET /api/finance/imports?limit=N`
+  - `POST /api/finance/imports` — body `{kind, raw, filename?}`. Server attempts CSV parse, persists either way (raw is authoritative). **1MB `raw` byte-length guard** rejects with `413` per spec.
+  - `POST /api/finance/imports/:id/apply` — runs `applyImportToProfile`; returns `{profile, snapshot_id, import_id}`. 404 vs 400 routing based on error message.
+  - `GET /api/finance/snapshots?limit=N`
+  - `POST /api/finance/snapshots/:id/restore`
+- ✅ **Dashboard rebuild** ([apps/dashboard/src/components/FinancePanel.tsx](apps/dashboard/src/components/FinancePanel.tsx)):
+  - Removed the inline `expense_breakdown` textarea (the old "Save breakdown" button is gone — breakdowns now flow through the imports system).
+  - **`<FinanceImports>` panel** — pill toggle between **Paste** (textarea) and **CSV upload** (file input, `.csv` accept, 1MB client-side guard mirroring the server). Save button creates an import; the new import appears in the history list immediately (optimistic prepend). History rows show kind + filename + parsed summary (`N categories · $total`) or `parse failed (raw saved)` for CSVs that didn't match the expected columns. Each row has **View** (toggles a `<pre>` of `raw`) and **Apply to profile** buttons. An `applied` badge marks the row once it's been applied. Below the history, a collapsed `<details>` shows the current `expense_breakdown` for reference.
+  - **`<FinanceSnapshots>` panel** — chronological list of `FinancialProfileSnapshot` entries newest-first. Each row shows source label (`profile edit` / `paste` / `CSV` / `restore`) + a quick snapshot summary (gross + fixed). **View** toggles a JSON-formatted view of the full `profile` snapshot. **Restore** confirms via `window.confirm` (because restore overwrites the live profile) then calls the route; on success refreshes the profile form + snapshots list.
+  - Reload coordination: `FinancePanel` owns `importsReloadKey` + `snapshotsReloadKey` counters. Profile saves bump the snapshots key. Applying an import bumps both. Restoring bumps both + refreshes form fields. The sub-components consume the key as a `useEffect` dependency.
+- ✅ **`api.finance.imports.list/create/apply` + `api.finance.snapshots.list/restore`** in [apps/dashboard/src/api.ts](apps/dashboard/src/api.ts).
+
+**Test delta:** **+32 tests** (24 in `csv-parser.test.ts` + 7 `applyImportToProfile` in `finance-history.test.ts` + 1 from a parseImportDate edge case caught during dev). Comfortably above the spec's +~12 target — CSV parsing has more edge cases than route logic, and getting the parser right matters because if it silently misreads a CSV, applying it to the profile feeds bad data into the persona. New API total: **329** (vs 297 entering Phase 5).
+
+**Notable design calls:**
+
+1. **CSV parsing ignores positive rows** (income/refunds) — the spec said "Parse by category, sum amounts." Including income would mix categories Diane probably doesn't want to discuss with the Finance persona (e.g. "Income: $5,200" landing in expense_breakdown) and the refund case is even worse (it makes a category look cheaper than reality). Outflows only. If she wants income in the breakdown she can use the paste mode.
+2. **`parseImportDate` rejects out-of-range components** — JS's `Date` silently rolls overflow (`2026/13/40` → `2027-02-09`). Tests caught this. Fixed by round-tripping components after construction.
+3. **`applyImportToProfile` does NOT use `setFinancialProfile`** — that path tags snapshots `dashboard_edit`, which would make the history view lie about provenance. Applying writes the profile fields directly and calls `saveSnapshot('paste_import' | 'csv_import')` explicitly.
+4. **CSV uploads are read client-side as text and POSTed as JSON `{raw}`** rather than as `multipart/form-data`. Avoids adding a multer-style dep to the API; CSVs are KB-scale; 1MB guard is enforced on both ends. If we ever want truly big files (we shouldn't), revisit.
+5. **`window.confirm()` on Restore** — destructive operation that overwrites live profile values. A modal would be nicer; `confirm` is the minimum viable safety rail and adds zero code. Snapshot history itself is the real safety net (every restore writes a new snapshot, so it's reversible).
+6. **No dashboard test infra** — same situation as Phases 3 + 4. The high-value seam is the pure CSV parser, which gets exhaustively covered. Component flows aren't unit-tested; manual smoke needed.
+
+### Phase 6 — Alexa: Reminders + Shopping List + WhatsLeftIntent (~4-6 hr) — **SHIPPED 2026-05-10 (code-complete; LWA activation pending Diane)**
+
+**6a. Alexa Reminders integration** (replaces ad-hoc custom notifications for time-based items)
+
+- Add `alexa::devices:all:reminders:write` permission to skill manifest.
+- Account linking flow so the API can hold an Amazon-issued access token outside skill sessions (same flow needed for Shopping Lists, so build once).
+- New service `apps/api/src/services/alexa-reminders.ts` — `createReminder(text, scheduledTime, recurrence?)`.
+- Wire it from the appointment-reconcile cron: when an appointment is within 24h, create an Alexa Reminder if one doesn't already exist for that calendar_event_id (track in a new `AlexaReminder` collection: `{ calendar_event_id, alexa_reminder_id, created_at, expires_at }`).
+- Existing 6 AM daily brief (Publisher → Proactive Events) stays as the morning push.
+
+**6b. Alexa Shopping List integration** (for grocery persona handoff)
+
+- Add `alexa::household:lists:write` permission to skill manifest.
+- New endpoint `POST /api/alexa/shopping-list/add` — body `{ items: string[] }`. Calls the Alexa Lists API and adds each item. Returns success/failure per item.
+- Dashboard panel on Food tab: paste-from-Claude grocery list → parser splits into `## Section`-headed lines and `- qty item` rows → "Send to Alexa Shopping List" button → bulk-add → confirmation toast.
+- **Hard rule, encoded in the route and the dashboard copy**: this only writes to the Alexa shopping list. It does NOT touch any Amazon cart, never calls the Amazon Marketplace API, never places orders. The shopping list is a checklist for in-person shopping (TJ's, Costco, QFC). Add a one-line comment at the top of the route stating this rule.
+
+**6c. WhatsLeftIntent** ("What am I still missing for the day?")
+
+- New intent in `apps/alexa-skill/src/handlers/today.ts` — `WhatsLeftIntent`.
+- Server: `GET /api/today/whats-left` returns `{ items: [{ name, estimate_minutes }], total_minutes }` for today's plan items where `status !== 'done'`. Sorted by `order`.
+- Skill speaks: "You have 3 items left: bins to curb, scoop litter, and the kitchen reset. About 35 minutes total." If 0 left: "You're done for today."
+- Add to skill manifest sample utterances: "what am I still missing for the day", "what's left", "what do I have left today".
+
+Test delta: +~12 tests (alexa-reminders, shopping-list route, whats-left handler).
+
+**What actually shipped in Phase 6:**
+
+- ✅ **6c: WhatsLeftIntent (fully active)** — `whatsLeftToday()` in [apps/api/src/services/today.ts](apps/api/src/services/today.ts) returns `{items: [{name, estimate_minutes, routine_key}], total_minutes}` for plan items where `status !== 'done'`, sorted by `order`. Exposed at `GET /api/today/whats-left`. New `WhatsLeftHandler` in [apps/alexa-skill/src/handlers/today.ts](apps/alexa-skill/src/handlers/today.ts) speaks an Oxford-joined list: *"You have 3 items left: bins to curb, scoop litter, and the kitchen reset. About 35 minutes total."* Says *"You're done for today."* when zero. Interaction model gets 7 new sample utterances ("what am I still missing", "what's left to do", "what do I have left", etc.). Wired into `skill.ts`. **This one needs no Amazon-side setup beyond a skill model rebuild — it works immediately.**
+- ✅ **6b: Shopping List integration (code-complete; LWA pending)** — Pure parser [apps/api/src/services/grocery-list-parser.ts](apps/api/src/services/grocery-list-parser.ts) handles `## Section` headers + `-`/`*`/`•` bullet rows + ```` ``` ```` fences + optional `GROCERY LIST` title line + sections-as-h1-through-h6. Service [apps/api/src/services/alexa-shopping-list.ts](apps/api/src/services/alexa-shopping-list.ts) finds the user's default shopping list via `GET /v2/householdlists/`, then `POST`s items one at a time. Returns `{results, added, failed, status: 'ok' | 'no_token'}`. When LWA isn't configured (NODE_ENV=test OR no stored token), returns `status: 'no_token'` so the route can return a clear 503. **Hard rule** restated at the top of the service, the route, and the dashboard panel: this only writes to the Alexa shopping list — never an Amazon cart, never orders, never spends money. Route at `POST /api/alexa/shopping-list/add` with a 100-item cap and a 413 for over-cap. Dashboard [ShoppingListPanel.tsx](apps/dashboard/src/components/ShoppingListPanel.tsx) lives on the Food tab between the meal calendar and the persona launcher: paste textarea → live-parse preview grouped by section → "Send to Alexa" button with auth-status guard.
+- ✅ **6a: Reminders integration (code-complete; LWA pending)** — `createReminderForAppointment` in [apps/api/src/services/alexa-reminders.ts](apps/api/src/services/alexa-reminders.ts) is idempotent via the new `AlexaReminder` Mongo collection keyed on `calendar_event_id`. Posts to `/v1/alerts/reminders` with `SCHEDULED_ABSOLUTE` 30 min before the appointment. Returns `null` (clean no-op) when LWA isn't configured. Wired into the existing hourly `reconcileAppointmentsCron` ([apps/api/src/cron/appointment-reconcile.ts](apps/api/src/cron/appointment-reconcile.ts)) as a second pass: for every appointment-enabled routine with `last_event_start` within the next 24h, ensure a reminder exists. `clearLocalReminderForEvent` for cleanup when events are removed externally.
+- ✅ **LWA token plumbing** — [apps/api/src/services/alexa-lwa.ts](apps/api/src/services/alexa-lwa.ts) wraps the Login-with-Amazon token lifecycle. `getValidAccessToken()` returns the stored token, auto-refreshing via `https://api.amazon.com/auth/o2/token` (grant_type=refresh_token) if within 5 min of expiry. `saveAccessToken()` upserts the new `AlexaAuth` singleton. `alexaLwaConfigured()` for clean 503 routing. Returns `null` in NODE_ENV=test or when `ALEXA_CLIENT_ID`/`SECRET` aren't set. Manual token-save endpoint at `POST /api/alexa/lwa/save-token` for one-time bootstrap.
+- ✅ **Skill manifest updated** — [apps/alexa-skill/skill.json](apps/alexa-skill/skill.json) now declares `alexa::devices:all:reminders:write` + `alexa::household:lists:write` alongside the existing notifications permission. Diane needs to deploy this manifest (Alexa Developer Console → Build → Permissions section will show the new entries) before she can grant them in the Alexa app.
+- ✅ **Routes added** to `/api/alexa`:
+  - `GET /api/alexa/auth-status` — `{configured: boolean}` for the dashboard to decide whether to grey out the Send button
+  - `POST /api/alexa/shopping-list/add` — body `{items: string[]}`, caps 100
+  - `POST /api/alexa/lwa/save-token` — bootstrap LWA storage
+- ✅ **3 new Mongo models** — `AlexaAuth` (singleton token store), `AlexaReminder` (per-calendar-event idempotency key). No third — the second one carries both responsibilities I was planning.
+
+**Test delta:** **+20 tests** (8 grocery-list-parser, 2 whats-left, 4 alexa-shopping-list, 4 alexa-reminders, 2 from added vocabularies). New API total: **349** (was 329). Comfortably above the spec's +~12.
+
+**📋 Operational TODO for Diane to fully activate 6a + 6b:**
+
+Once-only setup (the code is shipped, but Amazon needs to know the skill wants these permissions):
+
+1. **Bump the deployed skill model** so the new permissions + WhatsLeftIntent take effect:
+   - In the Alexa Developer Console, open the Household Ops skill → **Build** → click **Save Model** then **Build Model**. (The local `skill.json` + `interaction-model.en-US.json` need to be uploaded via ASK CLI or pasted in.)
+   - Under **Build → Permissions**, you'll now see "Reminders" and "Lists Read/Write" checkboxes — ensure both are toggled on. Save.
+2. **Re-link the skill in the Alexa app** so it picks up the new permission scopes:
+   - Alexa app → Skills & Games → Your Skills → Household Ops → Disable → Enable.
+   - When re-enabling, accept the new permission prompts (Reminders + Lists).
+3. **(Optional, only if you want full out-of-session reminders)** Stand up a one-time LWA token bootstrap:
+   - In the Amazon Developer Console → **Login with Amazon** → create / find the security profile linked to your skill. Grab the `client_id` + `client_secret`. Make sure `ALEXA_CLIENT_ID` + `ALEXA_CLIENT_SECRET` are set in Render (you already use them for Proactive Events, so they should already be there).
+   - Run an interactive LWA OAuth flow once to get the initial `access_token` + `refresh_token` (a small CLI script or curl against `/auth/o2/token` with `grant_type=authorization_code`).
+   - POST the response body to `https://<your-render-url>.onrender.com/api/alexa/lwa/save-token` with the bearer token.
+   - After that the refresh loop maintains itself.
+
+Until step 3 is done, the dashboard ShoppingListPanel + reminders cron will gracefully no-op with clean 503s / null returns. **Nothing is broken without it; the new surfaces just don't actually push to Alexa yet.**
+
+**Design calls worth knowing:**
+
+1. **CSV/file uploads were not added to the shopping list flow** — only paste. The MealWeekCalendar already handles CSV-shaped data; adding a separate CSV upload for grocery lists felt redundant when the paste textarea handles GM's output verbatim.
+2. **Reminders use absolute time (`SCHEDULED_ABSOLUTE`), 30 min before the appointment** — feels right for haircut/oil-change cadence. If Diane wants different lead time per category (e.g. 24h before head_spa for prep), it'd go on the routine's appointment subdoc as a `lead_minutes` field — a small Phase 4.5 follow-up.
+3. **Tests deliberately exercise the no-token path** — `NODE_ENV=test` short-circuits LWA, same isolation pattern as Google Calendar + Tasks. The actual Amazon API calls would need network mocking to test, and historically that's been more brittle than valuable. Validate the live path by re-linking the skill and watching the reconcile cron logs.
+4. **`AlexaReminder` is keyed on `calendar_event_id`, not routine_key** — because a single routine may have multiple appointments over time (Diane reschedules head_spa quarterly). Idempotency at the event level prevents duplicate buzzes for the same booking; new bookings get fresh reminders.
+
+---
+
+## 49. Mobile responsive audit (2026-05-10 evening)
+
+After Phase 6, a quick pass to tighten layout on phones:
+
+- **`.app` padding** — adds `@media (max-width: 520px)` block in [styles.css](apps/dashboard/src/styles.css) that shrinks app padding from `2rem 1.25rem 5rem` → `1rem 0.75rem 4rem`, drops `h1` font-size from `1.85rem` → `1.5rem`, and tightens `.panel` + `.widget` padding by ~0.3rem. Visual: more horizontal real estate on a 375px-wide viewport.
+- **Finance outsourceable table** — wrapped in `<div style={{overflowX: 'auto'}}>` with `min-width: 24rem` on the table so it horizontally scrolls instead of forcing the whole page wider. Cells stay readable.
+- **What was already good** — `.tabs` and the header icon row already use `flex-wrap: wrap`, so they reflow on mobile. `.widget-grid` collapses to single-column under 640px. MealWeekCalendar has its own `@media (max-width: 600px)` breakpoint stacking the recipe body. ShoppingListPanel uses `width: 100%` textareas. PersonaLauncher's launcher button + system prompt textarea were already responsive.
+
+## 50. Home widget reorder + Journal full-width (2026-05-10 evening)
+
+Diane's request: Zone Check belongs right after Finance (it's a quick-pulse action that pairs naturally with the discretionary widget), and the Journal widget should take the full width since today's entries can be longer than half a card.
+
+[HomePanel.tsx](apps/dashboard/src/components/HomePanel.tsx) new order:
+
+1. TodayWidget (`.full-width`)
+2. CalendarWidget
+3. WorkoutsWidget
+4. FinanceWidget
+5. **ZoneChipWidget** (moved up from #7)
+6. ActivityWidget (`.full-width`)
+7. **JournalWidget (`.full-width`)** (was half-width)
+
+On desktop (≥640px) the grid is now: 1 full row + 2-up CalendarWidget+WorkoutsWidget + 2-up FinanceWidget+ZoneChipWidget + 2 full-width rows. On mobile: linear single column, same order.
+
+### Phase 7 — Timestamp visibility (~1-2 hr)
+
+Data is already timestamped. This phase makes it *visible*.
+
+- **Routines page**: each row shows `last_done` as a relative time ("3h ago", "yesterday", "5 days ago") + `appointment.last_synced_at` for appointment routines.
+- **Finance tab**: profile shows `updated_at` prominently; imports list shows ts on every row; snapshot history defaults to expanded.
+- **Home recent-activity widget**: last 6 ActivityLog entries with relative timestamps.
+- **Today rows**: completed items show "✓ at 9:42 AM" instead of just "✓".
+- **Log tab**: full timestamps + filterable by kind, actor, date range. Add a `?date=YYYY-MM-DD` query param wiring (already supported server-side per §36).
+- Add a small utility `apps/dashboard/src/utils/relativeTime.ts` (or use `Intl.RelativeTimeFormat`) — single source of truth for "3h ago" formatting across the app.
+
+Test delta: 0 (UI-only, no React test infra).
+
+---
+
+### Summary table
+
+| Phase | What | Effort | Test delta | Independently shippable? |
+|---|---|---|---|---|
+| 1 | Cleanup (delete dead chat infra) | 30 min | −4 | Yes |
+| 2 | Data model (snapshots + imports + appointment field) | 1-2 hr | +15 | Yes, but blocks 4 and 5 |
+| 3 | Home tab + tab compression | 3-4 hr | 0 | Yes |
+| 4 | Per-appointment calendar events | 4-6 hr | +10 | Yes |
+| 5 | RocketMoney paste + CSV + history | 2-3 hr | +12 | Yes |
+| 6 | Alexa Reminders + Shopping List + WhatsLeft | 4-6 hr | +12 | Yes |
+| 7 | Timestamp visibility polish | 1-2 hr | 0 | Yes |
+
+Recommended order: **1 → 2 → 3 → (4, 5, 6 in any order) → 7**. Diane can stop after Phase 3 and still have a substantially nicer system; can stop after Phase 5 and have the Finance workflow she described; full plan ends with Phase 7 polish.
+
+### Hyperfixate-burnout guard
+
+This plan represents 15-25 hours of work spread across phases. The system already works today. Build incrementally; ship each phase to the deployed app before starting the next so progress is visible. Don't merge Phases 4 + 6 in the same session — Google API debugging + Alexa API debugging in one sitting is a fast path to burnout.
 

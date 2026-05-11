@@ -22,6 +22,35 @@ function pickOutsource(r: InventoryFields) {
   };
 }
 
+/**
+ * Routines that map to a real-world scheduled appointment (Diane books a
+ * time, someone shows up or she shows up somewhere). When seeded with
+ * `appointment.enabled = true`, the Routines page surfaces a "📅 Schedule"
+ * button per §47 Phase 4 and the hourly reconcile cron starts watching for
+ * Google Calendar edits.
+ *
+ * Durations come from observed appointment lengths; Diane can adjust per-
+ * appointment via the schedule modal (overrides default for that occurrence).
+ */
+const APPOINTMENT_DEFAULTS: Record<string, number> = {
+  haircut: 60,
+  head_spa: 90,
+  brazilian_wax: 30,
+  massage: 60,
+  nails_apply: 60,
+  oil_change: 60,
+  car_inspection: 30,
+  tire_rotation: 30,
+  regular_cleaning: 180, // cleaner visits the house ~3 hours
+};
+
+function appointmentField(key: string) {
+  const minutes = APPOINTMENT_DEFAULTS[key];
+  return minutes
+    ? { appointment: { enabled: true, default_duration_minutes: minutes } }
+    : {};
+}
+
 const all = [
   ...inventory.rolling_routines.map((r) => ({
     key: r.key,
@@ -38,6 +67,7 @@ const all = [
     skip_if: (r as { skip_if?: string }).skip_if,
     active: true,
     ...pickOutsource(r),
+    ...appointmentField(r.key),
   })),
   ...inventory.fixed_routines.map((r) => ({
     key: r.key,

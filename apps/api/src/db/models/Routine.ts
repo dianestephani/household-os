@@ -13,6 +13,17 @@ const SchedulingSchema = new Schema(
   { _id: false },
 );
 
+const AppointmentSchema = new Schema(
+  {
+    enabled: { type: Boolean, default: false },
+    calendar_event_id: String,
+    default_duration_minutes: Number,
+    last_synced_at: Date,
+    last_event_start: Date,
+  },
+  { _id: false },
+);
+
 const RoutineSchema = new Schema(
   {
     key: { type: String, unique: true, required: true, index: true },
@@ -30,6 +41,7 @@ const RoutineSchema = new Schema(
     outsource_cost_estimate: { type: Number, default: 0 },
     budget_gated: { type: Boolean, default: false },
     cost_estimate: { type: Number, default: 0 },
+    appointment: { type: AppointmentSchema, default: undefined },
   },
   { timestamps: true },
 );

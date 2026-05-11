@@ -3,6 +3,7 @@ import { ContextEntry } from '../db/models/ContextEntry.js';
 import { householdTools, financeTools, getToolsForPersona } from './tools.js';
 import { household } from '@household-os/shared/personas/household';
 import { finance } from '@household-os/shared/personas/finance';
+import { grocery } from '@household-os/shared/personas/grocery';
 
 /**
  * The persona JSON tool schemas (in packages/shared/src/personas/*) and the
@@ -30,6 +31,43 @@ describe('persona tool wiring — every declared tool has an implementation', ()
     expect(getToolsForPersona('household')).toBe(householdTools);
     expect(getToolsForPersona('finance')).toBe(financeTools);
     expect('not_implemented' in getToolsForPersona('grocery')).toBe(true);
+  });
+});
+
+/**
+ * Each persona is hardcoded to its Claude.ai Project URL. The PersonaLauncher
+ * reads `config.projectUrl` directly — no more localStorage override. If
+ * Diane creates a new Project (or Anthropic changes the URL format), these
+ * tests fail loud at build time instead of silently linking to the wrong
+ * place.
+ */
+describe('persona Claude.ai Project URLs (hardcoded)', () => {
+  const URL_SHAPE = /^https:\/\/claude\.ai\/project\/[0-9a-f-]{36}$/;
+
+  it('household persona points to its canonical Project', () => {
+    expect(household.projectUrl).toBe(
+      'https://claude.ai/project/019e1022-63c0-752f-a25c-38f80dbc6cc2',
+    );
+    expect(household.projectUrl).toMatch(URL_SHAPE);
+  });
+
+  it('finance persona points to its canonical Project', () => {
+    expect(finance.projectUrl).toBe(
+      'https://claude.ai/project/019e1024-e34d-7631-9a50-83a964f5921c',
+    );
+    expect(finance.projectUrl).toMatch(URL_SHAPE);
+  });
+
+  it('grocery persona points to its canonical Project', () => {
+    expect(grocery.projectUrl).toBe(
+      'https://claude.ai/project/019e141a-8cbc-720d-843a-0732ad1293c2',
+    );
+    expect(grocery.projectUrl).toMatch(URL_SHAPE);
+  });
+
+  it('all three URLs are distinct (no copy/paste collisions)', () => {
+    const urls = [household.projectUrl, finance.projectUrl, grocery.projectUrl];
+    expect(new Set(urls).size).toBe(3);
   });
 });
 
