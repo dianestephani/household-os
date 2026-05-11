@@ -323,6 +323,48 @@ export interface WorkoutPattern {
   recent_streaks: { kind: 'done' | 'skipped'; length: number }[];
 }
 
+// ----- Meal weeks (Grocery Manager output) -----
+
+/**
+ * How much hands-on work a meal takes. Used by the dashboard for the
+ * day-pill badge so Diane can scan the week at a glance.
+ *   - 'cook' = real cooking session (~20-40 min)
+ *   - 'easy' = microwave / minimal prep (~5-10 min)
+ *   - 'grab' = pre-made leftover or no-effort pull-from-fridge
+ */
+export type MealEffort = 'cook' | 'easy' | 'grab';
+
+export interface MealDay {
+  /** Display label, e.g. "Monday, May 11" — used for the recipe panel header. */
+  day: string;
+  title: string;
+  effort: MealEffort;
+  /** Effort badge text incl. emoji, e.g. "🍳 Cook" / "⚡ Easy" / "🥡 Grab & Go". */
+  effort_label: string;
+  /** Hands-on time, e.g. "~30 min". */
+  time: string;
+  /** Approx protein per serving, e.g. "~45g protein". */
+  protein: string;
+  /** Servings/yield, e.g. "2-3 servings". */
+  servings: string;
+  /** Optional contextual note shown below the recipe body. */
+  note?: string;
+  ingredients: string[];
+  steps: string[];
+}
+
+export interface MealWeek {
+  _id?: string;
+  /** Monday of the week, YYYY-MM-DD. The unique key. */
+  start_date: string;
+  /** Optional display title, e.g. "High-protein, low-effort". */
+  title?: string;
+  /** Always 7 entries — Mon through Sun for `start_date`. */
+  meals: MealDay[];
+  created_at?: Date | string;
+  updated_at?: Date | string;
+}
+
 // ----- Activity log -----
 
 export type ActivityKind =
@@ -345,7 +387,8 @@ export type ActivityKind =
   | 'routine_edited'
   | 'context_logged'
   | 'finance_import_added'
-  | 'finance_snapshot_restored';
+  | 'finance_snapshot_restored'
+  | 'meal_week_saved';
 
 export type ActivityActor = 'user' | 'system' | 'cron';
 

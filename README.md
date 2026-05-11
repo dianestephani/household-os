@@ -43,6 +43,7 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | **Finance module** (gross-income profile, 2025 federal/FICA/state tax estimator, outsourceable monthly cost rollup, greedy-fit affordability report, RocketMoney free-text breakdown) | [apps/api/src/services/finance.ts](apps/api/src/services/finance.ts), [apps/api/src/routes/finance.ts](apps/api/src/routes/finance.ts), [apps/dashboard/src/components/FinancePanel.tsx](apps/dashboard/src/components/FinancePanel.tsx) |
 | **Context journal** (shared narrative log for both personas; free-form text + structured `dogsit_count` / `energy` / `mood` / `blocked_activities` / `tags` / `related_persona`) | [apps/api/src/services/context.ts](apps/api/src/services/context.ts), [apps/api/src/routes/context.ts](apps/api/src/routes/context.ts), [apps/dashboard/src/components/JournalPanel.tsx](apps/dashboard/src/components/JournalPanel.tsx) |
 | **Persona launchers** (Household Ops + Finance + Grocery Manager — system-prompt copy + per-persona Claude Project URL persisted in localStorage with a hardcoded default fallback; opens in claude.ai instead of running in-dashboard chat, so no Anthropic API key is required. On iOS, tapping the link prompts to open in the Claude app via Universal Links if installed.) | [apps/dashboard/src/components/PersonaLauncher.tsx](apps/dashboard/src/components/PersonaLauncher.tsx), [packages/shared/src/personas/](packages/shared/src/personas/) |
+| **Meal Week Calendar** (interactive 7-day meal calendar on the Food tab — day-pill strip + recipe panel with ingredients/steps/notes; week navigator ±7 days; paste-JSON admin that ingests Grocery Manager's `MEAL WEEK JSON` block from claude.ai; scoped warm cream/terracotta palette distinct from the rest of the dashboard) | [apps/api/src/services/meal-weeks.ts](apps/api/src/services/meal-weeks.ts), [apps/api/src/routes/meal-weeks.ts](apps/api/src/routes/meal-weeks.ts), [apps/dashboard/src/components/MealWeekCalendar.tsx](apps/dashboard/src/components/MealWeekCalendar.tsx), [packages/shared/src/sample-meal-week.json](packages/shared/src/sample-meal-week.json) |
 | **Persona tool definitions** (Household Ops + Finance tool schemas + runtime implementations — consumed by the MCP server. No in-API chat loop; chat happens on claude.ai or via MCP.) | [apps/api/src/persona/tools.ts](apps/api/src/persona/tools.ts), [packages/shared/src/personas/](packages/shared/src/personas/) |
 | **Alexa skill** (15 voice intents + multi-turn morning check-in + proactive app cards) | [apps/alexa-skill/](apps/alexa-skill/) |
 | **Theme + typography** (light/dark toggle persisted in localStorage with prefers-color-scheme fallback, Inter body + Fraunces display from Google Fonts, strict-grayscale palette + muted semantic colors) | [apps/dashboard/src/styles.css](apps/dashboard/src/styles.css), [apps/dashboard/src/components/ThemeToggle.tsx](apps/dashboard/src/components/ThemeToggle.tsx), [apps/dashboard/index.html](apps/dashboard/index.html) |
@@ -85,7 +86,7 @@ Open <http://localhost:5173>. The Home tab (widget grid) is the landing page; To
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 263 tests (253 API + 10 alexa-skill)
+npm test                 # all workspaces — currently 285 tests (275 API + 10 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 

@@ -21,6 +21,7 @@ import type {
   ContextRelatedPersona,
   DayView,
   FilingStatus,
+  MealWeek,
   MoodLog,
   ScheduleRangeResponse,
   FinancialProfile,
@@ -215,6 +216,29 @@ export const api = {
       request<ContextEntry>('/context', {
         method: 'POST',
         body: JSON.stringify({ ...entry, source: entry.source ?? 'dashboard' }),
+      }),
+  },
+  mealWeeks: {
+    list: (limit = 26) =>
+      request<MealWeek[]>(`/meal-weeks?limit=${limit}`),
+    get: (startDate: string) =>
+      request<MealWeek>(`/meal-weeks/${startDate}`),
+    byDate: (date: string) =>
+      request<{ week: MealWeek | null; requested_date: string }>(
+        `/meal-weeks/by-date/${date}`,
+      ),
+    adjacent: (startDate: string) =>
+      request<{ prev: MealWeek | null; next: MealWeek | null }>(
+        `/meal-weeks/${startDate}/adjacent`,
+      ),
+    upsert: (input: { start_date: string; title?: string; meals: unknown[] }) =>
+      request<MealWeek>('/meal-weeks', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    remove: (startDate: string) =>
+      request<{ deleted: boolean }>(`/meal-weeks/${startDate}`, {
+        method: 'DELETE',
       }),
   },
   zones: {

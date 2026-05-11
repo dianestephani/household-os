@@ -803,6 +803,7 @@ Section numbers in Part B are append-order, so they're not always sequential. Us
 - §43 — Tab persistence + date-aware Workouts/Activity/Journal/Finance + mobile refresh button
 - §44 — Zone-assessment multi-task split (comma-separated → N tasks)
 - §45 — Grocery Manager persona + Food tab (replaced Nutrition stub) — and the **Alexa Shopping List** integration that's deliberately not built yet
+- §48 — **Meal Week Calendar** (interactive Food-tab calendar fed by GM's `MEAL WEEK JSON` paste; new `MealWeek` collection + routes; scoped warm palette)
 
 **Data + content**
 - §21 — Routines added since v1 (current count: 48–56 depending on seed timing)
@@ -826,7 +827,7 @@ Section numbers in Part B are append-order, so they're not always sequential. Us
 
 The v1 plan is shipped and the system is running. The API is on Render (Starter $7/mo); MongoDB lives on Atlas free tier; the dashboard is also on Render as a free static site; the Alexa skill is mounted on the API at `POST /alexa` via `ask-sdk-express-adapter`. There's no separate Lambda. Google Calendar OAuth is wired and working (with the `tasks` scope added in §40). Google sign-in is the login wall on the deployed dashboard (§38). The Food tab is the Grocery Manager launcher (§45) — replacing the old Nutrition stub.
 
-**Current test status: 263 tests across 31 files (253 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
+**Current test status: 285 tests across 31 files (275 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
 
 The for-end-user reference is the **in-app Guide tab** (Dashboard → ❔ Guide); this HANDOFF is just for engineers/Claude.
 
@@ -1062,7 +1063,7 @@ If you (Claude) do work on this project: respect these — they're the substrate
 1. **Read the Part B Index** above for navigation. §1–§17 is the original v1 design; §18 onward is current truth. When they conflict, current truth wins.
 2. **Read the memory** at `~/.claude/projects/-Users-dianestephani-Documents-Projects-Personal-Projects-household-os/memory/MEMORY.md` — the index there lists 12+ memory files including ADHD/energy patterns, dietary constraints, beauty maintenance, finance tools, the chat-interface and session-persistence decisions, and the two-emails-distinction (`reference_emails.md`: personal Gmail for OAuth, work email for OMG context — NOT interchangeable).
 3. `git status` + `git log --oneline -20` to see what's been touched recently.
-4. **`npm test` should pass 263 tests across 31 files** (253 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
+4. **`npm test` should pass 285 tests across 31 files** (275 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
 5. Skim the subsystem sections relevant to whatever Diane asks about. §36 is the canonical route cheat sheet — bookmark that.
 6. Ask Diane what she wants to work on. **Default to small, contained changes** — she has the hyperfixate-burnout pattern noted in §1 and `hyperfixate_burnout` memory. Don't propose multi-week refactors unprompted. **Don't push chat-style interfaces** — she declined Claude.ai connectors, Claude Desktop, AND re-adding dashboard chat on 2026-05-10 (see `feedback_chat_interface_decision` memory). Voice (Alexa) + dashboard buttons + per-persona Claude.ai launchers is the chosen interaction model.
 7. If she shares qualitative context in conversation, log it via the journal — `POST /api/context` directly with `related_persona` and any extractable structured fields. Don't lose context to a session boundary.
@@ -1636,12 +1637,16 @@ All `/api/*` routes gated by `requireToken` middleware ([middleware/auth.ts](app
 | `/api/finance/outsourceable` | GET | Outsourceable routines with monthly cost math |
 | `/api/finance/affordability` | GET | Greedy-fit affordability report |
 | `/api/finance/estimate-tax` | POST | Pure compute — federal/FICA/state estimator |
+| `/api/meal-weeks` | GET / POST | List newest-first / upsert by `start_date` (§48) |
+| `/api/meal-weeks/by-date/:date` | GET | Find the meal week containing any day |
+| `/api/meal-weeks/:start_date` | GET / DELETE | Exact week / remove by Monday-of-week |
+| `/api/meal-weeks/:start_date/adjacent` | GET | Nearest stored prev + next weeks for nav |
 
 ---
 
 ## 46. Latest test count + coverage delta (running tally)
 
-As of 2026-05-10 end-of-day, post-§47 Phase 2: **263 tests across 31 files** (253 API + 10 alexa-skill). Was 251 pre-Phase 1, dropped to 247 after Phase 1 cleanup, now 263 after Phase 2 data-model tests.
+As of 2026-05-10 end-of-day, post-§48 Meal Week Calendar: **285 tests across 31 files** (275 API + 10 alexa-skill). Was 251 pre-Phase 1, dropped to 247 after Phase 1 cleanup, 263 after Phase 2 data-model tests, 285 after §48 meal-weeks. Phase 3 was UI-only and didn't move the count.
 
 Recent additions since the initial Part B write-up:
 
@@ -1659,6 +1664,7 @@ Recent additions since the initial Part B write-up:
 | §47 Phase 1 cleanup | runner.test.ts deleted | −4 | 247 |
 | §47 Phase 2 data model | finance-history.test.ts + finance.test.ts additions | +16 | 263 |
 | §47 Phase 3 visual refactor | UI-only (no dashboard test infra) | 0 | 263 |
+| §48 Meal week calendar | meal-weeks.test.ts | +22 | 285 |
 
 **Deliberately not tested** (with rationale, so a fresh Claude doesn't try to backfill these):
 
@@ -1668,6 +1674,62 @@ Recent additions since the initial Part B write-up:
 - **All dashboard components** — no React testing infrastructure. If introducing it, first regression candidates: `EnergyButtons` cancel-modal refetch fix (§42), `MoodButtons` prefill (§42), `isFinanceActivity` filter logic (§43 finance day log).
 
 Run `npm test` from the repo root any time to verify.
+
+---
+
+## 48. Meal week calendar (Food tab — 2026-05-10 evening)
+
+Off-roadmap pivot during Phase 3. Diane wanted the Food tab to host an interactive meal week calendar that the Grocery Manager persona feeds (claude.ai chat → JSON paste → dashboard rendering).
+
+### Meal-week architecture
+
+The Grocery Manager runs on claude.ai (not in-API per §34) and now emits a `MEAL WEEK JSON` block after the grocery list (per the updated system prompt in [packages/shared/src/personas/grocery.ts](packages/shared/src/personas/grocery.ts)). Diane pastes that JSON into the dashboard's Food tab; the dashboard POSTs to `/api/meal-weeks` and re-renders the calendar.
+
+### Meal-week backend
+
+- **Model** ([apps/api/src/db/models/MealWeek.ts](apps/api/src/db/models/MealWeek.ts)) — `start_date` (YYYY-MM-DD, unique, Monday-of-week) + optional `title` + `meals: MealDay[]` (embedded subdoc). Schema timestamps map to `created_at` / `updated_at`.
+- **Service** ([apps/api/src/services/meal-weeks.ts](apps/api/src/services/meal-weeks.ts)) — pure helpers `startOfWeek(Date)` (Monday-of-week math, `(getDay() + 6) % 7` since-Monday) and `shiftWeek(ymd, weeks)` for navigation arithmetic; `upsertMealWeek` validates input shape (required string fields, `effort ∈ {cook,easy,grab}`); `getMealWeek` / `getMealWeekByDate` / `listMealWeeks` for reads; `adjacentMealWeeks` returns nearest stored neighbors for nav; `deleteMealWeek` for cleanup. All read methods short-circuit `null` on malformed YYYY-MM-DD instead of throwing.
+- **Routes** ([apps/api/src/routes/meal-weeks.ts](apps/api/src/routes/meal-weeks.ts)):
+  - `GET /api/meal-weeks?limit=N` — newest-first list (limit clamped to [1, 200])
+  - `GET /api/meal-weeks/by-date/:date` — find the week containing any day
+  - `GET /api/meal-weeks/:start_date` — exact week (404 if missing)
+  - `GET /api/meal-weeks/:start_date/adjacent` — nearest prev/next neighbors
+  - `POST /api/meal-weeks` — upsert by start_date (returns 400 on validation failure)
+  - `DELETE /api/meal-weeks/:start_date`
+- **New ActivityKind** — `meal_week_saved` fires on every upsert with `{start_date, meal_count}` metadata.
+- **Mongoose conflict gotcha (worth knowing)**: do NOT include `start_date` in both `$set` AND `$setOnInsert` on `findOneAndUpdate`. Mongoose throws "would create a conflict at 'start_date'". The pattern across this codebase (mirrors `setFinancialProfile`) is: filter `{start_date}` + `$set: {mutables}` + `$setOnInsert: {start_date}`. Tests caught this on first run.
+
+### Meal-week frontend
+
+- **Component** ([apps/dashboard/src/components/MealWeekCalendar.tsx](apps/dashboard/src/components/MealWeekCalendar.tsx)) — top-level renders:
+  - Eyebrow + serif title + divider
+  - Week navigator (prev / next ±7 days + "Jump to this week" link when off-current)
+  - 7-day pill strip with active state + per-day effort badge (`Cook` / `Easy` / `Grab`)
+  - Recipe panel for the selected day: terracotta header with title + meta chips (time / protein / servings); 2-col body (ingredients + steps) collapsing to 1-col under 600px; optional gold-bordered note; bottom day-nav (prev/next).
+  - Empty state when no week exists for that Monday (paste admin still available)
+  - Collapsible `<details>` paste-JSON admin with "Load sample (May 11)" button, "Save week" submit, parse-error display. `extractJson()` strips ```` ``` ```` fences and the literal "MEAL WEEK JSON" header so Diane can paste the whole block verbatim.
+- **Sample JSON** ([packages/shared/src/sample-meal-week.json](packages/shared/src/sample-meal-week.json)) — the May 11–17 week from Diane's HTML mockup, with mojibake fixed (the original encoding mangled emojis and em-dashes). Bundled into the dashboard via the shared package's `exports` map. The "Load sample" button writes it into the paste textarea so it's a 2-click first-run experience.
+- **api.ts methods** — `api.mealWeeks.list/get/byDate/adjacent/upsert/remove` mirror the routes 1:1.
+
+### Meal-week styling
+
+The calendar uses a **scoped warm palette** (cream / terracotta / sage / gold) under `.meal-cal`, intentionally distinct from the rest of the dashboard's strict-grayscale theme — Diane explicitly chose to keep the warmth from her HTML mockup. CSS variables are namespaced `--mc-*` so they can't leak. Dark-mode variant darkens the cream backdrop but keeps terracotta + gold vivid.
+
+### Grocery Manager prompt update
+
+A new section 6 in the system prompt instructs GM to emit a `MEAL WEEK JSON` block alongside its grocery list, with the literal header line + JSON shape inline. Schema requirements (strict effort enum, ASCII quotes for JSON parsing, free-form `day` labels, optional `note`) are documented in-prompt so GM produces parseable output the first time.
+
+### Food tab structure (post-refactor)
+
+The header `🛒 Food` icon (Phase 3) routes to a stacked view: `<MealWeekCalendar />` on top (new, primary surface), `<PersonaLauncher persona="grocery" />` unchanged below (kept per Diane's preference so she can still hop into Claude.ai to generate next week's plan).
+
+### Meal-week test coverage
+
+22 in [apps/api/src/services/meal-weeks.test.ts](apps/api/src/services/meal-weeks.test.ts): `startOfWeek` (Mon/Wed/Sun cases), `shiftWeek` (+/- 7d, month rollover, malformed input), `upsertMealWeek` (create + log, overwrite-by-start_date, bad start_date, empty meals, missing required field, invalid effort), `getMealWeek` + `getMealWeekByDate` (null when empty, exact match, find-by-any-day, malformed), `adjacentMealWeeks` (nearest neighbors skip empty Mondays, null when only one), `listMealWeeks` (newest-first), `deleteMealWeek` (success + false when missing). New total: **275 API + 10 alexa-skill = 285 tests across 31 files**.
+
+**Not tested (deliberately):**
+- The dashboard component — no React testing infra in this repo. First regression candidates if it's ever introduced: `extractJson()` JSON-fence stripping, `parseYmd`/`ymd` round-trips, `shortEffortLabel()` emoji extraction.
+- The route layer — thin Express handlers over the service; service is fully covered.
 
 ---
 
