@@ -826,7 +826,7 @@ Section numbers in Part B are append-order, so they're not always sequential. Us
 
 The v1 plan is shipped and the system is running. The API is on Render (Starter $7/mo); MongoDB lives on Atlas free tier; the dashboard is also on Render as a free static site; the Alexa skill is mounted on the API at `POST /alexa` via `ask-sdk-express-adapter`. There's no separate Lambda. Google Calendar OAuth is wired and working (with the `tasks` scope added in §40). Google sign-in is the login wall on the deployed dashboard (§38). The Food tab is the Grocery Manager launcher (§45) — replacing the old Nutrition stub.
 
-**Current test status: 247 tests across 30 files (237 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
+**Current test status: 263 tests across 31 files (253 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
 
 The for-end-user reference is the **in-app Guide tab** (Dashboard → ❔ Guide); this HANDOFF is just for engineers/Claude.
 
@@ -840,7 +840,7 @@ The original §11 plan said Household Ops would be the only live persona, with N
 | **Finance** | Live (full tools) | Helps Diane decide what to outsource and answer "can I afford X" |
 | **Nutrition** | Still stub | Diane explicitly deprioritized; "Diane is starting with Household Ops; nutrition comes later" is the canned reply |
 
-Both live personas use Claude Opus 4.7 (`claude-opus-4-7`) with prompt caching on system prompt + tool definitions. Both have `log_context` and `recent_context` tools and call `recent_context` at the start of every conversation (see §22).
+Both live personas use Claude Sonnet 4.6 (`claude-sonnet-4-6`) — switched from Opus 4.7 on 2026-05-10 since persona chat now runs on claude.ai (the `model` field is documentation only; Claude Projects pick model in their own UI). Both have `log_context` and `recent_context` tools and call `recent_context` at the start of every conversation (see §22).
 
 ## 20. Finance subsystem (was a stub in v1; now real)
 
@@ -1062,7 +1062,7 @@ If you (Claude) do work on this project: respect these — they're the substrate
 1. **Read the Part B Index** above for navigation. §1–§17 is the original v1 design; §18 onward is current truth. When they conflict, current truth wins.
 2. **Read the memory** at `~/.claude/projects/-Users-dianestephani-Documents-Projects-Personal-Projects-household-os/memory/MEMORY.md` — the index there lists 12+ memory files including ADHD/energy patterns, dietary constraints, beauty maintenance, finance tools, the chat-interface and session-persistence decisions, and the two-emails-distinction (`reference_emails.md`: personal Gmail for OAuth, work email for OMG context — NOT interchangeable).
 3. `git status` + `git log --oneline -20` to see what's been touched recently.
-4. **`npm test` should pass 247 tests across 30 files** (237 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
+4. **`npm test` should pass 263 tests across 31 files** (253 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
 5. Skim the subsystem sections relevant to whatever Diane asks about. §36 is the canonical route cheat sheet — bookmark that.
 6. Ask Diane what she wants to work on. **Default to small, contained changes** — she has the hyperfixate-burnout pattern noted in §1 and `hyperfixate_burnout` memory. Don't propose multi-week refactors unprompted. **Don't push chat-style interfaces** — she declined Claude.ai connectors, Claude Desktop, AND re-adding dashboard chat on 2026-05-10 (see `feedback_chat_interface_decision` memory). Voice (Alexa) + dashboard buttons + per-persona Claude.ai launchers is the chosen interaction model.
 7. If she shares qualitative context in conversation, log it via the journal — `POST /api/context` directly with `related_persona` and any extractable structured fields. Don't lose context to a session boundary.
@@ -1641,7 +1641,7 @@ All `/api/*` routes gated by `requireToken` middleware ([middleware/auth.ts](app
 
 ## 46. Latest test count + coverage delta (running tally)
 
-As of 2026-05-10 end-of-day, post-§47 Phase 1: **247 tests across 30 files** (237 API + 10 alexa-skill). Was 251 before runner.test.ts was deleted in Phase 1.
+As of 2026-05-10 end-of-day, post-§47 Phase 2: **263 tests across 31 files** (253 API + 10 alexa-skill). Was 251 pre-Phase 1, dropped to 247 after Phase 1 cleanup, now 263 after Phase 2 data-model tests.
 
 Recent additions since the initial Part B write-up:
 
@@ -1657,6 +1657,7 @@ Recent additions since the initial Part B write-up:
 | §44 Zone multi-task | zones.test.ts (splitTaskNotes + multi) | +10 | 251 |
 | §45 Grocery Manager | (no count change — renames updated existing tests) | 0 | 251 |
 | §47 Phase 1 cleanup | runner.test.ts deleted | −4 | 247 |
+| §47 Phase 2 data model | finance-history.test.ts + finance.test.ts additions | +16 | 263 |
 
 **Deliberately not tested** (with rationale, so a fresh Claude doesn't try to backfill these):
 
@@ -1699,7 +1700,7 @@ Verified dead from the audit (see §47 audit, this session):
 
 Test delta: −4 tests (runner.test.ts). New total: **247 tests across 30 files** (237 API + 10 alexa-skill). Typecheck clean across all four workspaces.
 
-### Phase 2 — Data model changes (~1-2 hr)
+### Phase 2 — Data model changes (~1-2 hr) — **SHIPPED 2026-05-10**
 
 New collections, no breaking changes to existing data.
 
@@ -1730,21 +1731,23 @@ New collections, no breaking changes to existing data.
 }
 ```
 
-- `FinancialProfile` stays a singleton (the "current" view); every PATCH also writes a `FinancialProfileSnapshot`. `expense_breakdown` paste creates a `RocketMoneyImport` of kind=`paste`.
-- Add `Routine.appointment` field for per-appointment calendar events:
-  ```ts
-  appointment?: {
-    enabled: boolean,                      // true if this routine maps to a real calendar event
-    calendar_event_id?: string,            // populated after first create
-    default_duration_minutes?: number,     // e.g. head_spa = 90
-    last_synced_at?: Date,
-    last_event_start?: Date                // for diff detection
-  }
-  ```
-- New service `apps/api/src/services/finance-history.ts` with `saveSnapshot()`, `listSnapshots()`, `restoreSnapshot()`, `addImport()`, `listImports()`.
-- ActivityLog wiring: every `FinancialProfile` PATCH, every `RocketMoneyImport` write, every snapshot restore generates an ActivityLog entry with the actual changed-fields diff in metadata.
+**Shipped in Phase 2:**
 
-Test delta: +~15 tests (finance-history.test.ts, snapshot-on-patch in finance.test.ts, import.test.ts).
+- ✅ Two new Mongoose models: [apps/api/src/db/models/FinancialProfileSnapshot.ts](apps/api/src/db/models/FinancialProfileSnapshot.ts) (append-only, fields: `ts`, `source: 'dashboard_edit' | 'csv_import' | 'restore'`, `profile` as `Mixed`, optional `parent_snapshot_id`) and [apps/api/src/db/models/RocketMoneyImport.ts](apps/api/src/db/models/RocketMoneyImport.ts) (`ts`, `kind: 'paste' | 'csv'`, optional `filename`, required `raw`, optional `parsed: { categories: [{name, amount, count?}], total, period_start?, period_end? }`, optional `applied_to_snapshot_id`).
+- ✅ `Routine.appointment` subdoc added in [apps/api/src/db/models/Routine.ts](apps/api/src/db/models/Routine.ts) with the spec shape (`enabled` / `calendar_event_id` / `default_duration_minutes` / `last_synced_at` / `last_event_start`). No routines have it populated yet — Phase 4 wires the per-appointment event lifecycle.
+- ✅ Shared types in [packages/shared/src/types.ts](packages/shared/src/types.ts): `RoutineAppointment`, `FinancialProfileSnapshot`, `RocketMoneyImport`, `ParsedImport`, `SnapshotSource`, `ImportKind`, and two new `ActivityKind` values (`finance_import_added`, `finance_snapshot_restored`).
+- ✅ New service [apps/api/src/services/finance-history.ts](apps/api/src/services/finance-history.ts) with `saveSnapshot`, `listSnapshots`, `restoreSnapshot`, `addImport`, `listImports`. Reads the `FinancialProfile` model directly (no import from `finance.ts`) to avoid a circular dep, since `setFinancialProfile` calls `saveSnapshot`.
+- ✅ Snapshot-on-PATCH wired into [apps/api/src/services/finance.ts](apps/api/src/services/finance.ts) `setFinancialProfile`. Captures before-state, performs the write, snapshots after, builds a per-field `diff: { field: { before, after } }` over `DIFFABLE_FIELDS` (excludes `key` + `updated_at`), and stores `snapshot_id` + `diff` in the `routine_edited` activity-log metadata. Snapshot failure is logged but does NOT break the PATCH — activity logging is observational.
+- ✅ Activity-log entries: every PATCH still logs `routine_edited` (now with diff + snapshot_id metadata); `addImport` logs `finance_import_added` with `{kind, filename, parsed: {total, category_count}, raw_length}`; `restoreSnapshot` logs `finance_snapshot_restored` with `{restored_from, restored_from_ts, new_snapshot_id}`.
+
+**Routes intentionally NOT added yet.** Phase 2 is data-layer only. The HTTP surfaces for snapshot list / restore / import paste / import CSV ship in Phase 5 alongside the Finance tab redesign.
+
+**Test delta:** +16 tests (13 in `finance-history.test.ts` + 3 in `finance.test.ts`). New total: **263 tests across 31 files** (253 API + 10 alexa-skill).
+
+**Two design calls worth knowing:**
+
+1. **`SnapshotSource` extended to include `'restore'`** beyond the spec's `'dashboard_edit' | 'csv_import'`. Without it, `restoreSnapshot` couldn't tag the chained snapshot honestly. Future paste-vs-csv distinction in Phase 5 can extend further (`'paste_import'`) without breaking shape.
+2. **`saveSnapshot` reads the `FinancialProfile` model directly**, not via `getFinancialProfile()`, to avoid a circular import between `finance.ts ↔ finance-history.ts`. When no profile exists yet, it snapshots a default-shaped record rather than refusing — keeps the history honest about "what did the profile look like at this moment."
 
 ### Phase 3 — Visual refactor: Home + tab compression (~3-4 hr)
 

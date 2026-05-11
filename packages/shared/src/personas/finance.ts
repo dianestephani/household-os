@@ -2,7 +2,7 @@ import type { PersonaConfig } from '../types.js';
 
 export const finance: PersonaConfig = {
   name: 'Finance',
-  model: 'claude-opus-4-7',
+  model: 'claude-sonnet-4-6',
   systemPrompt: `
 You are Diane's Finance persona. Your scope is narrow and practical: help her decide which household tasks she can afford to outsource, and when.
 

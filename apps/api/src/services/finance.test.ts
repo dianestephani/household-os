@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { ActivityLog } from '../db/models/ActivityLog.js';
 import { FinancialProfile } from '../db/models/FinancialProfile.js';
+import { FinancialProfileSnapshot } from '../db/models/FinancialProfileSnapshot.js';
 import { Routine } from '../db/models/Routine.js';
 import {
   affordabilityReport,
@@ -97,6 +99,66 @@ describe('financial profile', () => {
     const all = await FinancialProfile.find({}).lean();
     expect(all.length).toBe(1);
     expect(all[0]?.monthly_gross_income).toBe(2000);
+  });
+
+  it('writes a snapshot on every PATCH and links it on the activity entry', async () => {
+    await setFinancialProfile({ monthly_gross_income: 4000, state: 'WA' });
+    await setFinancialProfile({ monthly_gross_income: 5500 });
+
+    const snaps = await FinancialProfileSnapshot.find({}).sort({ ts: 1 }).lean();
+    expect(snaps.length).toBe(2);
+    expect(snaps[0]?.source).toBe('dashboard_edit');
+    const firstProfile = snaps[0]?.profile as { monthly_gross_income?: number };
+    const secondProfile = snaps[1]?.profile as { monthly_gross_income?: number };
+    expect(firstProfile.monthly_gross_income).toBe(4000);
+    expect(secondProfile.monthly_gross_income).toBe(5500);
+
+    // Both PATCHes wrote a routine_edited entry; the most recent should
+    // reference the second snapshot.
+    const entries = await ActivityLog.find({ kind: 'routine_edited' })
+      .sort({ ts: -1 })
+      .lean();
+    expect(entries.length).toBe(2);
+    const meta = entries[0]?.metadata as { snapshot_id?: string };
+    expect(meta?.snapshot_id).toBe(String(snaps[1]?._id));
+  });
+
+  it('activity log records per-field diff on PATCH', async () => {
+    await setFinancialProfile({ monthly_gross_income: 4000, state: 'WA' });
+    await setFinancialProfile({
+      monthly_gross_income: 5500,
+      state: 'CA',
+      notes: 'started new gig',
+    });
+
+    const latest = await ActivityLog.findOne({ kind: 'routine_edited' })
+      .sort({ ts: -1 })
+      .lean();
+    const meta = latest?.metadata as {
+      diff?: Record<string, { before: unknown; after: unknown }>;
+      fields?: string[];
+    };
+    expect(meta?.fields).toEqual(
+      expect.arrayContaining(['monthly_gross_income', 'state', 'notes']),
+    );
+    expect(meta?.diff?.monthly_gross_income).toEqual({
+      before: 4000,
+      after: 5500,
+    });
+    expect(meta?.diff?.state).toEqual({ before: 'WA', after: 'CA' });
+    // notes was previously unset → before should be null
+    expect(meta?.diff?.notes?.before).toBeFalsy();
+    expect(meta?.diff?.notes?.after).toBe('started new gig');
+  });
+
+  it('first-ever save (no prior profile) records before=null in diff', async () => {
+    await setFinancialProfile({ monthly_gross_income: 3000 });
+    const entry = await ActivityLog.findOne({ kind: 'routine_edited' }).lean();
+    const meta = entry?.metadata as {
+      diff?: Record<string, { before: unknown; after: unknown }>;
+    };
+    expect(meta?.diff?.monthly_gross_income?.before).toBeNull();
+    expect(meta?.diff?.monthly_gross_income?.after).toBe(3000);
   });
 });
 

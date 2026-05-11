@@ -93,6 +93,30 @@ export interface Routine {
    * haircut, massage). Used by budget-gated suggestion logic.
    */
   cost_estimate?: number;
+  /**
+   * Per-appointment Google Calendar event for this routine, if applicable.
+   * Wired up in Phase 4 of §47 (see HANDOFF). When `enabled: true`, this
+   * routine maps to a real calendar event the user manages directly — Diane
+   * edits/reschedules in Google Calendar and the system picks up the change
+   * via the appointment-reconcile cron. Phase 2 ships only the shape.
+   */
+  appointment?: RoutineAppointment;
+}
+
+export interface RoutineAppointment {
+  enabled: boolean;
+  /** Populated after the first calendar event is created. */
+  calendar_event_id?: string;
+  /** Default minutes used when creating a new event (e.g. head_spa = 90). */
+  default_duration_minutes?: number;
+  /** When the reconcile cron last touched this routine's appointment. */
+  last_synced_at?: Date | string;
+  /**
+   * Start time of the last-known calendar event. Used by the reconcile cron
+   * to detect external edits — if `event.start.dateTime` differs from this,
+   * the user moved/rescheduled it in Calendar.
+   */
+  last_event_start?: Date | string;
 }
 
 // ----- Finance -----
@@ -124,6 +148,49 @@ export interface FinancialProfile {
    */
   expense_breakdown?: string;
   updated_at: Date | string;
+}
+
+/**
+ * Append-only history of `FinancialProfile` saves. Every PATCH to the
+ * singleton profile writes one of these so Diane can browse historical state
+ * and restore a prior snapshot.
+ */
+export type SnapshotSource = 'dashboard_edit' | 'csv_import' | 'restore';
+
+export interface FinancialProfileSnapshot {
+  _id?: string;
+  ts: Date | string;
+  source: SnapshotSource;
+  /** Full state of the profile at the moment of save. */
+  profile: FinancialProfile;
+  /** If this snapshot was created by restoring a prior one, points back to it. */
+  parent_snapshot_id?: string | null;
+}
+
+export type ImportKind = 'paste' | 'csv';
+
+/**
+ * Best-effort structured parse of a RocketMoney paste or CSV. Always optional
+ * — if parsing fails the raw text still lives on the record.
+ */
+export interface ParsedImport {
+  categories: { name: string; amount: number; count?: number }[];
+  total: number;
+  period_start?: Date | string;
+  period_end?: Date | string;
+}
+
+export interface RocketMoneyImport {
+  _id?: string;
+  ts: Date | string;
+  kind: ImportKind;
+  /** Filename, only set when kind='csv'. */
+  filename?: string;
+  /** Exact content as submitted. Authoritative even if `parsed` is set. */
+  raw: string;
+  parsed?: ParsedImport | null;
+  /** If the user clicked "Apply to profile," links to the snapshot it produced. */
+  applied_to_snapshot_id?: string | null;
 }
 
 export interface TaxEstimate {
@@ -276,7 +343,9 @@ export type ActivityKind =
   | 'check_in_skipped'
   | 'trigger_added'
   | 'routine_edited'
-  | 'context_logged';
+  | 'context_logged'
+  | 'finance_import_added'
+  | 'finance_snapshot_restored';
 
 export type ActivityActor = 'user' | 'system' | 'cron';
 

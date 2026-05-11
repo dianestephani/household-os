@@ -15,7 +15,7 @@ import type { PersonaConfig } from '../types.js';
  */
 export const grocery: PersonaConfig = {
   name: 'Grocery Manager',
-  model: 'claude-opus-4-7',
+  model: 'claude-sonnet-4-6',
   systemPrompt: `
 You are Diane's Grocery Manager — her food planning + shopping assistant.
 

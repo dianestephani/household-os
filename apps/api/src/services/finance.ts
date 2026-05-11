@@ -1,6 +1,7 @@
 import { FinancialProfile } from '../db/models/FinancialProfile.js';
 import { Routine } from '../db/models/Routine.js';
 import { logActivity } from './activity.js';
+import { saveSnapshot } from './finance-history.js';
 import type {
   FilingStatus,
   FinancialProfile as FinancialProfileType,
@@ -8,6 +9,19 @@ import type {
   OutsourceableSummaryItem,
   TaxEstimate,
 } from '@household-os/shared/types';
+
+/** Fields included in the snapshot diff. `key` and `updated_at` are excluded
+ *  — `key` never changes and `updated_at` is bumped on every save. */
+const DIFFABLE_FIELDS = [
+  'monthly_gross_income',
+  'monthly_tax_estimate',
+  'monthly_fixed_expenses',
+  'state',
+  'filing_status',
+  'monthly_extra_withholding',
+  'notes',
+  'expense_breakdown',
+] as const;
 
 const DAYS_PER_MONTH = 30;
 
@@ -58,14 +72,40 @@ export async function setFinancialProfile(input: {
   if (typeof input.expense_breakdown === 'string')
     update.expense_breakdown = input.expense_breakdown;
 
+  // Capture "before" state so the activity log can record a per-field diff.
+  // Falls back to null (= "no prior profile") for the first-ever save.
+  const before = await FinancialProfile.findOne({ key: 'self' }).lean();
+
   const updated = await FinancialProfile.findOneAndUpdate(
     { key: 'self' },
     { $set: update, $setOnInsert: { key: 'self' } },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   ).lean();
 
+  const diff: Record<string, { before: unknown; after: unknown }> = {};
+  for (const field of DIFFABLE_FIELDS) {
+    if (!(field in update)) continue;
+    const b = before ? (before as Record<string, unknown>)[field] : null;
+    const a = (update as Record<string, unknown>)[field];
+    if (b !== a) diff[field] = { before: b ?? null, after: a ?? null };
+  }
+
+  // Snapshot AFTER the write so the recorded state matches the new singleton.
+  // Failure here must not break the PATCH — wrap defensively.
+  let snapshotId: string | null = null;
+  try {
+    const snap = await saveSnapshot({ source: 'dashboard_edit' });
+    snapshotId = snap._id;
+  } catch (err) {
+    console.error('[finance] snapshot-on-patch failed', err);
+  }
+
   await logActivity('routine_edited', 'Updated financial profile', {
-    metadata: { fields: Object.keys(update) },
+    metadata: {
+      fields: Object.keys(update),
+      diff,
+      snapshot_id: snapshotId,
+    },
   });
 
   return updated as unknown as FinancialProfileType;

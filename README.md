@@ -84,7 +84,7 @@ Open <http://localhost:5173>. The Today tab is the landing page. The **❔ Guide
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 247 tests (237 API + 10 alexa-skill)
+npm test                 # all workspaces — currently 263 tests (253 API + 10 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 
