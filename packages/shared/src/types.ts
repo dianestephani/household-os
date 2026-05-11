@@ -388,7 +388,10 @@ export type ActivityKind =
   | 'context_logged'
   | 'finance_import_added'
   | 'finance_snapshot_restored'
-  | 'meal_week_saved';
+  | 'meal_week_saved'
+  | 'appointment_created'
+  | 'appointment_rescheduled'
+  | 'appointment_deleted_externally';
 
 export type ActivityActor = 'user' | 'system' | 'cron';
 

@@ -218,6 +218,34 @@ export const api = {
         body: JSON.stringify({ ...entry, source: entry.source ?? 'dashboard' }),
       }),
   },
+  appointments: {
+    create: (
+      routineKey: string,
+      startsAt: string,
+      durationMinutes?: number,
+    ) =>
+      request<{
+        routine: Routine;
+        calendar_event_id: string | null;
+        starts_at: string;
+        duration_minutes: number;
+        calendar_skipped: boolean;
+      }>(`/appointments/${routineKey}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          starts_at: startsAt,
+          duration_minutes: durationMinutes,
+        }),
+      }),
+    reconcile: (routineKey: string) =>
+      request<{
+        routine_key: string;
+        action: 'no_change' | 'rescheduled' | 'deleted' | 'past_completed';
+        applied: boolean;
+      }>(`/appointments/${routineKey}/reconcile`, { method: 'POST' }),
+    unlink: (routineKey: string) =>
+      request<Routine>(`/appointments/${routineKey}`, { method: 'DELETE' }),
+  },
   mealWeeks: {
     list: (limit = 26) =>
       request<MealWeek[]>(`/meal-weeks?limit=${limit}`),

@@ -827,7 +827,7 @@ Section numbers in Part B are append-order, so they're not always sequential. Us
 
 The v1 plan is shipped and the system is running. The API is on Render (Starter $7/mo); MongoDB lives on Atlas free tier; the dashboard is also on Render as a free static site; the Alexa skill is mounted on the API at `POST /alexa` via `ask-sdk-express-adapter`. There's no separate Lambda. Google Calendar OAuth is wired and working (with the `tasks` scope added in §40). Google sign-in is the login wall on the deployed dashboard (§38). The Food tab is the Grocery Manager launcher (§45) — replacing the old Nutrition stub.
 
-**Current test status: 285 tests across 31 files (275 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
+**Current test status: 303 tests across 32 files (293 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
 
 The for-end-user reference is the **in-app Guide tab** (Dashboard → ❔ Guide); this HANDOFF is just for engineers/Claude.
 
@@ -1057,13 +1057,15 @@ If you (Claude) do work on this project: respect these — they're the substrate
 - **Patterns-from-EnergyLog** — original §17 open question; still open.
 - **RocketMoney CSV import** — Diane currently pastes a free-form summary. Structured CSV ingestion is realistic but not built; expect 1099 + W-2 commingled rows.
 - **Multi-user** — single-user via shared bearer token. Original §17 open question; still open.
+- **Today/Schedule appointment time rendering** — appointment-enabled routines that have a linked Google Calendar event don't yet display the event's actual start time in the Today plan or Schedule preview; they still show as "due today" based on cadence math. Deferred from Phase 4 (see §47). Needs `appointment.last_event_start` threaded through `getDayView` + `scheduleRange` and the rendering panels updated.
+- **Re-seeding wipes appointment linkage** — once Diane has scheduled real Google Calendar appointments via Phase 4, re-running `seed.ts` blows away `appointment.calendar_event_id` + `last_event_start` (same delete+insert gotcha as `last_done`, §21). Switching `seed.ts` to upsert-by-key would fix this for both fields at once.
 
 ## 30. How a fresh Claude should pick up
 
 1. **Read the Part B Index** above for navigation. §1–§17 is the original v1 design; §18 onward is current truth. When they conflict, current truth wins.
 2. **Read the memory** at `~/.claude/projects/-Users-dianestephani-Documents-Projects-Personal-Projects-household-os/memory/MEMORY.md` — the index there lists 12+ memory files including ADHD/energy patterns, dietary constraints, beauty maintenance, finance tools, the chat-interface and session-persistence decisions, and the two-emails-distinction (`reference_emails.md`: personal Gmail for OAuth, work email for OMG context — NOT interchangeable).
 3. `git status` + `git log --oneline -20` to see what's been touched recently.
-4. **`npm test` should pass 285 tests across 31 files** (275 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
+4. **`npm test` should pass 303 tests across 32 files** (293 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
 5. Skim the subsystem sections relevant to whatever Diane asks about. §36 is the canonical route cheat sheet — bookmark that.
 6. Ask Diane what she wants to work on. **Default to small, contained changes** — she has the hyperfixate-burnout pattern noted in §1 and `hyperfixate_burnout` memory. Don't propose multi-week refactors unprompted. **Don't push chat-style interfaces** — she declined Claude.ai connectors, Claude Desktop, AND re-adding dashboard chat on 2026-05-10 (see `feedback_chat_interface_decision` memory). Voice (Alexa) + dashboard buttons + per-persona Claude.ai launchers is the chosen interaction model.
 7. If she shares qualitative context in conversation, log it via the journal — `POST /api/context` directly with `related_persona` and any extractable structured fields. Don't lose context to a session boundary.
@@ -1641,12 +1643,15 @@ All `/api/*` routes gated by `requireToken` middleware ([middleware/auth.ts](app
 | `/api/meal-weeks/by-date/:date` | GET | Find the meal week containing any day |
 | `/api/meal-weeks/:start_date` | GET / DELETE | Exact week / remove by Monday-of-week |
 | `/api/meal-weeks/:start_date/adjacent` | GET | Nearest stored prev + next weeks for nav |
+| `/api/appointments/:routine_key` | POST / DELETE | Schedule a calendar appointment / unlink it (§47 Phase 4) |
+| `/api/appointments/:routine_key/reconcile` | POST | Force reconcile against Google Calendar |
+| `/api/appointments/reconcile-all` | POST | Admin trigger for the hourly cron logic |
 
 ---
 
 ## 46. Latest test count + coverage delta (running tally)
 
-As of 2026-05-10 end-of-day, post-§48 Meal Week Calendar: **285 tests across 31 files** (275 API + 10 alexa-skill). Was 251 pre-Phase 1, dropped to 247 after Phase 1 cleanup, 263 after Phase 2 data-model tests, 285 after §48 meal-weeks. Phase 3 was UI-only and didn't move the count.
+As of 2026-05-10 end-of-day, post-§47 Phase 4 (appointments): **303 tests across 32 files** (293 API + 10 alexa-skill). Was 251 pre-Phase 1, dropped to 247 after Phase 1 cleanup, 263 after Phase 2 data-model tests, 285 after §48 meal-weeks, 303 after Phase 4 appointments. Phase 3 was UI-only and didn't move the count.
 
 Recent additions since the initial Part B write-up:
 
@@ -1665,6 +1670,7 @@ Recent additions since the initial Part B write-up:
 | §47 Phase 2 data model | finance-history.test.ts + finance.test.ts additions | +16 | 263 |
 | §47 Phase 3 visual refactor | UI-only (no dashboard test infra) | 0 | 263 |
 | §48 Meal week calendar | meal-weeks.test.ts | +22 | 285 |
+| §47 Phase 4 appointments | appointments.test.ts | +18 | 303 |
 
 **Deliberately not tested** (with rationale, so a fresh Claude doesn't try to backfill these):
 
@@ -1876,7 +1882,7 @@ Test delta: 0 (no dashboard tests today; documented in §46).
 
 Test delta: 0 (no dashboard test infra exists in this repo; documented in §46). If we ever add Vitest + Testing Library, the first regression candidates are: `readSavedView` legacy migration, `relativeTime` unit bucketing, `todayZone` day-of-year rotation, and the `JournalWidget` quick-add path.
 
-### Phase 4 — Per-appointment Calendar events + reconciliation (~4-6 hr)
+### Phase 4 — Per-appointment Calendar events + reconciliation (~4-6 hr) — **SHIPPED 2026-05-10**
 
 **Goals**:
 1. Appointment-style routines (head_spa, haircut, car maintenance, dogsit windows, Airbnb checkin/checkout) get their own real Google Calendar events.
@@ -1895,7 +1901,34 @@ Test delta: 0 (no dashboard test infra exists in this repo; documented in §46).
 
 **Conflict resolution**: Calendar wins always. The cadence math becomes a *suggestion* for next-appointment timing; the actual `last_done` is the calendar event's `start.dateTime` when it's in the past, regardless of what the system thought.
 
-Test delta: +~10 tests (appointments.test.ts mocking Google Calendar responses).
+**What actually shipped in Phase 4:**
+
+- ✅ **Pure decision function** [diffAppointment](apps/api/src/services/appointments.ts) — exhaustively unit-tested. Takes `{current: {calendar_event_id, last_event_start, last_done}, event: {start: Date|null} | 'gone' | null, now?}` and returns one of `{action: 'no_change' | 'rescheduled' | 'deleted' | 'past_completed', new_*?}`. Rules: transient lookup failure (event=null) → no_change; event gone + we had one → deleted; event start in past + last_done doesn't already cover it → past_completed (sets `last_done = event.start`, the "Calendar wins" rule); start differs from `last_event_start` → rescheduled; same → no_change. **Past_completed takes precedence over rescheduled.**
+- ✅ **I/O wrappers** ([apps/api/src/services/appointments.ts](apps/api/src/services/appointments.ts)):
+  - `createAppointment({routine_key, starts_at, duration_minutes?})` — validates routine exists + `appointment.enabled=true` + parseable ISO start. Builds Calendar event body (`📅 <routine.name>`, start/end), inserts via `createEvent`, persists `calendar_event_id` + `last_event_start` + `last_synced_at` + back-fills `default_duration_minutes` if not set. Logs `appointment_created` with `{routine_key, starts_at, duration_minutes, calendar_event_id, calendar_skipped}`. Falls back to `appointment.default_duration_minutes ?? 60` when caller omits `duration_minutes`. In `NODE_ENV=test` (or no Calendar client), Calendar is no-op and `calendar_event_id` lands as `null` with `calendar_skipped=true`.
+  - `reconcileAppointment(routineKey)` — calls `getEvent`, parses start, runs `diffAppointment`, applies the outcome to Mongo + logs `appointment_rescheduled` / `appointment_deleted_externally` / `task_done` (past_completed branch, actor='system', metadata.source='calendar_reconcile'). Always bumps `last_synced_at`.
+  - `reconcileAllAppointments()` — `Routine.find({appointment.enabled: true, appointment.calendar_event_id: {$ne: null}})` then reconciles each. Per-routine `try/catch` so one transient failure doesn't kill the batch.
+  - `clearAppointmentLink(routineKey)` — nulls `calendar_event_id` + `last_event_start` without touching the Google Calendar event itself. Used when Diane wants to detach but keep the event.
+- ✅ **Google Calendar util extended** ([apps/api/src/utils/google-calendar.ts](apps/api/src/utils/google-calendar.ts)): added `createEvent` (returns full event), `getEvent` (returns event | `'gone'` | `null` — 404/410/`status=cancelled` all map to `'gone'`; transient failures map to `null`), `deleteEvent` (idempotent — 404/410 count as success). All three short-circuit in `NODE_ENV=test`.
+- ✅ **Hourly cron** ([apps/api/src/cron/appointment-reconcile.ts](apps/api/src/cron/appointment-reconcile.ts)) — `cron.schedule('0 * * * *', ...)` in index.ts calls `reconcileAllAppointments()` once an hour. Logs the count of changes when nonzero, silent otherwise. Push notifications (`events.watch`) deliberately deferred per spec ("Skip this for v1 of the refactor — hourly polling is fine").
+- ✅ **Routes** ([apps/api/src/routes/appointments.ts](apps/api/src/routes/appointments.ts)):
+  - `POST /api/appointments/:routine_key` — schedule (body: `{starts_at, duration_minutes?}`)
+  - `POST /api/appointments/:routine_key/reconcile` — force reconcile (returns `{routine_key, action, applied}`)
+  - `DELETE /api/appointments/:routine_key` — unlink (Mongo only, doesn't touch Google)
+  - `POST /api/appointments/reconcile-all` — admin trigger for the cron logic
+- ✅ **Seed update** ([apps/api/src/seed.ts](apps/api/src/seed.ts)) — new `APPOINTMENT_DEFAULTS` map sets `appointment.enabled: true` + `default_duration_minutes` on: `haircut` (60), `head_spa` (90), `brazilian_wax` (30), `massage` (60), `nails_apply` (60), `oil_change` (60), `car_inspection` (30), `tire_rotation` (30), `regular_cleaning` (180 — cleaner visits the house ~3h). Other routines get no appointment field.
+- ✅ **Dashboard** ([apps/dashboard/src/components/RoutinesPage.tsx](apps/dashboard/src/components/RoutinesPage.tsx)) — Routines page now shows a `📅 schedule` / `📅 linked` button per appointment-enabled routine (only — others get just the edit button). Click opens a `ScheduleAppointmentModal` with native `<input type="datetime-local">` (default: tomorrow at 10am local) + duration input (defaults to routine's `default_duration_minutes`). Submitting creates the event; an `unlink` button appears on already-linked routines that detaches without deleting the Calendar event. Errors surface inline.
+- ✅ **api.appointments** in [apps/dashboard/src/api.ts](apps/dashboard/src/api.ts) — `create(key, isoStartsAt, durationMinutes?)`, `reconcile(key)`, `unlink(key)`.
+- ✅ **3 new ActivityKinds**: `appointment_created`, `appointment_rescheduled`, `appointment_deleted_externally` (the `past_completed` branch logs as plain `task_done` with `metadata.source='calendar_reconcile'` for consistency with how completions are tracked elsewhere).
+
+**Spec deviations / design calls worth knowing:**
+
+1. **Today/Schedule views NOT updated to surface appointment times** — spec mentions "Today/Schedule views show appointment routines with their actual time, not just 'due today'" but I deferred this. Reason: it would mean threading `appointment.last_event_start` through `getDayView` / `scheduleRange` and updating multiple panel components, which is its own non-trivial change. Phase 4's core mechanic (linkage + reconcile cron + UI to create) is independently useful; the read-side polish is a follow-up. Tracked as an open gap below.
+2. **Re-seeding wipes `appointment.calendar_event_id` linkage** — existing `seed.ts` does `deleteMany` + `insertMany`. Same gotcha already documented in §21 for `last_done`. Worth flagging here too: **once Diane has linked real appointments, do not re-seed without manually preserving `appointment.*` fields**. Eventually we should switch seed to upsert-by-key. For now, only `start-tomorrow` (which preserves `last_done`) is safe to re-run.
+3. **`createAppointment` does NOT delete a previously-linked event** — if you call create on an already-linked routine, it creates a NEW event and orphans the old one in Google Calendar. The modal copy warns about this. The Mongo linkage moves to the new event; the old one stays in Google for Diane to clean up by hand. Rationale: deleting an event the user already moved around feels worse than orphaning a tagged event with a known `📅` prefix.
+4. **`past_completed` logs as `task_done` (not a new kind)** — keeps the completion timeline coherent (same activity-feed icon, same filters) and avoids adding a 4th appointment kind for what's semantically just "task got completed, source=Calendar."
+
+Test delta: **+18 tests** (15 in [apps/api/src/services/appointments.test.ts](apps/api/src/services/appointments.test.ts)). 6 exhaustive `diffAppointment` cases (transient failure / event gone two ways / past_completed two ways / rescheduled three ways / past beats reschedule). 9 I/O wrapper tests (createAppointment happy path + default duration + 4 reject paths; reconcile skip-paths; clearAppointmentLink). Reconcile happy paths through the Google API itself are NOT tested — that needs network mocking, same rationale as §40 Google Tasks. Service-layer + pure-decision coverage is the high-value testable seam.
 
 ### Phase 5 — RocketMoney workflow: paste + CSV + history (~2-3 hr)
 

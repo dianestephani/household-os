@@ -33,6 +33,7 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | **MCP server** (Model Context Protocol — exposes a focused subset of household tools to Claude.ai's Custom Connectors at `/mcp` via Streamable HTTP. `add_ad_hoc_task`, `mark_done`, `log_context`, `log_mood`, `update_energy`, `log_workout`, `swap_task` + read tools to ground responses. Auth via `?token=` query param.) | [apps/api/src/mcp/server.ts](apps/api/src/mcp/server.ts), [apps/api/src/mcp/route.ts](apps/api/src/mcp/route.ts) |
 | **Calendar (today's events)** (passthrough to Google Calendar with normalized event shape, click-through to event + day permalinks) | [apps/api/src/services/calendar.ts](apps/api/src/services/calendar.ts), [apps/api/src/routes/calendar.ts](apps/api/src/routes/calendar.ts), [apps/dashboard/src/components/CalendarDayPanel.tsx](apps/dashboard/src/components/CalendarDayPanel.tsx) |
 | **Calendar trigger ingestion** (Airbnb, dogsit, landscaper, cleaner) | [apps/api/src/cron/calendar-ingest.ts](apps/api/src/cron/calendar-ingest.ts) |
+| **Per-appointment Calendar events** (appointment-enabled routines like haircut/head spa/oil change get their own Google Calendar event; hourly cron reconciles reschedules + cancellations + past-completions back into routine state — Calendar wins) | [apps/api/src/services/appointments.ts](apps/api/src/services/appointments.ts), [apps/api/src/cron/appointment-reconcile.ts](apps/api/src/cron/appointment-reconcile.ts), [apps/api/src/routes/appointments.ts](apps/api/src/routes/appointments.ts), [apps/dashboard/src/components/RoutinesPage.tsx](apps/dashboard/src/components/RoutinesPage.tsx) |
 | **Publisher** (debounced fan-out to Google Calendar + Alexa app cards) | [apps/api/src/publisher/](apps/api/src/publisher/) |
 | **Mood + energy logging** | [apps/api/src/services/mood.ts](apps/api/src/services/mood.ts), [apps/api/src/services/energy.ts](apps/api/src/services/energy.ts) |
 | **Workouts module** (today's slot, log status, history) | [apps/api/src/services/workouts.ts](apps/api/src/services/workouts.ts) |
@@ -86,7 +87,7 @@ Open <http://localhost:5173>. The Home tab (widget grid) is the landing page; To
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 285 tests (275 API + 10 alexa-skill)
+npm test                 # all workspaces — currently 303 tests (293 API + 10 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 
