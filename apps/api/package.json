@@ -15,7 +15,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.95.0",
     "@household-os/alexa-skill": "*",
     "@household-os/shared": "*",
     "@modelcontextprotocol/sdk": "^1.29.0",

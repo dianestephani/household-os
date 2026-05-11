@@ -675,5 +675,4 @@ export interface PersonaConfig {
   model: string;
   systemPrompt: string;
   tools: PersonaToolDef[];
-  stub?: boolean;
 }

@@ -8,7 +8,6 @@ import todayRouter from './routes/today.js';
 import routinesRouter from './routes/routines.js';
 import energyRouter from './routes/energy.js';
 import triggersRouter from './routes/triggers.js';
-import chatRouter from './routes/chat.js';
 import moodRouter from './routes/mood.js';
 import workoutsRouter from './routes/workouts.js';
 import patternsRouter from './routes/patterns.js';
@@ -99,7 +98,6 @@ app.get('/', (_req, res) => {
         '/api/day/:YYYY-MM-DD',
         '/api/tasks',
         '/api/auth/google',
-        '/api/chat/:persona',
       ],
     },
   });
@@ -114,7 +112,6 @@ app.use('/api/today', todayRouter);
 app.use('/api/routines', routinesRouter);
 app.use('/api/energy', energyRouter);
 app.use('/api/triggers', triggersRouter);
-app.use('/api/chat', chatRouter);
 app.use('/api/mood', moodRouter);
 app.use('/api/workouts', workoutsRouter);
 app.use('/api/patterns', patternsRouter);

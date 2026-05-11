@@ -16,9 +16,6 @@ import type { PersonaConfig } from '../types.js';
 export const grocery: PersonaConfig = {
   name: 'Grocery Manager',
   model: 'claude-opus-4-7',
-  // Launcher-only: hitting /api/chat/grocery returns a canned redirect rather
-  // than burning an API call. The real chat happens on Claude.ai.
-  stub: true,
   systemPrompt: `
 You are Diane's Grocery Manager — her food planning + shopping assistant.
 

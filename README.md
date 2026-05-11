@@ -11,7 +11,7 @@ For end-user docs (every voice command, every dashboard tab, every cron job, eve
 ```text
 household-os/
   packages/shared/       — types + seed inventory + persona configs
-  apps/api/              — Express + Mongoose + cron + publisher + persona chat + Alexa webhook
+  apps/api/              — Express + Mongoose + cron + publisher + MCP + Alexa webhook
   apps/dashboard/        — React + Vite frontend (incl. the in-app How-to Guide)
   apps/alexa-skill/      — Alexa custom skill (handlers, interaction model, deploy docs)
   render.yaml            — Render Blueprint for one-click prod deploy
@@ -43,7 +43,7 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | **Finance module** (gross-income profile, 2025 federal/FICA/state tax estimator, outsourceable monthly cost rollup, greedy-fit affordability report, RocketMoney free-text breakdown) | [apps/api/src/services/finance.ts](apps/api/src/services/finance.ts), [apps/api/src/routes/finance.ts](apps/api/src/routes/finance.ts), [apps/dashboard/src/components/FinancePanel.tsx](apps/dashboard/src/components/FinancePanel.tsx) |
 | **Context journal** (shared narrative log for both personas; free-form text + structured `dogsit_count` / `energy` / `mood` / `blocked_activities` / `tags` / `related_persona`) | [apps/api/src/services/context.ts](apps/api/src/services/context.ts), [apps/api/src/routes/context.ts](apps/api/src/routes/context.ts), [apps/dashboard/src/components/JournalPanel.tsx](apps/dashboard/src/components/JournalPanel.tsx) |
 | **Persona launchers** (Household Ops + Finance + Grocery Manager — system-prompt copy + per-persona Claude Project URL persisted in localStorage with a hardcoded default fallback; opens in claude.ai instead of running in-dashboard chat, so no Anthropic API key is required. On iOS, tapping the link prompts to open in the Claude app via Universal Links if installed.) | [apps/dashboard/src/components/PersonaLauncher.tsx](apps/dashboard/src/components/PersonaLauncher.tsx), [packages/shared/src/personas/](packages/shared/src/personas/) |
-| **Persona API chat** (kept for completeness — Household Ops + Finance both have full tool definitions and runner; not currently wired to the dashboard UI but the route exists at `/api/chat/:persona` for re-enabling later) | [apps/api/src/persona/](apps/api/src/persona/) |
+| **Persona tool definitions** (Household Ops + Finance tool schemas + runtime implementations — consumed by the MCP server. No in-API chat loop; chat happens on claude.ai or via MCP.) | [apps/api/src/persona/tools.ts](apps/api/src/persona/tools.ts), [packages/shared/src/personas/](packages/shared/src/personas/) |
 | **Alexa skill** (15 voice intents + multi-turn morning check-in + proactive app cards) | [apps/alexa-skill/](apps/alexa-skill/) |
 | **Theme + typography** (light/dark toggle persisted in localStorage with prefers-color-scheme fallback, Inter body + Fraunces display from Google Fonts, strict-grayscale palette + muted semantic colors) | [apps/dashboard/src/styles.css](apps/dashboard/src/styles.css), [apps/dashboard/src/components/ThemeToggle.tsx](apps/dashboard/src/components/ThemeToggle.tsx), [apps/dashboard/index.html](apps/dashboard/index.html) |
 | **Google sign-in wall** (Google Identity Services button on the dashboard, email allowlist, short-lived signed-JWT session in `sessionStorage` so the user re-auths on every fresh tab; API middleware accepts either the legacy `API_TOKEN` *or* a valid session JWT) | [apps/dashboard/src/components/LoginScreen.tsx](apps/dashboard/src/components/LoginScreen.tsx), [apps/dashboard/src/auth.ts](apps/dashboard/src/auth.ts), [apps/api/src/services/session.ts](apps/api/src/services/session.ts), [apps/api/src/middleware/auth.ts](apps/api/src/middleware/auth.ts), [apps/api/src/routes/auth.ts](apps/api/src/routes/auth.ts) |
@@ -59,7 +59,7 @@ npm install
 cp .env.example .env
 cp apps/dashboard/.env.example apps/dashboard/.env
 # (edit .env — at minimum: MONGO_URL. API_TOKEN can be empty for local dev.
-#  ANTHROPIC_API_KEY is no longer required — persona chat happens on claude.ai now.
+#  No Anthropic API key required — persona chat happens on claude.ai.
 #  GOOGLE_CALENDAR_* envs only needed if you want calendar/trigger ingestion.
 #  GOOGLE_OAUTH_CLIENT_ID + AUTH_ALLOWED_EMAIL + JWT_SECRET only needed if you
 #  want the Google login wall — leave blank locally to skip auth entirely.)
@@ -84,7 +84,7 @@ Open <http://localhost:5173>. The Today tab is the landing page. The **❔ Guide
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 251 tests (241 API + 10 alexa-skill)
+npm test                 # all workspaces — currently 247 tests (237 API + 10 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 
@@ -149,7 +149,7 @@ Setup, deployment paths, intent reference, and troubleshooting all live in [apps
 
 Render hosts the API (Express + cron + Alexa webhook). MongoDB lives separately on Atlas free tier. The dashboard can stay local — only the API needs to be public so Alexa can reach it.
 
-**Cost:** ~$7/mo (Render Starter Web Service) + $0 (Mongo Atlas free tier). Persona chat now runs on claude.ai (no Anthropic API charges) — the in-dashboard chat windows have been replaced with launchers that hand off to per-persona Claude Projects.
+**Cost:** ~$7/mo (Render Starter Web Service) + $0 (Mongo Atlas free tier). Persona chat runs on claude.ai (no Anthropic API charges) — the dashboard has launchers that hand off to per-persona Claude Projects.
 
 > The free Render tier won't work for this project — it sleeps after 15 min idle, which breaks every cron job (morning-gen, calendar-ingest, check-in generators). Starter ($7/mo) keeps the process always-on.
 
@@ -168,7 +168,6 @@ Render hosts the API (Express + cron + Alexa webhook). MongoDB lives separately 
    - Fill in the secret env vars Render prompts for:
      - `MONGO_URL` — your Atlas connection string (must end with `/household_os?...`)
      - `API_TOKEN` — `openssl rand -hex 32` (optional; leave blank for no auth on a single-user system)
-     - `ANTHROPIC_API_KEY` — **no longer required** since persona chat happens on claude.ai. Leave blank unless you want to re-enable the in-dashboard `/api/chat/:persona` route.
      - `ALEXA_SKILL_ID`, `ALEXA_CLIENT_ID`, `ALEXA_CLIENT_SECRET` — from the Alexa Developer Console (LWA pair only needed for proactive app-card push)
    - Click **Apply**. Render builds + deploys (~3-5 minutes).
 

@@ -775,13 +775,58 @@ End of handoff. Start with §15 step 1.
 
 ---
 
-# Part B — Post-v1 update (current as of 2026-05-09)
+# Part B — Post-v1 update (current as of 2026-05-10)
 
 > **Reading instructions for a fresh Claude instance:** §1–§17 above is the original v1 design doc. Everything in this Part B reflects what has actually been built and changed since the v1 scaffold. When the design doc and this section disagree, **trust this section** — the design doc is historical. Diane wants you to be fully caught up before you write any code. Don't re-do the original §15 build order; it's done.
 
+## Part B Index
+
+Section numbers in Part B are append-order, so they're not always sequential. Use this index to navigate.
+
+**Status + onboarding**
+- §18 — State of the system (deployed, test counts, what's running where)
+- §19 — Personas — current truth (Household, Finance live; Grocery Manager launcher-only)
+- §30 — **How a fresh Claude should pick up** (start here)
+
+**Built subsystems** (each entry is a complete design + impl record)
+- §20 — Finance module (gross income, tax estimator, outsourceable + affordability)
+- §22 — Context journal (shared narrative log with structured fields)
+- §31 — Calendar (today's events via Google Calendar OAuth passthrough)
+- §32 — Schedule preview (week/month look-ahead)
+- §33 — Theme + typography (light/dark toggle, Inter + Fraunces)
+- §34 — Persona handoff to claude.ai (launcher pattern, replaced in-dashboard chat)
+- §38 — Google sign-in wall (login on deployed dashboard, session JWT)
+- §39 — Day navigator (Today tab is date-aware)
+- §40 — Google Tasks integration (read + mark-done from dashboard)
+- §41 — Ad-hoc task creation + MCP server (built-but-unused-by-design)
+- §42 — Mood/Energy UI confirmation pattern + persona clarification principle
+- §43 — Tab persistence + date-aware Workouts/Activity/Journal/Finance + mobile refresh button
+- §44 — Zone-assessment multi-task split (comma-separated → N tasks)
+- §45 — Grocery Manager persona + Food tab (replaced Nutrition stub) — and the **Alexa Shopping List** integration that's deliberately not built yet
+
+**Data + content**
+- §21 — Routines added since v1 (current count: 48–56 depending on seed timing)
+- §24 — Inventory cadences worth knowing
+- §23 — Tax + finance UI (FinancePanel structure)
+
+**Operational**
+- §25 — Tests — coverage map
+- §26 — Operational / deployment notes (Atlas TLS, OAuth path resolution, OverwriteModelError)
+- §27 — Skill API additions (older cheat sheet — superseded by §36)
+- §28 — Memory + design principles in active use
+- §29 — Known gaps / open work
+- §35 — "Official launch tomorrow" script (`start-tomorrow`)
+- §36 — **Route cheat sheet (canonical, current)** — appears in the middle of Part B due to append-order
+
+**Process notes**
+- §37 — Merge from second HANDOFF / second-instance memory (2026-05-10 morning)
+- §46 — Latest test count + coverage delta
+
 ## 18. State of the system
 
-The v1 plan is shipped and the system is running. The API is on Render (Starter $7/mo); MongoDB lives on Atlas free tier; the dashboard is also on Render as a free static site; the Alexa skill is mounted on the API at `POST /alexa` via `ask-sdk-express-adapter`. There's no separate Lambda. Google Calendar OAuth is wired and working. 158 tests pass green; typecheck is clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).
+The v1 plan is shipped and the system is running. The API is on Render (Starter $7/mo); MongoDB lives on Atlas free tier; the dashboard is also on Render as a free static site; the Alexa skill is mounted on the API at `POST /alexa` via `ask-sdk-express-adapter`. There's no separate Lambda. Google Calendar OAuth is wired and working (with the `tasks` scope added in §40). Google sign-in is the login wall on the deployed dashboard (§38). The Food tab is the Grocery Manager launcher (§45) — replacing the old Nutrition stub.
+
+**Current test status: 247 tests across 30 files (237 API + 10 alexa-skill). Typecheck clean across all four workspaces (`shared`, `api`, `dashboard`, `alexa-skill`).**
 
 The for-end-user reference is the **in-app Guide tab** (Dashboard → ❔ Guide); this HANDOFF is just for engineers/Claude.
 
@@ -1014,12 +1059,22 @@ If you (Claude) do work on this project: respect these — they're the substrate
 
 ## 30. How a fresh Claude should pick up
 
-1. Read this whole HANDOFF (Part A for design, Part B for current truth).
-2. `git status` + `git log --oneline -20` to see what's been touched recently.
-3. `npm test` should be green (178 tests). `npm run typecheck` should be clean.
-4. Ask Diane what she wants to work on. Default to small, contained changes — she has the hyperfixate-burnout pattern noted in §1, so don't propose multi-week refactors unprompted.
-5. If she shares qualitative context in conversation, log it via the journal — `POST /api/context` directly. Don't lose context to a session boundary.
-6. The end-user reference is the **Dashboard → ❔ Guide tab**. If Diane asks "how do I X" and the answer is in there, point her at it before re-explaining.
+1. **Read the Part B Index** above for navigation. §1–§17 is the original v1 design; §18 onward is current truth. When they conflict, current truth wins.
+2. **Read the memory** at `~/.claude/projects/-Users-dianestephani-Documents-Projects-Personal-Projects-household-os/memory/MEMORY.md` — the index there lists 12+ memory files including ADHD/energy patterns, dietary constraints, beauty maintenance, finance tools, the chat-interface and session-persistence decisions, and the two-emails-distinction (`reference_emails.md`: personal Gmail for OAuth, work email for OMG context — NOT interchangeable).
+3. `git status` + `git log --oneline -20` to see what's been touched recently.
+4. **`npm test` should pass 247 tests across 30 files** (237 API + 10 alexa-skill). `npm run typecheck` should be clean across all 4 workspaces.
+5. Skim the subsystem sections relevant to whatever Diane asks about. §36 is the canonical route cheat sheet — bookmark that.
+6. Ask Diane what she wants to work on. **Default to small, contained changes** — she has the hyperfixate-burnout pattern noted in §1 and `hyperfixate_burnout` memory. Don't propose multi-week refactors unprompted. **Don't push chat-style interfaces** — she declined Claude.ai connectors, Claude Desktop, AND re-adding dashboard chat on 2026-05-10 (see `feedback_chat_interface_decision` memory). Voice (Alexa) + dashboard buttons + per-persona Claude.ai launchers is the chosen interaction model.
+7. If she shares qualitative context in conversation, log it via the journal — `POST /api/context` directly with `related_persona` and any extractable structured fields. Don't lose context to a session boundary.
+8. The end-user reference is the **Dashboard → ❔ Guide tab**. If Diane asks "how do I X" and the answer is in there, point her at it before re-explaining.
+
+### Top-of-mind operational gotchas
+
+- **Render env vars must use absolute `/etc/secrets/...` paths** for Google Calendar creds — not the `./google-creds.json` from `.env.example`. Diane hit this once.
+- **Atlas isn't seeded automatically.** After any inventory change, she has to run `npm -w @household-os/api run seed` against the Atlas connection string (or via Render Shell). `start-tomorrow` after that to space out cadences.
+- **Tasks API scope** was added to the Google OAuth token on 2026-05-10. If a future change requires re-consent, `npm -w @household-os/api run google-auth` regenerates the token; she must re-upload `google-token.json` to Render Secret Files afterward.
+- **MCP server is built but unwired** (§41). Don't try to wire it without an explicit ask — she declined this path twice.
+- **Session is 30-day localStorage** on the dashboard (§38, revised in §43 area). Don't switch to sessionStorage without an explicit ask — she reversed that decision after iOS 2FA friction.
 
 ---
 
@@ -1529,23 +1584,299 @@ Total: still **251 tests** (241 API + 10 alexa-skill).
 
 ---
 
-## 36. Route cheat sheet (current as of this Part B)
+## 36. Route cheat sheet (canonical — updated 2026-05-10)
+
+All `/api/*` routes gated by `requireToken` middleware ([middleware/auth.ts](apps/api/src/middleware/auth.ts)) — accepts `API_TOKEN` bearer, Google-issued session JWT (§38), or open-pass when neither is configured. Auth routes + `/mcp` have their own middleware.
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/api/today`, `/today/regenerate`, `/today/swap`, `/today/mark-done`, `/today/pull-from-pool` | GET / POST | Same as v1 |
-| `/api/routines`, `/api/routines/:key` | GET / PATCH | |
-| `/api/energy`, `/api/mood` | POST | |
-| `/api/workouts/today`, `/api/workouts` | GET / POST | |
-| `/api/zones`, `/api/zones/assess`, `/api/zones/tasks` | various | |
-| `/api/checkins/pending`, `/api/checkins/:id/answer`, `…/skip` | various | |
-| `/api/triggers` | GET / POST | |
-| `/api/patterns/deferrals`, `/api/patterns/workouts` | GET | |
-| `/api/activity` | GET | |
-| `/api/finance/profile`, `/api/finance/outsourceable`, `/api/finance/affordability`, `/api/finance/estimate-tax` | GET / PATCH / POST | |
-| `/api/context`, `/api/context/today` | GET / POST | journal |
-| **`/api/calendar/today`** | **GET** | **new — today's Google Calendar events normalized for the dashboard** |
-| **`/api/schedule?days=N`** | **GET** | **new — week / month look-ahead, calendar events + routines coming due** |
-| `/api/chat/:persona` | POST | Persona chat (still wired backend-side; no longer hit from the UI) |
-| `/alexa` | POST | Alexa webhook |
+| `/health` | GET | Health check (no auth) |
+| `/alexa` | POST | Alexa skill webhook (raw body, signature-verified) |
+| `/api/auth/google` | POST | Verify Google ID token → issue session JWT (mounted before `requireToken`, §38) |
+| `/mcp` | ALL | MCP server endpoint via Streamable HTTP transport. Auth via `?token=` query or Authorization header against `API_TOKEN`. Built but unwired-by-design (§41). |
+| `/api/today` | GET | Current TodayPlan (auto-generates if missing) |
+| `/api/today/regenerate` | POST | Force re-gen + activity log entry |
+| `/api/today/swap` | POST | Move item to swap_pool, optionally pull replacement |
+| `/api/today/mark-done` | POST | Mark plan item complete |
+| `/api/today/pull-from-pool` | POST | Bring item from swap_pool back into today |
+| `/api/day/:YYYY-MM-DD` | GET | DayView bundle (plan + forecast + events + tasks + context) — §39 |
+| `/api/schedule?days=N` | GET | Week/month look-ahead (events + routines coming due) — §32. Days clamped [1, 60]. |
+| `/api/calendar/today` | GET | Today's Google Calendar events normalized for dashboard — §31 |
+| `/api/tasks?date=YYYY-MM-DD` | GET | Google Tasks for that day — §40 |
+| `/api/tasks/backlog` | GET | Google Tasks with no due date |
+| `/api/tasks/complete`, `/api/tasks/uncomplete` | POST | Flip Google Task status |
+| `/api/routines` | GET | All active routines (optional `?category=` `?zone=` filters) |
+| `/api/routines/:key` | PATCH | Allow-list field update |
+| `/api/energy` | POST | Log energy + return suggested swaps |
+| `/api/energy?days=N` | GET | Recent energy logs |
+| `/api/mood` | POST / GET | Log mood / recent moods |
+| `/api/workouts` | GET | Recent workout logs |
+| `/api/workouts` | POST | Log a workout (upserts on date + slot_key) |
+| `/api/workouts/today` | GET | Today's slot + log |
+| `/api/workouts/by-date/:date` | GET | Same shape for any date — §43 |
+| `/api/zones/state` | GET | Latest assessment per zone |
+| `/api/zones/assessments?days=N` | GET | Recent assessments |
+| `/api/zones/tasks` | GET | Open ad-hoc tasks |
+| `/api/zones/tasks` | POST | **Direct ad-hoc task creation** (name + optional zone/severity/source) — §41 |
+| `/api/zones/tasks/:id/cancel` | POST | Cancel an ad-hoc task |
+| `/api/zones/assess` | POST | Record zone assessment; creates one ad-hoc task per comma-separated `notes` item — §44 |
+| `/api/checkins/pending` | GET | Currently pending check-ins |
+| `/api/checkins/:id/answer` | POST | Answer (also fires mood/energy side-effects) |
+| `/api/checkins/:id/skip` | POST | |
+| `/api/triggers` | GET / POST | Calendar/event triggers |
+| `/api/patterns/deferrals` | GET | Frequent-deferral pattern |
+| `/api/patterns/workouts` | GET | Workout summary + streaks |
+| `/api/activity?days=N&kind=…` | GET | Unified activity log (range) |
+| `/api/activity?date=YYYY-MM-DD` | GET | Activity for one day — §43 |
+| `/api/context?days=N` | GET | Journal entries (range) |
+| `/api/context?date=YYYY-MM-DD` | GET | Journal for one day — §43 |
+| `/api/context/today` | GET | Today's journal entries |
+| `/api/context` | POST | Add journal entry |
+| `/api/finance/profile` | GET / PATCH | Financial profile singleton |
+| `/api/finance/outsourceable` | GET | Outsourceable routines with monthly cost math |
+| `/api/finance/affordability` | GET | Greedy-fit affordability report |
+| `/api/finance/estimate-tax` | POST | Pure compute — federal/FICA/state estimator |
+
+---
+
+## 46. Latest test count + coverage delta (running tally)
+
+As of 2026-05-10 end-of-day, post-§47 Phase 1: **247 tests across 30 files** (237 API + 10 alexa-skill). Was 251 before runner.test.ts was deleted in Phase 1.
+
+Recent additions since the initial Part B write-up:
+
+| When | Section | Tests added | Total after |
+|---|---|---|---|
+| Initial Part B | §25 | (baseline) | 178 |
+| §38 Google sign-in | session.test.ts + auth.test.ts | +16 | 194 |
+| §39 Day navigator | day.test.ts | +7 | 201 |
+| §40 Google Tasks | tasks.test.ts | +8 | 209 |
+| §41 Ad-hoc + MCP | zones.test.ts (createAdHocTask) | +5 | 214 |
+| §42 Coverage backfill | routines.test.ts + alexa-push.test.ts | +17 | 231 |
+| §43 Date-aware tabs | activity.test.ts + context.test.ts + workouts.test.ts | +10 | 241 |
+| §44 Zone multi-task | zones.test.ts (splitTaskNotes + multi) | +10 | 251 |
+| §45 Grocery Manager | (no count change — renames updated existing tests) | 0 | 251 |
+| §47 Phase 1 cleanup | runner.test.ts deleted | −4 | 247 |
+
+**Deliberately not tested** (with rationale, so a fresh Claude doesn't try to backfill these):
+
+- `mcp/server.ts` + `mcp/route.ts` — transport mocking via `@hono/node-server` is more brittle than the test would catch. Service-layer code the MCP tools delegate to is fully covered.
+- `services/triggers.ts` — thin Mongoose wrapper, indirectly tested via activity-wiring.test.ts.
+- `utils/google-calendar.ts` + `utils/google-tasks.ts` — `NODE_ENV=test` short-circuits prevent real API calls; service-layer wrappers normalize.
+- **All dashboard components** — no React testing infrastructure. If introducing it, first regression candidates: `EnergyButtons` cancel-modal refetch fix (§42), `MoodButtons` prefill (§42), `isFinanceActivity` filter logic (§43 finance day log).
+
+Run `npm test` from the repo root any time to verify.
+
+---
+
+## 47. Refactor plan (2026-05-10 PM)
+
+Diane requested a holistic refactor focused on: (a) deeper integration with the tools she already uses (RocketMoney, Google Calendar, Alexa) without reinventing them, (b) two-way sync where missing, (c) a "one place to see everything" visual layout, (d) timestamping/tracking surfaced in the UI, (e) cleanup of unused code.
+
+This is broken into 7 phases. Each phase is independently shippable — Diane can stop at any phase and still have a coherent system. **Total estimated effort: ~15-25 hours.** Recommended order is as written; phases 4/5/6 are independent of each other.
+
+### Design principles for this refactor
+
+1. **Calendar is always source of truth for time-bound things.** Diane keeps it updated and uses Google Tasks regularly. When in conflict with our cadence math, Calendar wins.
+2. **Don't reprogram what Alexa/Google already do.** Use Alexa Reminders for time-based nudges (not custom notifications), Alexa Shopping Lists for the grocery handoff, Google Tasks for ad-hoc tasks where appropriate.
+3. **No automatic Amazon cart placements, ever.** Shopping list is a checklist for in-person shopping (TJ's, etc.). Hard rule.
+4. **Every submission is timestamped and historical.** Singletons that overwrite (`FinancialProfile` today) become append-only history with a "current view." User can browse + edit history.
+5. **Deletion of running infra requires the corresponding test/route also be deleted in the same change.** No dangling references.
+
+---
+
+### Phase 1 — Cleanup (~30 min) — **SHIPPED 2026-05-10**
+
+Verified dead from the audit (see §47 audit, this session):
+
+- ✅ **Deleted** `apps/dashboard/src/components/ChatPanel.tsx` — zero imports.
+- ✅ **Deleted** `apps/api/src/persona/runner.ts` and `apps/api/src/persona/runner.test.ts`. Chat moved to Claude.ai launchers per §34; in-API chat loop has no consumer.
+- ✅ **Deleted** `apps/api/src/routes/chat.ts`, unmounted `/api/chat/:persona` from [apps/api/src/index.ts](apps/api/src/index.ts), and dropped from §36 route cheat sheet + the root `/` endpoint docs list.
+- ✅ **Kept** `packages/shared/src/personas/{household,finance,grocery}.ts` — these define the system prompts Diane copy-pastes into each Claude.ai Project. They're documentation that compiles.
+- ✅ **Kept** `apps/api/src/persona/tools.ts` and `tools.test.ts` — MCP server uses these; the drift detector test is load-bearing.
+- ✅ **Removed** `@anthropic-ai/sdk` from `apps/api/package.json`. `npm install` removed 7 packages (SDK + transitive deps).
+- ✅ **Scrubbed README + .env.example** — removed `ANTHROPIC_API_KEY` row from `.env.example`, removed the "Persona API chat" subsystem row from README, replaced it with a "Persona tool definitions" row pointing at `persona/tools.ts` (consumed by MCP), updated the workspace blurb (`persona chat` → `MCP`), removed the `ANTHROPIC_API_KEY` line from the Render deploy section, and updated the test count line + cost-summary blurb.
+
+Test delta: −4 tests (runner.test.ts). New total: **247 tests across 30 files** (237 API + 10 alexa-skill). Typecheck clean across all four workspaces.
+
+### Phase 2 — Data model changes (~1-2 hr)
+
+New collections, no breaking changes to existing data.
+
+```ts
+// FinancialProfileSnapshot — append-only history of profile saves
+{
+  _id: ObjectId,
+  ts: Date,                                // when saved
+  source: 'dashboard_edit' | 'csv_import',
+  profile: { /* full snapshot of FinancialProfile fields at save time */ },
+  parent_snapshot_id?: ObjectId            // for edit-from-history flow
+}
+
+// RocketMoneyImport — every paste or CSV upload, raw + parsed
+{
+  _id: ObjectId,
+  ts: Date,
+  kind: 'paste' | 'csv',
+  filename?: string,                       // csv only
+  raw: string,                             // exact content as submitted
+  parsed?: {                               // best-effort categorization
+    categories: [{ name, amount, count? }],
+    total: number,
+    period_start?: Date,
+    period_end?: Date
+  },
+  applied_to_snapshot_id?: ObjectId        // if user clicked "apply to profile"
+}
+```
+
+- `FinancialProfile` stays a singleton (the "current" view); every PATCH also writes a `FinancialProfileSnapshot`. `expense_breakdown` paste creates a `RocketMoneyImport` of kind=`paste`.
+- Add `Routine.appointment` field for per-appointment calendar events:
+  ```ts
+  appointment?: {
+    enabled: boolean,                      // true if this routine maps to a real calendar event
+    calendar_event_id?: string,            // populated after first create
+    default_duration_minutes?: number,     // e.g. head_spa = 90
+    last_synced_at?: Date,
+    last_event_start?: Date                // for diff detection
+  }
+  ```
+- New service `apps/api/src/services/finance-history.ts` with `saveSnapshot()`, `listSnapshots()`, `restoreSnapshot()`, `addImport()`, `listImports()`.
+- ActivityLog wiring: every `FinancialProfile` PATCH, every `RocketMoneyImport` write, every snapshot restore generates an ActivityLog entry with the actual changed-fields diff in metadata.
+
+Test delta: +~15 tests (finance-history.test.ts, snapshot-on-patch in finance.test.ts, import.test.ts).
+
+### Phase 3 — Visual refactor: Home + tab compression (~3-4 hr)
+
+**Tab structure becomes:**
+
+| Tab | Status | Notes |
+|---|---|---|
+| **Home** | NEW, default | Widget grid (below) |
+| Today | Keep | Drill-down from Home |
+| Schedule | Keep | Merge in calendar.today + tasks views |
+| Workouts | Keep | |
+| Finance | Keep | Adds history + import panel |
+| Log | NEW (merge) | Activity + Journal combined, with a toggle |
+| Routines | Demote | Move to a "Settings" gear icon in header, not a top-level tab |
+| Food | Demote | Move to a top-bar launcher icon (single button → opens Claude.ai project) |
+| Household (DayPanel) | DELETE or merge | Overlaps with Today + Home; absorb its zone-assessment trigger into Home widget |
+| Guide | Demote | Move to ❔ icon in header |
+
+Result: **6 top-level tabs** (Home, Today, Schedule, Workouts, Finance, Log) + 3 header icons (Routines/⚙️, Food/🛒, Guide/❔). Tab persistence (§43) still applies.
+
+**Home widget grid (mobile-friendly, single column → 2-col on desktop):**
+
+1. **Today summary** — N of M items done; one-tap to Today tab. Shows the next 2 incomplete items inline.
+2. **Calendar today strip** — Google Calendar events for today; one-tap to Schedule tab.
+3. **Workouts** — this week's hit count vs target; today's workout slot if any.
+4. **Finance** — discretionary $/mo, top 2 outsourceables not yet covered, last RocketMoney import date.
+5. **Recent activity ticker** — last 6 ActivityLog entries with relative timestamps ("3h ago", "yesterday"). Tap → Log tab.
+6. **Journal/context strip** — today's ContextEntry text if any; "+" to add one quickly.
+7. **Zone assessment chip** — "How's the kitchen look right now?" rotating prompt; one-tap to assess.
+
+**Visual polish:**
+- Card-based layout for widgets; consistent 12px radius; existing CSS tokens.
+- Skeleton loaders on first paint (not spinners).
+- Empty states with one-sentence help text + a single CTA button.
+- Refresh button (§43 mobile) on every widget header.
+
+Test delta: 0 (no dashboard tests today; documented in §46).
+
+### Phase 4 — Per-appointment Calendar events + reconciliation (~4-6 hr)
+
+**Goals**:
+1. Appointment-style routines (head_spa, haircut, car maintenance, dogsit windows, Airbnb checkin/checkout) get their own real Google Calendar events.
+2. If Diane edits/moves/deletes one in Calendar, the system picks it up and updates the routine's `last_done`/`next_due`.
+3. The existing daily checklist event (§10 Publisher) stays — it's a summary, not appointment-level.
+
+**Build:**
+
+- Update `routines/seed.ts` (or add a migration) to mark appropriate routines `appointment.enabled = true` with default durations.
+- New service `apps/api/src/services/appointments.ts`:
+  - `createAppointment(routineKey, startsAt, durationMinutes?)` → inserts Google Calendar event, persists `routine.appointment.calendar_event_id`.
+  - `syncAppointmentFromCalendar(routineKey)` → fetches event by stored id, compares `event.start.dateTime` to `routine.appointment.last_event_start`. If different: update routine, log ActivityLog `appointment_rescheduled`. If event missing (404): clear `calendar_event_id`, log `appointment_deleted_externally`.
+- New cron `apps/api/src/cron/appointment-reconcile.ts` — runs hourly. Iterates routines with `appointment.enabled = true && calendar_event_id != null`, calls `syncAppointmentFromCalendar()`.
+- Optional but recommended: **Google Calendar push notifications (watch API)** for a dedicated "Household" calendar. Requires a public webhook (`POST /api/calendar/webhook`) and Google Calendar's `events.watch`. Eliminates the polling delay. **Skip this for v1 of the refactor** — hourly polling is fine.
+- UI: Routines page gets a "📅 Schedule appointment" button per appointment-enabled routine. Today/Schedule views show appointment routines with their actual time, not just "due today."
+
+**Conflict resolution**: Calendar wins always. The cadence math becomes a *suggestion* for next-appointment timing; the actual `last_done` is the calendar event's `start.dateTime` when it's in the past, regardless of what the system thought.
+
+Test delta: +~10 tests (appointments.test.ts mocking Google Calendar responses).
+
+### Phase 5 — RocketMoney workflow: paste + CSV + history (~2-3 hr)
+
+**Finance tab gains 3 sub-sections** (replacing the current single `expense_breakdown` paste box):
+
+1. **Current profile** (existing UI) — gross, fixed expenses, tax estimate, etc. Save button writes a `FinancialProfileSnapshot` per Phase 2.
+2. **RocketMoney imports** —
+   - "Paste latest breakdown" textarea + Save button → writes `RocketMoneyImport` (kind=`paste`).
+   - "Upload CSV" button → multipart upload, stored raw, attempted parse (simple category aggregation), preview before save. Writes `RocketMoneyImport` (kind=`csv`).
+   - History list: most-recent-first, each row shows ts, source, total, and "View / Apply to profile / Edit" buttons. "Apply to profile" copies the parsed categories into `expense_breakdown` and saves a snapshot.
+3. **Submission history** — chronological list of `FinancialProfileSnapshot` entries; click to view the full state at that time; "Restore" button reverts the current profile (and writes a new snapshot of the restoration). Edit-in-place opens the standard profile editor pre-filled.
+
+**CSV parser**: keep simple. Most RocketMoney CSVs have columns roughly like `Date, Description, Category, Amount`. Parse by category, sum amounts in the file's date range, return `{ categories, total, period_start, period_end }`. If columns don't match expectation, save raw + flag "parse failed" — the raw is still in the DB.
+
+**File storage**: store CSV content as a UTF-8 string field on `RocketMoneyImport.raw` directly in Mongo. Keep it simple; CSVs are small (KB, not MB). Add a guard if raw > 1MB → reject with a clear error.
+
+Test delta: +~12 tests (finance-history, import, csv-parser).
+
+### Phase 6 — Alexa: Reminders + Shopping List + WhatsLeftIntent (~4-6 hr)
+
+**6a. Alexa Reminders integration** (replaces ad-hoc custom notifications for time-based items)
+
+- Add `alexa::devices:all:reminders:write` permission to skill manifest.
+- Account linking flow so the API can hold an Amazon-issued access token outside skill sessions (same flow needed for Shopping Lists, so build once).
+- New service `apps/api/src/services/alexa-reminders.ts` — `createReminder(text, scheduledTime, recurrence?)`.
+- Wire it from the appointment-reconcile cron: when an appointment is within 24h, create an Alexa Reminder if one doesn't already exist for that calendar_event_id (track in a new `AlexaReminder` collection: `{ calendar_event_id, alexa_reminder_id, created_at, expires_at }`).
+- Existing 6 AM daily brief (Publisher → Proactive Events) stays as the morning push.
+
+**6b. Alexa Shopping List integration** (for grocery persona handoff)
+
+- Add `alexa::household:lists:write` permission to skill manifest.
+- New endpoint `POST /api/alexa/shopping-list/add` — body `{ items: string[] }`. Calls the Alexa Lists API and adds each item. Returns success/failure per item.
+- Dashboard panel on Food tab: paste-from-Claude grocery list → parser splits into `## Section`-headed lines and `- qty item` rows → "Send to Alexa Shopping List" button → bulk-add → confirmation toast.
+- **Hard rule, encoded in the route and the dashboard copy**: this only writes to the Alexa shopping list. It does NOT touch any Amazon cart, never calls the Amazon Marketplace API, never places orders. The shopping list is a checklist for in-person shopping (TJ's, Costco, QFC). Add a one-line comment at the top of the route stating this rule.
+
+**6c. WhatsLeftIntent** ("What am I still missing for the day?")
+
+- New intent in `apps/alexa-skill/src/handlers/today.ts` — `WhatsLeftIntent`.
+- Server: `GET /api/today/whats-left` returns `{ items: [{ name, estimate_minutes }], total_minutes }` for today's plan items where `status !== 'done'`. Sorted by `order`.
+- Skill speaks: "You have 3 items left: bins to curb, scoop litter, and the kitchen reset. About 35 minutes total." If 0 left: "You're done for today."
+- Add to skill manifest sample utterances: "what am I still missing for the day", "what's left", "what do I have left today".
+
+Test delta: +~12 tests (alexa-reminders, shopping-list route, whats-left handler).
+
+### Phase 7 — Timestamp visibility (~1-2 hr)
+
+Data is already timestamped. This phase makes it *visible*.
+
+- **Routines page**: each row shows `last_done` as a relative time ("3h ago", "yesterday", "5 days ago") + `appointment.last_synced_at` for appointment routines.
+- **Finance tab**: profile shows `updated_at` prominently; imports list shows ts on every row; snapshot history defaults to expanded.
+- **Home recent-activity widget**: last 6 ActivityLog entries with relative timestamps.
+- **Today rows**: completed items show "✓ at 9:42 AM" instead of just "✓".
+- **Log tab**: full timestamps + filterable by kind, actor, date range. Add a `?date=YYYY-MM-DD` query param wiring (already supported server-side per §36).
+- Add a small utility `apps/dashboard/src/utils/relativeTime.ts` (or use `Intl.RelativeTimeFormat`) — single source of truth for "3h ago" formatting across the app.
+
+Test delta: 0 (UI-only, no React test infra).
+
+---
+
+### Summary table
+
+| Phase | What | Effort | Test delta | Independently shippable? |
+|---|---|---|---|---|
+| 1 | Cleanup (delete dead chat infra) | 30 min | −4 | Yes |
+| 2 | Data model (snapshots + imports + appointment field) | 1-2 hr | +15 | Yes, but blocks 4 and 5 |
+| 3 | Home tab + tab compression | 3-4 hr | 0 | Yes |
+| 4 | Per-appointment calendar events | 4-6 hr | +10 | Yes |
+| 5 | RocketMoney paste + CSV + history | 2-3 hr | +12 | Yes |
+| 6 | Alexa Reminders + Shopping List + WhatsLeft | 4-6 hr | +12 | Yes |
+| 7 | Timestamp visibility polish | 1-2 hr | 0 | Yes |
+
+Recommended order: **1 → 2 → 3 → (4, 5, 6 in any order) → 7**. Diane can stop after Phase 3 and still have a substantially nicer system; can stop after Phase 5 and have the Finance workflow she described; full plan ends with Phase 7 polish.
+
+### Hyperfixate-burnout guard
+
+This plan represents 15-25 hours of work spread across phases. The system already works today. Build incrementally; ship each phase to the deployed app before starting the next so progress is visible. Don't merge Phases 4 + 6 in the same session — Google API debugging + Alexa API debugging in one sitting is a fast path to burnout.
 
