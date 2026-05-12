@@ -4,6 +4,8 @@ Diane's "Household Ops" assistant — a single-user system that knows her recurr
 
 The original v1 design lives in [HANDOFF.md](./HANDOFF.md). This README covers what's actually shipped — including everything we've built since the v1 scaffold.
 
+> **Rebuild in progress** — HANDOFF §50 documents a re-simplification of this system to a "three-view" shape (Today / Look Back / Stuff) with a single unified Claude assistant in place of the three-persona launcher pattern. **Phase A (scaffolding for the unified assistant) shipped 2026-05-11** — see HANDOFF §51. Phases B-G follow. The old persona launchers still work through the transition.
+
 For end-user docs (every voice command, every dashboard tab, every cron job, every privacy boundary), open the dashboard and click the **❔ Guide** tab in the top-right of the nav. That's the canonical reference; this README is just for orientation + setup.
 
 ## What's in here
@@ -47,6 +49,7 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | **Persona launchers** (Household Ops + Finance + Grocery Manager — each persona's `config.projectUrl` is hardcoded to its canonical Claude.ai Project. Opens in claude.ai with no Anthropic API key required; on iOS, tapping the link prompts to open in the Claude app via Universal Links if installed. The full system prompt is rendered alongside with a Copy button for re-pasting into the Project settings.) | [apps/dashboard/src/components/PersonaLauncher.tsx](apps/dashboard/src/components/PersonaLauncher.tsx), [packages/shared/src/personas/](packages/shared/src/personas/) |
 | **Meal Week Calendar** (interactive 7-day meal calendar on the Food tab — day-pill strip + recipe panel with ingredients/steps/notes; week navigator ±7 days; paste-JSON admin that ingests Grocery Manager's `MEAL WEEK JSON` block from claude.ai; scoped warm cream/terracotta palette distinct from the rest of the dashboard) | [apps/api/src/services/meal-weeks.ts](apps/api/src/services/meal-weeks.ts), [apps/api/src/routes/meal-weeks.ts](apps/api/src/routes/meal-weeks.ts), [apps/dashboard/src/components/MealWeekCalendar.tsx](apps/dashboard/src/components/MealWeekCalendar.tsx), [packages/shared/src/sample-meal-week.json](packages/shared/src/sample-meal-week.json) |
 | **Persona tool definitions** (Household Ops + Finance tool schemas + runtime implementations — consumed by the MCP server. No in-API chat loop; chat happens on claude.ai or via MCP.) | [apps/api/src/persona/tools.ts](apps/api/src/persona/tools.ts), [packages/shared/src/personas/](packages/shared/src/personas/) |
+| **Unified assistant chat** (§50 Phase A — single Claude assistant replacing the three-persona split. `POST /api/chat` runs a tool-use loop with prompt caching on system prompt + 14 wired tools; versioned system prompt in `AssistantSettings` is the live source of truth, seed lives in shared. Returns a clean offline message when `ANTHROPIC_API_KEY` isn't set, so deploys without the key still serve well-formed responses. UI surfaces ship in Phases B + E) | [packages/shared/src/persona/assistant.ts](packages/shared/src/persona/assistant.ts), [apps/api/src/persona/runner.ts](apps/api/src/persona/runner.ts), [apps/api/src/persona/assistant-tools.ts](apps/api/src/persona/assistant-tools.ts), [apps/api/src/services/assistant-settings.ts](apps/api/src/services/assistant-settings.ts), [apps/api/src/routes/chat.ts](apps/api/src/routes/chat.ts), [apps/api/src/routes/assistant-settings.ts](apps/api/src/routes/assistant-settings.ts) |
 | **Alexa skill** (16 voice intents including WhatsLeftIntent + multi-turn morning check-in + proactive app cards) | [apps/alexa-skill/](apps/alexa-skill/) |
 | **Alexa Shopping List integration** (Food tab "Send to Alexa Shopping List" — paste Grocery Manager's list, parse `## section` headers + bullet rows, bulk-add to your default Alexa list. **Read-only — never touches Amazon cart, never places orders.** Requires one-time LWA permission grant in the Alexa app) | [apps/api/src/services/alexa-shopping-list.ts](apps/api/src/services/alexa-shopping-list.ts), [apps/api/src/services/grocery-list-parser.ts](apps/api/src/services/grocery-list-parser.ts), [apps/dashboard/src/components/ShoppingListPanel.tsx](apps/dashboard/src/components/ShoppingListPanel.tsx) |
 | **Alexa Reminders for appointments** (hourly cron creates an Alexa Reminder 30 min before each scheduled appointment, idempotent per calendar event; requires same LWA permission grant) | [apps/api/src/services/alexa-reminders.ts](apps/api/src/services/alexa-reminders.ts), [apps/api/src/cron/appointment-reconcile.ts](apps/api/src/cron/appointment-reconcile.ts) |
@@ -65,7 +68,9 @@ npm install
 cp .env.example .env
 cp apps/dashboard/.env.example apps/dashboard/.env
 # (edit .env — at minimum: MONGO_URL. API_TOKEN can be empty for local dev.
-#  No Anthropic API key required — persona chat happens on claude.ai.
+#  ANTHROPIC_API_KEY enables `POST /api/chat` (§50 Phase A); leave blank and
+#  the route returns a `{live: false}` offline message. The launcher-mode
+#  per-persona chat (Claude.ai Projects) still works without a key.
 #  GOOGLE_CALENDAR_* envs only needed if you want calendar/trigger ingestion.
 #  GOOGLE_OAUTH_CLIENT_ID + AUTH_ALLOWED_EMAIL + JWT_SECRET only needed if you
 #  want the Google login wall — leave blank locally to skip auth entirely.)
@@ -90,7 +95,7 @@ Open <http://localhost:5173>. The Home tab (widget grid) is the landing page; To
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 359 tests (349 API + 10 alexa-skill)
+npm test                 # all workspaces — currently 380 tests (370 API + 10 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 
@@ -101,6 +106,7 @@ Coverage spans:
 - **Services** — finance (profile + tax estimator + outsourceable + affordability), context journal, calendar (day-range + URL helpers + event normalization + connected/disconnected states), schedule (rolling/fixed/event-driven/zone-rotation bucketing + skip_if + window clamping + pending ad-hoc), today/swap/defer/pull, zones (assessments + ad-hoc tasks), checkins, mood/energy, workouts, patterns, activity log
 - **Cron** — morning-gen (rolling + fixed + zone rotation + event-driven + skip_if + ad-hoc), calendar-ingest, deferral edge cases
 - **Persona wiring** — every tool declared in the persona schemas has a matching implementation in [apps/api/src/persona/tools.ts](apps/api/src/persona/tools.ts) (catches schema/impl drift; this matters even with launcher-mode personas because the API tool runtime is still maintained)
+- **Unified assistant** (§50 Phase A) — assistant-settings auto-seed + version-push + reset + empty-prompt rejection; assistant-tools drift detector + deferred-tool exclusion + create/delete-routine validation + tax-estimator math; runner offline path + tool-use loop + unknown-tool `is_error` recovery + round-cap bailout
 - **Auth** — session JWT round-trip + tamper-rejection + secret-rotation rejection + length-requirement enforcement; allowlist case-insensitive + comma-separated + closed-by-default; middleware accepts `API_TOKEN` *or* a valid JWT, rejects bad/missing bearers, open-passes when nothing is configured
 - **Routines CRUD** — `patchRoutine` allow-list silently drops disallowed fields (`key`, `_id`, anything off the curated list); list filters by category + zone; soft delete flips `active` without removing the doc
 - **Zone-assessment multi-task split** — `splitTaskNotes` (empty/null/whitespace → []; commas split; segments trimmed; empty segments dropped; only commas separate — semicolons / slashes / newlines stay inside a segment) and `recordAssessment` (one task per comma-separated item, single-item notes still produce 1 task, fallback to default name when all segments are empty, one activity log entry per task, all tasks linked to same source assessment)
@@ -155,7 +161,7 @@ Setup, deployment paths, intent reference, and troubleshooting all live in [apps
 
 Render hosts the API (Express + cron + Alexa webhook). MongoDB lives separately on Atlas free tier. The dashboard can stay local — only the API needs to be public so Alexa can reach it.
 
-**Cost:** ~$7/mo (Render Starter Web Service) + $0 (Mongo Atlas free tier). Persona chat runs on claude.ai (no Anthropic API charges) — the dashboard has launchers that hand off to per-persona Claude Projects.
+**Cost:** ~$7/mo (Render Starter Web Service) + $0 (Mongo Atlas free tier) + $5-15/mo Anthropic API (only if you enable §50 Phase A's `/api/chat` — prompt caching keeps the input cost low). Per-persona launchers still hand off to claude.ai for $0 if you'd rather not pay for the API.
 
 > The free Render tier won't work for this project — it sleeps after 15 min idle, which breaks every cron job (morning-gen, calendar-ingest, check-in generators). Starter ($7/mo) keeps the process always-on.
 
@@ -192,12 +198,12 @@ Push to `master` → Render auto-deploys. Logs are in the Render dashboard.
 
 ### Costs after first month
 
-| Service            | Tier                                    | Monthly  |
-| ------------------ | --------------------------------------- | -------- |
-| Render Web Service | Starter (always-on)                     | $7       |
-| MongoDB Atlas      | M0 (free, 512 MB)                       | $0       |
-| Anthropic API      | not used — persona chat is on claude.ai | $0       |
-| **Total**          |                                         | **~$7**  |
+| Service            | Tier                                         | Monthly    |
+| ------------------ | -------------------------------------------- | ---------- |
+| Render Web Service | Starter (always-on)                          | $7         |
+| MongoDB Atlas      | M0 (free, 512 MB)                            | $0         |
+| Anthropic API      | optional — unified `/api/chat` (§50 Phase A) | $0-15      |
+| **Total**          |                                              | **~$7-22** |
 
 ### Hosting the dashboard too
 

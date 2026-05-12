@@ -13,7 +13,8 @@
     "./personas/household": "./src/personas/household.ts",
     "./personas/grocery": "./src/personas/grocery.ts",
     "./personas/finance": "./src/personas/finance.ts",
-    "./personas": "./src/personas/index.ts"
+    "./personas": "./src/personas/index.ts",
+    "./persona/assistant": "./src/persona/assistant.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

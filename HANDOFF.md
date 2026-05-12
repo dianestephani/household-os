@@ -2121,3 +2121,450 @@ Recommended order: **1 → 2 → 3 → (4, 5, 6 in any order) → 7**. Diane can
 
 This plan represents 15-25 hours of work spread across phases. The system already works today. Build incrementally; ship each phase to the deployed app before starting the next so progress is visible. Don't merge Phases 4 + 6 in the same session — Google API debugging + Alexa API debugging in one sitting is a fast path to burnout.
 
+---
+
+## 50. Rebuild to three-view shape (2026-05-11 — supersedes §47 direction)
+
+**This section is the new canonical direction. §47 is honored for shipped phases, but §47 Phase 7 (timestamp polish) and all future feature expansion stop here. §48 (meal week calendar) and §49 (mobile audit) survive in their current form unless explicitly listed below for removal.**
+
+### Why this section exists
+
+On 2026-05-11, after stepping back from implementation, Diane and I revisited what the app should actually be for someone with her life — five income streams, 4 pets, chaotic schedule, hyperfixate-burnout pattern, preference for keeping some workflows manual (pen-and-paper income, in-person shopping). The audit was honest: the system has grown past what her life actually needs. The features she'd open every day are narrow:
+
+- Introspection (not optimization) for mood/energy/awakeness
+- Affordability Q&A (not budget management)
+- Routine + Calendar sync (not daily plan generation)
+- A grocery list helper that respects her diet + store splits
+
+Most of the elaborate scheduling infrastructure (TodayPlan auto-gen, swap pool, zone rotation, workout night-before check-in, three-persona chat split, Home widget grid sprawl) was solving problems she doesn't actually have. This section strips the system down to **one unified Claude assistant + three views**, and lists what to delete vs simplify vs keep from the current shipped state.
+
+### Core principles (these override every prior principle in §11 / §47)
+
+1. **One Claude assistant, not three personas.** Real questions cross persona boundaries constantly ("can I afford to bump the cleaner to every 3 weeks?"). One assistant with read access to everything answers all of them. The split into Household / Finance / Grocery introduced friction and complexity without value.
+2. **Three views: Today, Look Back, Stuff.** Replaces the six-tab structure from §47 Phase 3. The Home widget grid is too much; collapse to a single Today view that holds the morning check-in + Calendar today strip + a habits reminder + an Ask input.
+3. **Calendar is the source of truth** for time-bound items. This is unchanged from §47 Phase 4 — the appointment-reconcile infrastructure stays.
+4. **RocketMoney as data input, not a target to replace.** The Phase 5 CSV/paste workflow stays. The app stores history; RocketMoney remains the categorization tool.
+5. **Pen-and-paper income stays as Diane's workflow.** The app accepts a single per-month projected income number as input. That's the integration — no attempt to replace the paper log.
+6. **Introspective, not prescriptive.** Mood/energy/awakeness tracking surfaces patterns retrospectively in Look Back. No streaks, no daily scoring, no nags.
+7. **Dashboard is the full control surface.** CRUD on routines, system prompt editing, monthly inputs all in the browser. No codebase edits for routine use.
+8. **Habits aren't tracked, appointments are.** Daily habits (litter scoop, sweep, kitchen reset) appear as a static visual reminder list on Today, not as cadence-tracked routines.
+9. **Calendar bidirectional sync wins over in-app planning.** When she reschedules in Calendar, the app's reconcile cron picks it up. When she edits a routine in-app, the modal asks the cadence-shift question and writes back to Calendar.
+10. **Hard rule, inherited from §47 Phase 6**: shopping list integration never touches Amazon cart. Encoded in the route already; keep it.
+
+### Current state (what's actually live on Render as of 2026-05-10 PM)
+
+This matters because Option A is a rollback + simplification, not a fresh build:
+
+- ✅ §47 Phase 1 shipped — chat infrastructure (ChatPanel, runner.ts, `/api/chat/:persona`, `@anthropic-ai/sdk` dep) all deleted. **§50 re-adds this work for the unified assistant.**
+- ✅ §47 Phase 2 shipped — FinancialProfileSnapshot, RocketMoneyImport, Routine.appointment field. **§50 keeps all of this.**
+- ✅ §47 Phase 3 shipped — Home tab + 6-tab compression (Today, Schedule, Workouts, Finance, Log + Home). **§50 further compresses to 3 views.**
+- ✅ §47 Phase 4 shipped — per-appointment Calendar events + `diffAppointment` + reconcile cron. **§50 keeps all of this.**
+- ✅ §47 Phase 5 shipped — RocketMoney paste + CSV + history. **§50 keeps all of this, surfaces it inside Stuff/Finance.**
+- ✅ §47 Phase 6 code-complete (LWA activation pending) — Alexa Reminders + Shopping List + WhatsLeftIntent. **§50 keeps the morning push + WhatsLeftIntent (retooled). Defers full Reminders integration. Keeps Shopping List but accessed via the unified assistant, not a Grocery persona launcher.**
+- ✅ §48 Meal week calendar shipped on the Food tab. **§50 collapses the Food tab; the meal week calendar UI either retires or moves into the unified assistant's chat surface.** Decision deferred to Phase A below — Diane should sanity-check whether she'd miss the meal week view.
+- ✅ §49 Mobile responsive audit complete. **§50 inherits this work — the three views must remain mobile-first.**
+
+### What gets DELETED in §50
+
+Each item is safe because nothing in the three-view design depends on it.
+
+**Models (with their services, routes, tests, and cron):**
+- `TodayPlan` — central state for "today's plan" retires. Today view reads Calendar + routines + morning check-in directly.
+- `WorkoutDay`, `WorkoutWeek` — workout night-before check-in retires. Replaced by the much simpler `WorkoutLog` already in the system; logging is retroactive only.
+- `ZoneAssessment`, `AdHocTask` — zone assessment feature retires entirely.
+- `CheckIn` (the existing morning-checkin variant) — replaced by `MorningCheckin` (new shape: mood + energy + awakeness in one document).
+- `MoodLog`, `EnergyLog`, `DeferralEvent` — folded into the new `MorningCheckin` model.
+- `ContextEntry` (§22 Journal) — folded into the optional `note` field on `MorningCheckin`. The richer ContextEntry schema isn't needed.
+
+**Services + routes:**
+- `services/today.ts` + its routes (`/today`, `/today/regenerate`, `/today/swap`, `/today/mark-done`, `/today/pull-from-pool`) — delete entirely.
+- `cron/morning-gen.ts` — delete.
+- All retrospective / nudge crons (`cron/evening-retro.ts`, `cron/morning-intent.ts`, `cron/pattern-interrupts.ts`, `cron/weekly-review.ts`, `cron/zone-assessment.ts`) — delete.
+- `services/zones.ts` + `routes/zones.ts` — delete.
+- `services/checkins.ts` (old) — replace with new `services/morning-checkin.ts`.
+- `services/patterns.ts` and `/api/patterns/*` routes — delete.
+- Publisher's daily-checklist event creation — delete. The per-appointment events from Phase 4 replace it; no daily summary event.
+- `routes/day.ts` (`GET /api/day/:date` DayView bundle) — delete; was a TodayPlan-era aggregation.
+
+**Dashboard:**
+- All tabs except 3 (Today, Look Back, Stuff). Concretely delete: Schedule (merge into Today via Calendar strip), Workouts (workouts surface in Look Back), Log (Activity + Journal merged into Look Back retrospective), the Home widget grid from §47 Phase 3 (Today becomes the landing page).
+- Food tab — delete unless Diane wants to preserve the §48 meal week view; default to delete.
+- Routines tab — replaced by Stuff/Routines sub-tab.
+- Components to delete: `TodayList`, `DayPanel`, `SchedulePanel`, `WorkoutPanel`, `ActivityFeed`, `JournalPanel`, `TodayContextStrip`, `EnergyButtons`, `MoodButtons`, `MealWeekCalendar`, `PersonaLauncher` (no more per-persona launcher pattern), and any Home widgets that don't map into the three-view shape.
+
+**Persona infrastructure:**
+- The three persona files `packages/shared/src/personas/{household,finance,grocery}.ts` — collapse into one `packages/shared/src/persona/assistant.ts`. Delete the three.
+- The launcher pattern (§34, §45) — retire. The Claude.ai Projects Diane has on mobile continue to exist independently; the dashboard's unified assistant uses an adapted version of the system prompt for API.
+
+**Other:**
+- `mcp/server.ts` + `mcp/route.ts` + tools exposed through MCP — delete. The unified assistant calls tools directly; MCP was unwired and is unneeded.
+- The §47 Phase 6 Alexa Reminders integration (account linking + AlexaReminder collection) — defer indefinitely. The morning push + WhatsLeftIntent are enough; Reminders adds operational burden without proportionate value.
+- Test files for any deleted module take their tests with them.
+
+**Test count expectation after deletes:** roughly 100-130 tests survive (down from current ~263). Most deletions take their tests with them; some shared service tests need pruning.
+
+### What gets KEPT (with simplifications noted)
+
+**Models:**
+- `Routine` — simplify. Remove `energy`, `flex_days`, `also_triggers`, `skip_if`, `prep_dependency`, `zone_rotation` scheduling type. Keep `key`, `name`, `category`, `scheduling.{type, interval_days}`, `next_due`, `last_done`, `appointment` block (from Phase 2), `outsourceable.{cost_estimate, monthly_occurrences_override?}`, free-form `notes`, `active`.
+- `Trigger` — keep for Calendar event ingestion (Airbnb, dogsit, landscaper, cleaner_visit).
+- `FinancialProfile` (singleton) + `FinancialProfileSnapshot` (history) + `RocketMoneyImport` — all kept from Phase 2/5. These are the finance backbone of §50.
+- `ActivityLog` — keep as invisible infrastructure. Look Back reads from it for retrospective surfacing. No dedicated UI tab.
+- `WorkoutLog` — keep, simplified shape: `date`, `kind` ('strength'|'cardio'|'other'), `outcome` ('full'|'modified'|'skipped'), `note`. Retroactive logging only.
+
+**New model:**
+```ts
+// MorningCheckin — one document per date
+{
+  _id: ObjectId,
+  date: string,                              // 'YYYY-MM-DD', unique index
+  mood: 'good' | 'neutral' | 'down',
+  energy: 'low' | 'medium' | 'high',
+  awakeness: 'groggy' | 'meh' | 'alert',
+  note?: string,                             // optional, ≤500 chars
+  created_at: Date,
+  updated_at: Date
+}
+
+// AssistantSettings — singleton with versioned system prompt
+{
+  _id: ObjectId,
+  key: 'current',
+  system_prompt: string,
+  model: string,                             // default 'claude-sonnet-4-6'
+  versions: [{ ts, system_prompt, edited_by: 'user' | 'seed' }],
+  updated_at: Date
+}
+```
+
+**Services + routes:**
+- `services/finance.ts` (tax estimator, affordability report, `listOutsourceable`) — keep. These are the finance functions Diane actually uses.
+- `services/finance-history.ts` (Phase 2) — keep.
+- `services/appointments.ts` + `diffAppointment` + `reconcileAppointment` (Phase 4) — keep entirely.
+- `cron/appointment-reconcile.ts` (Phase 4) — keep.
+- `cron/calendar-ingest.ts` — keep.
+- Google Calendar utilities (Phase 4) — keep.
+- Google Tasks integration — keep, read-only on Today view's Calendar strip.
+- Google sign-in (§38) — keep.
+- New service `services/morning-checkin.ts` with `upsertCheckin(date, fields)`, `getCheckin(date)`, `recentCheckins(days)`.
+- New service `services/assistant-settings.ts` with `getCurrent()`, `update(prompt)` (versioned), `resetToSeed()`.
+
+**Dashboard infrastructure:**
+- Theme + typography (§33) — keep.
+- Tab persistence (§43) — adapt to three-tab world.
+- Mobile responsive scaffolding (§49) — keep.
+
+### The unified assistant
+
+`packages/shared/src/persona/assistant.ts` (this file replaces the three deleted persona files):
+
+```ts
+export const assistant = {
+  name: 'Assistant',
+  model: 'claude-sonnet-4-6',
+  systemPrompt: ASSISTANT_SYSTEM_PROMPT,   // seed; live version in AssistantSettings.current
+  tools: ASSISTANT_TOOLS                   // see list below
+};
+```
+
+**Seed system prompt** (Diane edits live in Stuff/Assistant Settings; this is the initial version):
+
+```
+You are Diane's personal household assistant. Be concise, casual, grounded
+in current data — call tools to look up real values rather than guessing.
+
+About Diane:
+- 34, lives alone in a 3BR rental with 2 dogs and 2 cats. Frequently
+  dogsits up to 5+ guest dogs at once.
+- Five income streams: One More Game (engineering/QA, primary), catering
+  gigs (often weekends), dogsitting, Airbnb spare rooms, personal training
+  (Tue/Thu mornings at a local gym — regular client 9 AM both days,
+  semi-regular client 10 AM Tue 3 of 4 weeks).
+- 5'4", ~148 lbs, working toward -5kg and -5 inches off waist.
+- Has a hyperfixate-then-burnout pattern with side projects — prefer
+  simple low-maintenance suggestions over elaborate systems.
+
+Diet (hard rules):
+- No seafood ever, including dishes with seafood ingredients.
+- Won't cook or handle raw meat — won't buy it either.
+- Eggs and dairy irritate her stomach. Use sparingly, not as primary
+  protein vehicles.
+- High protein preferred. Trader Joe's precooked options are staples.
+
+Shopping (physical trips only, no Amazon Prime):
+- Costco list (~$225-250 per run): gas, toilet paper, paper towels,
+  air fresheners, cat litter, cat food, dog food. This list is fixed.
+- Trader Joe's: primary grocery store, almost everything else.
+- QFC: secondary/backup.
+
+Cleaning crew: every 3-4 weeks, $380/visit (~$4,900-6,600/year). The
+3-vs-4-week cadence question is a recurring budget decision. When she
+asks, call get_financial_profile + affordability_report and answer
+grounded in real numbers.
+
+Workouts: 3x/week strength training target. She's a trainer and writes
+her own programs — never prescribe workouts. Tue/Thu mornings she's at
+the gym for client sessions; her own slot is BEFORE those (~7:45 AM).
+Post-session workouts essentially don't happen — don't suggest them.
+
+Tone:
+- Casual, no over-explaining
+- Don't moralize about spending
+- Never push streaks, scores, or "did you work out today" nags
+- Mood/energy/awakeness data exists for HER introspection. Surface
+  patterns when asked (recent_checkins + recent_workouts). Don't
+  volunteer them as advice.
+
+Behavior:
+- Call get_calendar_today near the start of conversations about plans.
+- Call recent_checkins if she mentions feeling off or having skipped
+  something.
+- Call get_financial_profile + affordability_report for any
+  "can I afford X" question. Never speculate on her budget.
+- When she describes a new recurring item ("I need to clean the gutters
+  every 6 months"), propose a routine and offer to create it via
+  create_routine.
+- When she reschedules an appointment, ASK which cadence-shift strategy
+  to apply: 'one_off', 'shift_all', or 'skip_one'. Don't assume.
+```
+
+**Tool list (~20 tools, implementations in `apps/api/src/persona/tools.ts` which mostly already exists):**
+
+| Tool | Purpose |
+|---|---|
+| `get_calendar_today` | Today's Google Calendar events |
+| `get_calendar_range(days)` | Upcoming events (default 7) |
+| `create_calendar_event({title, start, duration_minutes, notes?})` | Insert event |
+| `update_calendar_event({event_id, patch})` | Patch event |
+| `delete_calendar_event({event_id})` | Delete event |
+| `list_routines({category?, active?})` | Routine list |
+| `create_routine({...routine_fields})` | Add routine; auto-creates Calendar event if appointment-enabled |
+| `update_routine({key, patch, cadence_shift_strategy?})` | Edit routine. `cadence_shift_strategy` ∈ `'one_off'\|'shift_all'\|'skip_one'` |
+| `delete_routine({key})` | Soft-delete |
+| `get_morning_checkin({date?})` | One day's check-in (default today) |
+| `recent_checkins({days})` | Multiple check-ins |
+| `log_workout({date, kind, outcome, note?})` | Retroactive workout log |
+| `recent_workouts({days})` | Workout list |
+| `get_financial_profile` | Current profile |
+| `set_projected_income({month, amount})` | Per-month projected income write |
+| `estimate_tax({gross, state?, filing_status?})` | Pure compute, keeps existing |
+| `affordability_report({extra_monthly_cost?})` | Existing |
+| `list_outsourceable` | Existing |
+| `recent_imports({days})` | RocketMoney imports |
+| `add_rocketmoney_paste({text})` | Add paste + return parsed result |
+
+**Prompt caching is mandatory** on the system prompt + tool definitions. Sonnet 4.6, 5-min cache TTL. Expected monthly cost at 20-50 turns/day: $5-15.
+
+### The three views
+
+#### Today (default landing)
+
+Single column, mobile-first. Top to bottom:
+
+1. **Morning check-in form** — only when today's check-in is not yet saved. Three button-row pickers (mood / energy / awakeness, three options each) + an optional one-line `note` field. Single Save button. Once saved, collapses to a one-line summary ("✓ Logged at 7:42 AM — meh · medium · alert") with an Edit link.
+2. **Calendar today strip** — Google Calendar events for today, time-ordered. Tap a row to open in Calendar.
+3. **Habits reminder** — static list, NOT tracked. "Litter scoop · Sweep pet zones · Kitchen reset · Pet food/water." Visual nudge only; no buttons, no checking off. No DB writes.
+4. **Ask** — chat input + send button. Conversation scrolls below. Last 20 messages live in component state; full history persists to a new `ChatMessage` collection (just `{conversation_id, role, content, ts}`) for Look Back access.
+
+That's all of Today. No widgets to maintain.
+
+#### Look Back
+
+Read-only retrospective. Three sections top-to-bottom:
+
+1. **This week** — workout count vs target ("2 of 3 strength this week"); the last 7 days' check-ins as a small grid (mood/energy/awakeness as colored chips, days with no log greyed); a one-line "what was different" if a pattern is obvious.
+2. **This month** — RocketMoney totals from the most-recent import (top categories + total); the projected income number Diane entered; a single `Net = Projected income − Tax estimate − Fixed − This-month-RocketMoney-discretionary` line.
+3. **Patterns** — surfaced only when there's enough signal. Examples: "Last 30 days, you skipped strength training 3 times — all had `groggy` awakeness." Pure observation, no recommendation. Implemented as a small set of hardcoded queries; if none match, this section hides.
+
+No editing here. Tap-through to Stuff if she wants to change something.
+
+#### Stuff
+
+CRUD surface. Three sub-tabs within the view:
+
+1. **Routines** — table of all routines. Columns: name, category, cadence (days), next due (or appointment date if appointment-enabled), last done, outsource $/mo (if applicable), notes. Inline edit. "Add" button opens a form modal. Editing cadence on an appointment-enabled routine triggers the cadence-shift modal (`one_off` / `shift_all` / `skip_one`); the chosen strategy passes through `update_routine`. Deletes are soft (sets `active: false`).
+2. **Finance** — current `FinancialProfile` editor (gross income, fixed expenses, state, filing status, monthly extra withholding, projected income for this month as a single number field, free-form `notes`); submission history list from `FinancialProfileSnapshot`; RocketMoney imports list from `RocketMoneyImport` with view/apply/edit buttons per row; "Upload CSV" + "Paste breakdown" actions; tax estimator button.
+3. **Assistant Settings** — textarea pre-filled with current system prompt from `AssistantSettings.current`. Save button writes a new version. Versions list with rollback. "Reset to seed" button restores the seed from code.
+
+### Phased build order
+
+Each phase is independently shippable. Diane can stop after any phase.
+
+**Phase A — Unified assistant scaffolding (~3-4 hr) — SHIPPED 2026-05-11**
+- ✅ Re-added `@anthropic-ai/sdk@^0.30.0` (resolved 0.30.1) to `apps/api/package.json`.
+- ✅ Created [packages/shared/src/persona/assistant.ts](packages/shared/src/persona/assistant.ts) — seed prompt (the verbatim §50 text), `ASSISTANT_MODEL='claude-sonnet-4-6'`, and an `ASSISTANT_TOOLS` array of 14 wired tools. The 6 Phase B/E-deferred tools (`get_morning_checkin`, `recent_checkins`, `set_projected_income`, `create_calendar_event`, `update_calendar_event`, `delete_calendar_event`) live in a `DEFERRED_TOOL_NAMES` constant in the same file — documented but kept out of the live surface so the model never tries to call something that doesn't exist yet.
+- ✅ Built `AssistantSettings` model ([apps/api/src/db/models/AssistantSettings.ts](apps/api/src/db/models/AssistantSettings.ts)) + service ([apps/api/src/services/assistant-settings.ts](apps/api/src/services/assistant-settings.ts)) with `getCurrent` (auto-seeds), `update` (pushes new version), `resetToSeed`. Versions array carries `{ts, system_prompt, edited_by: 'user' | 'seed'}` for the Stuff/Assistant Settings rollback UI in Phase E.
+- ✅ Built `apps/api/src/persona/runner.ts` — single-assistant tool-use loop. Uses `client.beta.promptCaching.messages.create` with `cache_control: {type: 'ephemeral'}` on the system prompt AND the last tool definition (caches the entire tools array). Caps tool rounds at 6, returns clean offline message when `ANTHROPIC_API_KEY` is missing. Exposes `__setAnthropicClient` / `__setAssistantTools` test hooks so the loop is unit-testable without hitting the live API.
+- ✅ Built `apps/api/src/persona/assistant-tools.ts` — runtime impls for the 14 Phase-A tools, mapping onto existing services (`listRoutines`, `createRoutine`, `softDeleteRoutine`, `patchRoutine`, `logWorkout`, `recentWorkouts`, `getFinancialProfile`, `estimateMonthlyTax`, `affordabilityReport`, `listOutsourceable`, `todaysEvents`, `scheduleRange`, `listImports`, `addImport`).
+- ✅ Built `POST /api/chat` route ([apps/api/src/routes/chat.ts](apps/api/src/routes/chat.ts)) and `GET/PATCH /api/assistant-settings` + `POST /api/assistant-settings/reset` ([apps/api/src/routes/assistant-settings.ts](apps/api/src/routes/assistant-settings.ts)). Both wired into [index.ts](apps/api/src/index.ts) under the existing `requireToken` guard.
+- ⏸️ **Deferred**: deleting the three persona files (`packages/shared/src/personas/{household,finance,grocery}.ts`). Reason: they're still imported by `PersonaLauncher.tsx` (dashboard) and `tools.test.ts` (MCP drift detector). Both consumers are slated for removal in Phase C. Keeping the old files alive in Phase A means the deployed dashboard's launcher pattern continues working through the transition — nothing is "down for the rebuild" per the §50 hyperfixate-burnout guard. The new unified config lives at `packages/shared/src/persona/assistant.ts` (singular `persona/`) alongside the old `personas/` directory; both export paths coexist in `packages/shared/package.json`.
+- ⏸️ Diane's smoke-test (live chat) — requires her to do the manual steps in §50's "Diane's manual setup steps" first (Anthropic key + Render env var). Until then the route returns the offline message.
+
+**Test delta: +21 (7 assistant-settings + 9 assistant-tools + 5 runner).** New API total: **370 tests across 41 files** (380 total with alexa-skill). Typecheck clean across all four workspaces. Detail in §51.
+
+**Phase B — MorningCheckin + Today view (~3-4 hr)**
+- New `MorningCheckin` model (with unique index on `date`).
+- New `services/morning-checkin.ts` + `routes/morning-checkin.ts` (`GET /api/morning-checkin/:date?`, `POST /api/morning-checkin`).
+- Build `MorningCheckinForm` component (3 button-row pickers + note + save).
+- Build static `HabitsReminder` component (no DB).
+- Compose new Today view from `MorningCheckinForm` + existing `CalendarTodayWidget` (Phase 3) + `HabitsReminder` + a new `AskPanel`.
+- Implement `AskPanel` using the `POST /api/chat` endpoint.
+- Replace the existing Today/Home tab as the default landing.
+
+**Phase C — Deletes + tab compression (~3-4 hr)**
+- Delete the model + service + route + cron + dashboard component lists in "What gets DELETED" above.
+- Compress the dashboard tabs from 6 (Home, Today, Schedule, Workouts, Finance, Log) to 3 (Today, Look Back, Stuff).
+- Migrate any salvageable Schedule/Workouts/Finance/Log UI into the appropriate new view sections.
+- Update `App.tsx` view union + route persistence (§43) for the new three-tab world.
+- Migration for already-persisted `household-os.view` localStorage that holds a now-removed value — fall through to `'today'`.
+
+**Phase D — Look Back view (~3-4 hr)**
+- Build `LookBackPanel` component with the three sections (This week / This month / Patterns).
+- Implement the "patterns" surfacer as a small `services/patterns-simple.ts` (no cron — computed on demand). Start with one or two patterns: skipped-workouts-by-awakeness, skipped-workouts-by-sleep (if note text hints).
+- Wire workout target (3/week) as a constant for now; editable later from Stuff/Assistant Settings if she wants.
+
+**Phase E — Stuff view (~3-4 hr)**
+- Build `StuffPanel` with three sub-tabs (Routines, Finance, Assistant Settings).
+- Routines sub-tab: reuse the `RoutinesPage` table if it survived Phase C; otherwise rebuild as a simple editable table.
+- Cadence-shift modal: invoked from both the inline edit row and from the chat tool path (`update_routine` with `cadence_shift_strategy`). Three options as buttons.
+- Finance sub-tab: surface the existing Phase 2/5 work (snapshot history, RocketMoney imports, upload/paste).
+- Assistant Settings sub-tab: textarea + version list + rollback.
+
+**Phase F — Alexa cleanup (~1-2 hr)**
+- Delete most skill intents per the "What gets DELETED" list.
+- Retool `WhatsLeftIntent` to read incomplete Calendar events for today (not TodayPlan items).
+- Verify the daily morning push still fires.
+- If Phase 6 Alexa Reminders/LWA infrastructure shipped: leave the code in place but disable the cron that pushes Reminders. Mark as deprecated.
+
+**Phase G — Final cleanup + polish (~1-2 hr)**
+- Delete the MCP server files.
+- Delete any orphaned utils, types, or test files surfaced by Phase C.
+- Add relative timestamps where they aren't yet (Routines table row, MorningCheckin summary).
+- Verify all four workspaces typecheck clean.
+- Update README + this HANDOFF's §36 route cheat sheet to match the new state.
+
+**Total: ~17-23 hours.** Phases A + B + C land the meaningful gap-fill — if Diane is feeling the burnout signal, stop after C and use the system. Phases D-G are depth.
+
+### Diane's manual setup steps
+
+- [ ] Anthropic console account at `console.anthropic.com`
+- [ ] Generate an API key (save to password manager)
+- [ ] Prepay $20 balance; set $30/month spending limit
+- [ ] Render dashboard → API service → Environment → add `ANTHROPIC_API_KEY=sk-ant-...`
+- [ ] After Phase A: open the dashboard, go to Stuff → Assistant Settings, read the seeded system prompt, edit anything that doesn't sound like her
+- [ ] After Phase B: log her first morning check-in
+- [ ] After Phase E: if she has a current RocketMoney CSV handy, upload it to seed the Look Back's "This month" section
+
+### What this gives her, in plain language
+
+If §50 ships end-to-end, here's what daily use looks like:
+
+- **Morning**: open the dashboard, tap three buttons for mood / energy / awakeness, optionally type a one-line note, hit save. Total time: under 30 seconds.
+- **Mid-day**: glance at Calendar today strip on Today view to see what's coming. Or just look at her phone's Calendar app — both are the same data.
+- **A decision moment** (can I afford this? what should I get at TJ's? should I bump the cleaner to every 3 weeks?): open Today, type the question into Ask. Get a grounded answer that actually used her real data. Close.
+- **Weekly**: open Look Back. See if she hit 3 workouts, see what the check-in data looked like, see what RocketMoney said. ~2 minutes.
+- **Monthly**: open Stuff → Finance, paste the latest RocketMoney breakdown (or upload the CSV), enter her projected income on paper into the dashboard. ~3 minutes.
+- **Whenever**: chat with the assistant to add/edit/delete routines; they sync to Calendar automatically.
+
+If the daily use isn't under 5 minutes most days, this rebuild didn't succeed and §50 needs reconsidering before adding more features.
+
+### Hyperfixate-burnout guard
+
+The deployed app stays running through every phase. Nothing is "down for the rebuild." Don't bundle Phases A and C in one sitting — re-adding the Anthropic SDK + deleting half the models at once means too much in flight at once. Land each phase, test it live for at least a day, then move on.
+
+This is the last big refactor. After §50 ships, further work should be small, additive, and only in response to real friction Diane has experienced — not anticipatory feature growth.
+
+---
+
+## 51. Phase A — Unified assistant scaffolding (SHIPPED 2026-05-11)
+
+Phase A of the §50 rebuild. Lands the read/write infrastructure for the unified assistant without yet ripping out the three-persona launcher path (deferred to Phase C, see "Spec deviation" below).
+
+### What landed
+
+**Shared package**
+
+- [packages/shared/src/persona/assistant.ts](packages/shared/src/persona/assistant.ts) — `ASSISTANT_SYSTEM_PROMPT` (the verbatim §50 seed), `ASSISTANT_MODEL = 'claude-sonnet-4-6'`, `ASSISTANT_TOOLS` (14 tool defs), and `DEFERRED_TOOL_NAMES` (6 names from §50's 20-tool list whose underlying services arrive in later phases). The `assistant` object aggregates them as one config so the runner can import a single symbol.
+- [packages/shared/package.json](packages/shared/package.json) — added the `./persona/assistant` export path. The old `./personas/*` paths stay until Phase C.
+
+**API — model + service**
+
+- [apps/api/src/db/models/AssistantSettings.ts](apps/api/src/db/models/AssistantSettings.ts) — Mongoose singleton (`key: 'current'`). Versions are an embedded subdoc array (`{ts, system_prompt, edited_by: 'user' | 'seed'}`) so rollback can pick any prior prompt without a separate collection. Defensive `mongoose.models.AssistantSettings ?? mongoose.model(...)` pattern mirrors every other model file in this repo (prevents `OverwriteModelError` on multi-test-file imports).
+- [apps/api/src/services/assistant-settings.ts](apps/api/src/services/assistant-settings.ts) — `getCurrent()` auto-seeds from the shared constant on first read (records the seed as version 0 with `edited_by: 'seed'`). `update(prompt)` trims whitespace, rejects empty, pushes a new `'user'` version. `resetToSeed()` pushes a fresh `'seed'` version so the history reflects the reset rather than silently overwriting.
+
+**API — chat runner**
+
+- [apps/api/src/persona/runner.ts](apps/api/src/persona/runner.ts) — single-assistant tool-use loop. Uses `client.beta.promptCaching.messages.create` (SDK v0.30 path) so the request hits the `anthropic-beta: prompt-caching-2024-07-31` endpoint. `cache_control: {type: 'ephemeral'}` is set on:
+  1. The system prompt (single text block in the `system` array).
+  2. The **last** entry of the `tools` array — this tells Anthropic to cache everything up to and including that marker, so the whole tools array is cached as one block. A common-but-wrong pattern is per-tool `cache_control` which fragments the cache; the single-trailing-marker approach matches the GA prompt-caching guidance.
+  3. The runner intentionally does NOT add `cache_control` to user messages — they vary per turn and would never hit cache.
+- Tool loop: cap of 6 rounds (`MAX_TOOL_ROUNDS`); replays each `tool_use` block into the working messages as a fresh `user` turn with `tool_result` blocks. Unknown tool names → `is_error: true` tool_result so the model can self-correct. Per-tool failures (`throw`) → `is_error: true` with the thrown message — keeps a single broken tool from killing the conversation.
+- Offline path: when `ANTHROPIC_API_KEY` isn't set (and no test stub is injected), returns `{live: false, text: '[assistant offline: ANTHROPIC_API_KEY not configured ...]'}` instead of crashing. Lets the chat route stay well-behaved before Diane bootstraps her API key.
+- Test hooks: `__setAnthropicClient(stub)` and `__setAssistantTools(impls)` are exported for unit tests. The client hook takes precedence over the env-driven path (via `clientOverridden` flag) so tests can inject behavior even with `NODE_ENV=test`. Hooks reset to defaults in `afterEach`.
+
+- [apps/api/src/persona/assistant-tools.ts](apps/api/src/persona/assistant-tools.ts) — runtime impls for the 14 Phase-A tools. Maps onto existing service-layer functions (no duplication). Tools wired:
+  - **Calendar reads**: `get_calendar_today` → `todaysEvents`, `get_calendar_range` → `scheduleRange`
+  - **Routines CRUD**: `list_routines`, `create_routine` (validates `key` + `name`, fills sensible defaults for the rest), `update_routine` (delegates to `patchRoutine`'s allow-list), `delete_routine` (soft via `softDeleteRoutine`)
+  - **Workouts**: `log_workout`, `recent_workouts`
+  - **Finance**: `get_financial_profile`, `estimate_tax`, `affordability_report`, `list_outsourceable`, `recent_imports`, `add_rocketmoney_paste` (creates a `kind: 'paste'` import without auto-applying; Diane reviews in Stuff/Finance per §50)
+
+**API — routes**
+
+- [apps/api/src/routes/chat.ts](apps/api/src/routes/chat.ts) — `POST /api/chat`. Body `{messages: [{role, content}]}`; 400 on empty array or malformed messages; passes through to `assistantChat`. Returns `{text, blocks, tool_rounds, usage, live}`.
+- [apps/api/src/routes/assistant-settings.ts](apps/api/src/routes/assistant-settings.ts) — `GET /api/assistant-settings`, `PATCH /api/assistant-settings` (body `{system_prompt}`), `POST /api/assistant-settings/reset`. PATCH rejects non-string or empty with 400 + clear error message.
+- Both wired into [apps/api/src/index.ts](apps/api/src/index.ts) under the existing `requireToken` middleware; also added to the root endpoint listing.
+
+### Tests added (+21)
+
+- [apps/api/src/services/assistant-settings.test.ts](apps/api/src/services/assistant-settings.test.ts) (7): auto-seed on first read; idempotent repeat reads (single doc, no version churn); update pushes a `'user'` version after the seed; whitespace-trim; empty/whitespace rejection; multi-edit version history; `resetToSeed` records a `'seed'` version entry.
+- [apps/api/src/persona/assistant-tools.test.ts](apps/api/src/persona/assistant-tools.test.ts) (9): drift detector (every declared tool has an impl); deferred tools are absent from the impl table; schema shape validation; `list_routines` category filter; `create_routine` validation + defaults; `delete_routine` soft-delete preserves doc; `add_rocketmoney_paste` rejects empty; `estimate_tax` returns federal/FICA/state breakdown (WA → state_tax=0).
+- [apps/api/src/persona/runner.test.ts](apps/api/src/persona/runner.test.ts) (5): no-key offline message; `stop_reason: 'end_turn'` returns final text in zero tool rounds; one tool round runs and feeds back; unknown-tool gets `is_error: true` tool_result on the next turn; round-cap bailout prevents infinite loops.
+
+**Deliberately NOT tested:**
+
+- Live Anthropic API roundtrip — testing the actual `client.beta.promptCaching.messages.create` against the network is more brittle than valuable (same rationale as the Google Calendar tests). The stub-driven runner tests cover every branch of the loop. Live verification is Diane's smoke test after she adds her API key.
+- Express route layer (`chat.ts`, `assistant-settings.ts`) — thin handlers over the service layer. Following the established pattern in this repo (e.g. `finance.ts` routes, `meal-weeks.ts` routes — none have route-level tests; the services they wrap are fully covered).
+- Dashboard wiring — Phase A is API-only. The AskPanel + Stuff/Assistant Settings UI lands in Phases B + E.
+
+### Spec deviation
+
+§50 Phase A says "Create `packages/shared/src/persona/assistant.ts` with seed system prompt + tool list. Delete the three persona files." Phase A scaffolding shipped, but **the deletion of `packages/shared/src/personas/{household,finance,grocery}.ts` was deferred to Phase C.** Reasons:
+
+1. **Active dashboard consumers**: `apps/dashboard/src/components/PersonaLauncher.tsx` imports from all three persona files. Deleting them in Phase A would break the live dashboard's Household / Finance / Grocery tabs. Phase C is the explicit "deletes" phase that also retires `PersonaLauncher` per §50's "What gets DELETED" list, so doing both in the same change keeps the deploy coherent.
+2. **MCP drift detector**: `apps/api/src/persona/tools.test.ts` validates schema/impl parity for the per-persona tools fed into the MCP server. Phase A doesn't touch MCP (Phase C deletes MCP entirely). Keeping the old test passing through Phase A lets us delete it cleanly in Phase C alongside its subject.
+3. **§50 hyperfixate-burnout guard**: "The deployed app stays running through every phase. Nothing is 'down for the rebuild.'" Holding the persona-launcher path alive through A → B is the conservative read of that rule.
+
+The new `persona/assistant.ts` (singular) coexists with the old `personas/` (plural) directory; the `package.json` exports both paths. Phase C will remove the old paths + `PersonaLauncher.tsx` + the MCP layer in one coherent change.
+
+### Other spec deviations worth knowing
+
+1. **Phase A tool surface is 14, not 20.** §50 lists 20 tools. Six (`get_morning_checkin`, `recent_checkins`, `set_projected_income`, `create_calendar_event`, `update_calendar_event`, `delete_calendar_event`) are gated on services that arrive in later phases (`MorningCheckin` model from Phase B; projected-income field + calendar event mutation tooling from Phase E). They're tracked in the new `DEFERRED_TOOL_NAMES` constant — visible in the file, kept out of the live surface so the model can't call something that doesn't exist. Each gets added to `ASSISTANT_TOOLS` when its underlying service lands.
+2. **`update_routine` has no `cadence_shift_strategy` yet.** §50's tool list shows `update_routine({key, patch, cadence_shift_strategy?})`. The strategy logic is Phase E because it requires a UI modal (`'one_off' | 'shift_all' | 'skip_one'`) and back-end appointment-shift logic. Phase A's `update_routine` is a flat field patch via `patchRoutine` — same as the existing `edit_routine` tool that's already been working in the per-persona flow.
+3. **No `list_routines` `active` filter pass-through yet.** The tool schema declares `active?: boolean` but the impl always defaults to active-only (because `listRoutines` does). Wiring the override is a 2-line change for Phase E when soft-deleted routines need to be visible in the Stuff/Routines table.
+
+### What unblocks for Diane
+
+After she does the §50 manual steps (Anthropic console account, API key, `ANTHROPIC_API_KEY` in Render), `POST /api/chat` will serve real assistant replies grounded in the 14 wired tools. The dashboard's AskPanel doesn't exist yet (Phase B), so for now she can verify the endpoint with curl:
+
+```bash
+curl -sH "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"list my pet routines"}]}' \
+  https://household-os-api.onrender.com/api/chat
+```
+
+Until the API key is set, the route returns `{live: false, text: '[assistant offline: ...]'}` — that's the expected pre-bootstrap state.
+
+### Route cheat sheet additions
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/chat` | POST | Unified-assistant tool-use loop. Body `{messages: [{role, content}]}` → `{text, blocks, tool_rounds, usage, live}`. Returns `live: false` when `ANTHROPIC_API_KEY` is unset (no crash). |
+| `/api/assistant-settings` | GET | Live system prompt + model + versions array |
+| `/api/assistant-settings` | PATCH | Body `{system_prompt: string}`. Trims, rejects empty, pushes new `'user'` version. |
+| `/api/assistant-settings/reset` | POST | Restore the seed prompt; records a `'seed'` version entry. |
+
+### Open follow-ups for the next phase boundary
+
+- **Phase B**: build `MorningCheckin` model + `morning-checkin.ts` service + route; add `get_morning_checkin` + `recent_checkins` to `ASSISTANT_TOOLS` (remove from `DEFERRED_TOOL_NAMES`); compose the new Today view with `AskPanel` calling `POST /api/chat`.
+- **Phase C** (deferred-from-A): delete `packages/shared/src/personas/{household,finance,grocery}.ts` + `personas/index.ts` + the launcher consumers (`PersonaLauncher.tsx`) + `tools.ts` + `tools.test.ts` + the MCP layer. Remove the `./personas/*` exports from `packages/shared/package.json`.
+- **Phase E**: add `update_routine` cadence-shift wiring; add `set_projected_income` (needs a new field or collection — decision pending); add `create_calendar_event` / `update_calendar_event` / `delete_calendar_event` if the assistant should mutate Calendar directly (or punt to "assistant proposes; user confirms in Calendar UI").
