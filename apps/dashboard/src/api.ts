@@ -1,38 +1,29 @@
 import type {
   Routine,
-  TodayPlan,
-  Trigger,
-  EnergyLevel,
-  EnergySuggestion,
-  MoodLevel,
-  DeferReasonCode,
-  DeferralPattern,
   WorkoutLog,
-  WorkoutPattern,
   WorkoutSlotKey,
   WorkoutStatus,
-  CheckIn,
-  ActivityKind,
-  ActivityLogEntry,
   AwakenessLevel,
   CalendarDayResponse,
-  CalendarTask,
-  ContextEntry,
-  ContextEntryInput,
-  ContextRelatedPersona,
-  DayView,
+  EnergyLevel,
   FilingStatus,
   FinancialProfileSnapshot,
   ImportKind,
-  MealWeek,
-  MoodLog,
+  MoodLevel,
   MorningCheckin,
   RocketMoneyImport,
-  ScheduleRangeResponse,
   FinancialProfile,
   OutsourceableSummary,
   TaxEstimate,
 } from '@household-os/shared/types';
+
+/** Response shape for GET /api/assistant-settings (§50 Phase A). */
+export interface AssistantSettingsView {
+  system_prompt: string;
+  model: string;
+  versions: { ts: string; system_prompt: string; edited_by: 'user' | 'seed' }[];
+  updated_at: string;
+}
 
 /** Response shape for POST /api/chat (§50 Phase A). */
 export interface ChatResult {
@@ -87,38 +78,59 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * §50 Phase C — surviving REST surface. Endpoints retired in Phase C:
+ *   /api/today/*, /api/zones/*, /api/checkins/*, /api/patterns/*, /api/mood,
+ *   /api/energy, /api/context, /api/day/*, /api/schedule, /api/meal-weeks/*,
+ *   /api/tasks, /api/activity (was used by Log + FinanceDayLog), /mcp.
+ *
+ * Surviving + new:
+ *   /api/routines, /api/finance/*, /api/calendar/today,
+ *   /api/morning-checkin/*, /api/chat, /api/assistant-settings, /api/triggers,
+ *   /api/appointments/*, /api/workouts/*, /api/alexa/shopping-list (kept per
+ *   §50 hard-rule but not in active dashboard use), /api/auth/google.
+ */
 export const api = {
-  today: {
-    get: () => request<TodayPlan>('/today'),
-    regenerate: () =>
-      request<TodayPlan>('/today/regenerate', { method: 'POST' }),
-    swap: (
-      item_key: string,
-      replacement_key?: string,
-      reason?: DeferReasonCode,
-      notes?: string,
-    ) =>
-      request<TodayPlan>('/today/swap', {
+  morningCheckin: {
+    get: (date?: string) =>
+      request<MorningCheckin | null>(
+        date ? `/morning-checkin/${date}` : '/morning-checkin',
+      ),
+    recent: (days = 14) =>
+      request<MorningCheckin[]>(`/morning-checkin?days=${days}`),
+    save: (input: {
+      date?: string;
+      mood: MoodLevel;
+      energy: EnergyLevel;
+      awakeness: AwakenessLevel;
+      note?: string;
+    }) =>
+      request<MorningCheckin>('/morning-checkin', {
         method: 'POST',
-        body: JSON.stringify({ item_key, replacement_key, reason, notes }),
-      }),
-    markDone: (item_key: string) =>
-      request<TodayPlan>('/today/mark-done', {
-        method: 'POST',
-        body: JSON.stringify({ item_key }),
-      }),
-    pullFromPool: (item_key: string) =>
-      request<TodayPlan>('/today/pull-from-pool', {
-        method: 'POST',
-        body: JSON.stringify({ item_key }),
+        body: JSON.stringify(input),
       }),
   },
-  energy: {
-    set: (level: EnergyLevel) =>
-      request<EnergySuggestion>('/energy', {
+  chat: {
+    send: (messages: ChatMessage[]) =>
+      request<ChatResult>('/chat', {
         method: 'POST',
-        body: JSON.stringify({ level, source: 'dashboard' }),
+        body: JSON.stringify({ messages }),
       }),
+  },
+  assistantSettings: {
+    get: () => request<AssistantSettingsView>('/assistant-settings'),
+    update: (systemPrompt: string) =>
+      request<AssistantSettingsView>('/assistant-settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ system_prompt: systemPrompt }),
+      }),
+    reset: () =>
+      request<AssistantSettingsView>('/assistant-settings/reset', {
+        method: 'POST',
+      }),
+  },
+  calendar: {
+    today: () => request<CalendarDayResponse>('/calendar/today'),
   },
   routines: {
     list: () => request<Routine[]>('/routines'),
@@ -126,115 +138,6 @@ export const api = {
       request<Routine>(`/routines/${key}`, {
         method: 'PATCH',
         body: JSON.stringify(patch),
-      }),
-  },
-  triggers: {
-    list: () => request<Trigger[]>('/triggers'),
-  },
-  mood: {
-    set: (level: MoodLevel) =>
-      request<MoodLog>('/mood', {
-        method: 'POST',
-        body: JSON.stringify({ level, source: 'dashboard' }),
-      }),
-    recent: (days = 14) => request<MoodLog[]>(`/mood?days=${days}`),
-  },
-  workouts: {
-    today: () =>
-      request<{
-        slot: { slot_key: WorkoutSlotKey; name: string; type: string } | null;
-        log: WorkoutLog | null;
-      }>('/workouts/today'),
-    byDate: (date: string) =>
-      request<{
-        slot: { slot_key: WorkoutSlotKey; name: string; type: string } | null;
-        log: WorkoutLog | null;
-      }>(`/workouts/by-date/${date}`),
-    list: (days = 14) => request<WorkoutLog[]>(`/workouts?days=${days}`),
-    log: (input: {
-      slot_key: WorkoutSlotKey;
-      status: WorkoutStatus;
-      notes?: string;
-    }) =>
-      request<WorkoutLog>('/workouts', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }),
-  },
-  patterns: {
-    deferrals: (days = 14, min = 2) =>
-      request<DeferralPattern[]>(`/patterns/deferrals?days=${days}&min=${min}`),
-    workouts: (days = 14) =>
-      request<WorkoutPattern>(`/patterns/workouts?days=${days}`),
-  },
-  checkins: {
-    pending: () => request<CheckIn[]>('/checkins/pending'),
-    answer: (id: string, answers: Record<string, string>) =>
-      request<CheckIn>(`/checkins/${id}/answer`, {
-        method: 'POST',
-        body: JSON.stringify({ answers }),
-      }),
-    skip: (id: string) =>
-      request<CheckIn>(`/checkins/${id}/skip`, { method: 'POST' }),
-  },
-  activity: {
-    list: (days = 7, kind?: ActivityKind) => {
-      const qs = new URLSearchParams({ days: String(days) });
-      if (kind) qs.set('kind', kind);
-      return request<ActivityLogEntry[]>(`/activity?${qs.toString()}`);
-    },
-    onDate: (date: string, kind?: ActivityKind) => {
-      const qs = new URLSearchParams({ date });
-      if (kind) qs.set('kind', kind);
-      return request<ActivityLogEntry[]>(`/activity?${qs.toString()}`);
-    },
-  },
-  calendar: {
-    today: () => request<CalendarDayResponse>('/calendar/today'),
-  },
-  schedule: {
-    range: (days = 7) =>
-      request<ScheduleRangeResponse>(`/schedule?days=${days}`),
-  },
-  day: {
-    get: (date: string) => request<DayView>(`/day/${date}`),
-  },
-  tasks: {
-    forDay: (date: string) =>
-      request<CalendarTask[]>(`/tasks?date=${date}`),
-    backlog: () => request<CalendarTask[]>('/tasks/backlog'),
-    complete: (tasklist_id: string, task_id: string) =>
-      request<CalendarTask>('/tasks/complete', {
-        method: 'POST',
-        body: JSON.stringify({ tasklist_id, task_id }),
-      }),
-    uncomplete: (tasklist_id: string, task_id: string) =>
-      request<CalendarTask>('/tasks/uncomplete', {
-        method: 'POST',
-        body: JSON.stringify({ tasklist_id, task_id }),
-      }),
-  },
-  context: {
-    list: (days = 7, persona?: ContextRelatedPersona) => {
-      const qs = new URLSearchParams({ days: String(days) });
-      if (persona) qs.set('persona', persona);
-      return request<ContextEntry[]>(`/context?${qs.toString()}`);
-    },
-    onDate: (date: string, persona?: ContextRelatedPersona) => {
-      const qs = new URLSearchParams({ date });
-      if (persona) qs.set('persona', persona);
-      return request<ContextEntry[]>(`/context?${qs.toString()}`);
-    },
-    today: (persona?: ContextRelatedPersona) => {
-      const qs = new URLSearchParams();
-      if (persona) qs.set('persona', persona);
-      const suffix = qs.toString() ? `?${qs.toString()}` : '';
-      return request<ContextEntry[]>(`/context/today${suffix}`);
-    },
-    add: (entry: ContextEntryInput) =>
-      request<ContextEntry>('/context', {
-        method: 'POST',
-        body: JSON.stringify({ ...entry, source: entry.source ?? 'dashboard' }),
       }),
   },
   appointments: {
@@ -265,87 +168,18 @@ export const api = {
     unlink: (routineKey: string) =>
       request<Routine>(`/appointments/${routineKey}`, { method: 'DELETE' }),
   },
-  mealWeeks: {
-    list: (limit = 26) =>
-      request<MealWeek[]>(`/meal-weeks?limit=${limit}`),
-    get: (startDate: string) =>
-      request<MealWeek>(`/meal-weeks/${startDate}`),
-    byDate: (date: string) =>
-      request<{ week: MealWeek | null; requested_date: string }>(
-        `/meal-weeks/by-date/${date}`,
-      ),
-    adjacent: (startDate: string) =>
-      request<{ prev: MealWeek | null; next: MealWeek | null }>(
-        `/meal-weeks/${startDate}/adjacent`,
-      ),
-    upsert: (input: { start_date: string; title?: string; meals: unknown[] }) =>
-      request<MealWeek>('/meal-weeks', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }),
-    remove: (startDate: string) =>
-      request<{ deleted: boolean }>(`/meal-weeks/${startDate}`, {
-        method: 'DELETE',
-      }),
-  },
-  alexa: {
-    authStatus: () =>
-      request<{ configured: boolean }>('/alexa/auth-status'),
-    addToShoppingList: (items: string[]) =>
-      request<{
-        results: {
-          text: string;
-          status: 'added' | 'error';
-          id?: string;
-          error?: string;
-        }[];
-        added: number;
-        failed: number;
-        status: 'ok' | 'no_token';
-      }>('/alexa/shopping-list/add', {
-        method: 'POST',
-        body: JSON.stringify({ items }),
-      }),
-  },
-  zones: {
-    assess: (
-      zone: string,
-      level: 'fine' | 'meh' | 'rough',
-      notes?: string,
-    ) =>
-      request<{
-        assessment: { zone: string; level: string };
-        tasks: { _id: string; name: string }[];
-      }>('/zones/assess', {
-        method: 'POST',
-        body: JSON.stringify({ zone, level, notes }),
-      }),
-  },
-  morningCheckin: {
-    get: (date?: string) =>
-      request<MorningCheckin | null>(
-        date ? `/morning-checkin/${date}` : '/morning-checkin',
-      ),
-    recent: (days = 14) =>
-      request<MorningCheckin[]>(`/morning-checkin?days=${days}`),
-    save: (input: {
-      date?: string;
-      mood: MoodLevel;
-      energy: EnergyLevel;
-      awakeness: AwakenessLevel;
-      note?: string;
+  workouts: {
+    /** Retroactive workout log — Look Back's only mutator. */
+    log: (input: {
+      slot_key: WorkoutSlotKey;
+      status: WorkoutStatus;
+      notes?: string;
     }) =>
-      request<MorningCheckin>('/morning-checkin', {
+      request<WorkoutLog>('/workouts', {
         method: 'POST',
         body: JSON.stringify(input),
       }),
-  },
-  chat: {
-    send: (messages: ChatMessage[]) =>
-      request<ChatResult>('/chat', {
-        method: 'POST',
-        body: JSON.stringify({ messages }),
-      }),
+    list: (days = 14) => request<WorkoutLog[]>(`/workouts?days=${days}`),
   },
   finance: {
     profile: () => request<FinancialProfile>('/finance/profile'),

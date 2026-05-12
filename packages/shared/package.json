@@ -9,11 +9,6 @@
     ".": "./src/index.ts",
     "./types": "./src/types.ts",
     "./inventory.json": "./src/inventory.json",
-    "./sample-meal-week.json": "./src/sample-meal-week.json",
-    "./personas/household": "./src/personas/household.ts",
-    "./personas/grocery": "./src/personas/grocery.ts",
-    "./personas/finance": "./src/personas/finance.ts",
-    "./personas": "./src/personas/index.ts",
     "./persona/assistant": "./src/persona/assistant.ts"
   },
   "scripts": {

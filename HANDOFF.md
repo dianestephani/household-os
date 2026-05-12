@@ -2415,12 +2415,23 @@ Each phase is independently shippable. Diane can stop after any phase.
 
 **Test delta: +14 (11 morning-checkin service + 3 new assistant-tools cases for get_morning_checkin + recent_checkins).** New API total: **384 tests across 41 files** (394 total with alexa-skill). All four workspaces typecheck clean; dashboard production build verified (291 KB JS / 16 KB CSS gzipped). Detail in §52.
 
-**Phase C — Deletes + tab compression (~3-4 hr)**
-- Delete the model + service + route + cron + dashboard component lists in "What gets DELETED" above.
-- Compress the dashboard tabs from 6 (Home, Today, Schedule, Workouts, Finance, Log) to 3 (Today, Look Back, Stuff).
-- Migrate any salvageable Schedule/Workouts/Finance/Log UI into the appropriate new view sections.
-- Update `App.tsx` view union + route persistence (§43) for the new three-tab world.
-- Migration for already-persisted `household-os.view` localStorage that holds a now-removed value — fall through to `'today'`.
+**Phase C — Deletes + tab compression (~3-4 hr) — SHIPPED 2026-05-11**
+- ✅ Deleted 10 Mongoose models: `TodayPlan`, `MoodLog`, `EnergyLog`, `ContextEntry`, `AdHocTask`, `ZoneAssessment`, `CheckIn`, `DeferralEvent`, `MealWeek`, `AlexaReminder`. 10 models survive: `Routine`, `Trigger`, `WorkoutLog`, `FinancialProfile`, `FinancialProfileSnapshot`, `RocketMoneyImport`, `ActivityLog`, `AlexaAuth`, `MorningCheckin`, `AssistantSettings`.
+- ✅ Deleted 12 API routes: `/api/today/*`, `/api/zones/*`, `/api/checkins/*`, `/api/patterns/*`, `/api/mood`, `/api/energy`, `/api/context/*`, `/api/day/:date`, `/api/schedule`, `/api/meal-weeks/*`, `/api/tasks/*`, `/api/activity`. 11 routes survive: `/api/auth/google`, `/api/routines`, `/api/triggers`, `/api/workouts`, `/api/finance/*`, `/api/calendar/today`, `/api/appointments/*`, `/api/alexa/*`, `/api/chat`, `/api/assistant-settings/*`, `/api/morning-checkin/*`.
+- ✅ Deleted 14 API services: `today`, `zones`, `checkins`, `checkin-generators`, `patterns`, `mood`, `energy`, `context`, `day`, `schedule`, `meal-weeks`, `tasks`, `alexa-push`, `alexa-reminders`. Services kept: `routines`, `triggers`, `workouts`, `finance`, `finance-history`, `csv-parser`, `calendar`, `appointments`, `morning-checkin`, `assistant-settings`, `activity` (still fires `morning_checkin_logged` / `routine_edited` / `finance_*` / `appointment_*` / `task_done` / `workout_logged`), `session`, `alexa-lwa`, `alexa-shopping-list`, `grocery-list-parser`.
+- ✅ Deleted crons: `morning-gen` and the four nudge-style check-in generators (`evening-retro`, `morning-intent`, `pattern-interrupts`, `weekly-review`, `zone-assessment` — all of which lived in `services/checkin-generators.ts`). Two crons survive: `calendar-ingest` (Google Calendar → Trigger ingestion) and `appointment-reconcile` (§47 Phase 4 hourly job; the Phase 6 Alexa-Reminders second pass was stripped per §50).
+- ✅ Deleted the entire MCP layer (`apps/api/src/mcp/server.ts` + `route.ts`), `apps/api/src/persona/tools.ts` + its drift-detector test, and the old three persona files in `packages/shared/src/personas/` (household, finance, grocery, index). Removed `./personas/*` exports from `packages/shared/package.json`. The new unified assistant at `packages/shared/src/persona/assistant.ts` is the only persona surface left.
+- ✅ Deleted the Publisher debounced fan-out (`apps/api/src/publisher/` entirely — was specific to TodayPlan writes; per-appointment Calendar events from §47 Phase 4 took over). `lodash.debounce` dep also removed from `apps/api/package.json`.
+- ✅ Deleted 17 dashboard components: `DayPanel`, `ActivityFeed`, `JournalPanel`, `WorkoutPanel`, `SchedulePanel`, `HomePanel`, `EnergyButtons`, `MoodButtons`, `TodayList`, `TodayContextStrip`, `MealWeekCalendar`, `ShoppingListPanel`, `PersonaLauncher`, `CheckInBanner`, `DeferDialog`, `LogPanel`, `DayNavigator`. Also `apps/dashboard/src/utils/relativeTime.ts` (no surviving consumer). 13 components remain (including 3 new Phase C panels: `LookBackPanel`, `StuffPanel`, `AssistantSettingsPanel`).
+- ✅ Stripped `FinanceDayLog` sub-component from `FinancePanel.tsx` (it referenced `api.context.onDate` + `api.activity.onDate` which both retire). FinancePanel is now profile + outsourceable + affordability + RocketMoney imports + snapshot history only.
+- ✅ Rewired `assistant-tools.ts` `get_calendar_range` to use a new `upcomingEvents(days)` helper in `services/calendar.ts` (just lists Google Calendar events for an N-day window) — replaces the deleted `scheduleRange` heavy lift.
+- ✅ Compressed dashboard tabs from 6 → 3: **Today** (the §50 Phase B TodayView), **Look Back** (new minimal panel — Phase D fills in patterns), **Stuff** (new — sub-tabs Routines / Finance / Assistant Settings, each wrapping the surviving panels). Single header icon left (`❔ Guide`). Legacy `household-os.view` localStorage values (`home`, `today`, `schedule`, `workouts`, `finance`, `log`, etc.) all fall through to `'today'` in the new `readSavedView()`.
+- ✅ Trimmed `packages/shared/src/types.ts` from ~830 lines to ~370 lines — removed all retired types (`TodayPlan`, `PlanItem`, `SwapPoolItem`, `PublisherState`, `MoodLog`, `EnergyLog`, `DeferralEvent`, `DeferralPattern`, `WorkoutPattern`, `MealEffort`, `MealDay`, `MealWeek`, `ContextEntry/Input`, `CheckIn` + question shapes, `ZoneAssessment`, `AdHocTask`, `CalendarTask`, `DayView`, `ScheduleRoutineDue/Entry/Pending/Range`, `EnergySuggestion`, `DeferReasonCode/DeferReason`, `WellbeingSource`, `DayType`, `ItemStatus`, `PersonaConfig`). `ActivityKind` shrunk from 25 values to 10.
+- ⏸️ **Deferred to Phase F**: Alexa skill handlers + `client.ts` still reference retired endpoints (`/today/swap`, `/today/mark-done`, `/zones/*`, `/patterns/*`, `/checkins/*`, `/mood`, `/energy`). They compile (the skill has its own type copies) but they 404 at runtime against the new API. §50's Phase F is the dedicated skill-cleanup phase — leaving the work there per the phasing.
+- ⏸️ **Deferred to Phase E**: Routine schema simplification (§50 calls for removing `energy`, `flex_days`, `also_triggers`, `skip_if`). Phase E rebuilds the Routines table in Stuff and is the natural place to drop fields from the schema + every consumer in one coherent change.
+- ⏸️ **Deferred to Phase D**: full Look Back content. The Phase C `LookBackPanel` ships with a "This week" workout count + 7-day check-in strip — enough to be useful — plus placeholders for "This month" (Phase D wires RocketMoney summary) and "Patterns" (Phase D adds the pattern surfacer).
+
+**Test delta: −195 (from 384 → 189).** Within §50's prediction of "roughly 100-130 tests survive" — slightly higher because the surviving subsystems (finance, appointments, csv-parser, routines, calendar, morning-checkin) have heavier coverage than the deletes did. Dashboard build dropped from 291 KB JS gzipped → 209 KB (28% smaller). Detail in §53.
 
 **Phase D — Look Back view (~3-4 hr)**
 - Build `LookBackPanel` component with the three sections (This week / This month / Patterns).
@@ -2662,6 +2673,129 @@ If `ANTHROPIC_API_KEY` is set, `AskPanel` will round-trip against `/api/chat` im
 
 ### Open follow-ups for Phase C
 
-- Delete `HomePanel.tsx` (now unmounted), `personas/{household,finance,grocery}.ts` + index, `PersonaLauncher.tsx`, `tools.ts` + drift-detector test, MCP layer, and the broader model/service/cron list from §50's "What gets DELETED."
-- Compress to 3 tabs: Today (the new view we just shipped), Look Back, Stuff. Migrate the salvageable Schedule/Workouts/Finance/Log surfaces into Look Back / Stuff per §50.
-- Migration for already-persisted `household-os.view` localStorage values that become invalid — fall through to `'today'` (or whatever the new default-landing key is named in Phase C; the current `'home'` key may want a rename).
+- Delete `HomePanel.tsx` (now unmounted), `personas/{household,finance,grocery}.ts` + index, `PersonaLauncher.tsx`, `tools.ts` + drift-detector test, MCP layer, and the broader model/service/cron list from §50's "What gets DELETED." (Shipped — see §53.)
+- Compress to 3 tabs: Today (the new view we just shipped), Look Back, Stuff. (Shipped — see §53.)
+- Migration for already-persisted `household-os.view` localStorage values that become invalid — fall through to `'today'`. (Shipped — see §53.)
+
+---
+
+## 53. Phase C — Deletes + tab compression (SHIPPED 2026-05-11)
+
+Phase C of the §50 rebuild — the destructive purge. Removes ~50 files of legacy code, compresses the 6-tab dashboard to 3, and reshapes the API surface to a 11-route minimum. Phase A's deferred work (deleting old persona files) also landed here.
+
+### Deletion ledger
+
+**Mongoose models removed** (10 files; data in Atlas survives — restore from `git log` if any are missed): `TodayPlan`, `MoodLog`, `EnergyLog`, `ContextEntry`, `AdHocTask`, `ZoneAssessment`, `CheckIn`, `DeferralEvent`, `MealWeek`, `AlexaReminder`.
+
+**API services removed** (14): `today`, `zones`, `checkins`, `checkin-generators`, `patterns`, `mood`, `energy`, `context`, `day`, `schedule`, `meal-weeks`, `tasks`, `alexa-push`, `alexa-reminders`.
+
+**API routes removed** (12): mounting + handler files for `/api/today`, `/api/zones`, `/api/checkins`, `/api/patterns`, `/api/mood`, `/api/energy`, `/api/context`, `/api/day`, `/api/schedule`, `/api/meal-weeks`, `/api/tasks`, `/api/activity`.
+
+**Crons removed**: `cron/morning-gen.ts` + the four nudge generators inside `services/checkin-generators.ts`. Two crons survive (`cron/calendar-ingest.ts` + `cron/appointment-reconcile.ts`).
+
+**MCP layer removed entirely**: `apps/api/src/mcp/{server,route}.ts` + `apps/api/src/persona/tools.ts` + `apps/api/src/persona/tools.test.ts` (the drift detector). Phase A had deferred this; landed alongside the broader purge.
+
+**Old persona files removed**: `packages/shared/src/personas/{household,finance,grocery,index}.ts`. `package.json` exports for `./personas/*` removed. Phase A had deferred this; landed here. Also dropped: `packages/shared/src/sample-meal-week.json` (was bundled into the deleted MealWeekCalendar) + its export entry.
+
+**Publisher removed entirely**: `apps/api/src/publisher/{index,calendar,alexa}.ts`. Was wired only from `services/today.ts`; per-appointment events from §47 Phase 4 replaced its job. `lodash.debounce` dropped from `apps/api/package.json`.
+
+**Dashboard components removed** (17 + 1 utils file): `DayPanel`, `ActivityFeed`, `JournalPanel`, `WorkoutPanel`, `SchedulePanel`, `HomePanel`, `EnergyButtons`, `MoodButtons`, `TodayList`, `TodayContextStrip`, `MealWeekCalendar`, `ShoppingListPanel`, `PersonaLauncher`, `CheckInBanner`, `DeferDialog`, `LogPanel`, `DayNavigator`, `utils/relativeTime.ts`.
+
+**Test files removed** (~17): all tests for deleted services. Notable: `activity-wiring.test.ts` was deleted entirely because most of its event sources retired; remaining activity-log coverage lives in the individual service tests (`morning-checkin.test.ts`, `finance.test.ts`, `finance-history.test.ts`, `appointments.test.ts`).
+
+**Scripts trimmed**: `seed-first-context.ts` deleted (used `ContextEntry`). `start-tomorrow.ts` and `set-cleaner-visit.ts` updated to drop `TodayPlan.deleteMany({})` calls (TodayPlan retired). The `npm run start-tomorrow` script still works for backdating rolling routine `last_done` values.
+
+**`apps/api/src/utils/day-classify.ts` removed** — no surviving consumers after `morning-gen` retired.
+
+### What survives — the new minimum
+
+**Models (10)**: `Routine`, `Trigger`, `WorkoutLog`, `FinancialProfile`, `FinancialProfileSnapshot`, `RocketMoneyImport`, `ActivityLog`, `AlexaAuth`, `MorningCheckin`, `AssistantSettings`.
+
+**Services (16)**: `routines`, `triggers`, `workouts`, `finance`, `finance-history`, `csv-parser`, `calendar` (+ new `upcomingEvents` helper for `get_calendar_range`), `appointments`, `morning-checkin`, `assistant-settings`, `activity`, `session`, `alexa-lwa`, `alexa-shopping-list`, `grocery-list-parser`, `assistant-tools` (under `persona/`).
+
+**Routes (11)**: `/api/auth/google`, `/api/routines`, `/api/triggers`, `/api/workouts`, `/api/finance/*` (profile + outsourceable + affordability + estimate-tax + imports + snapshots), `/api/calendar/today`, `/api/appointments/*`, `/api/alexa/*` (LWA + shopping list), `/api/chat`, `/api/assistant-settings*`, `/api/morning-checkin/*`.
+
+**Dashboard components (13)**: `App`, `TodayView`, `LookBackPanel`, `StuffPanel`, `AssistantSettingsPanel`, `MorningCheckinForm`, `HabitsReminder`, `AskPanel`, `CalendarDayPanel`, `RoutinesPage`, `FinancePanel`, `HowToGuide`, `LoginScreen`, `ThemeToggle`.
+
+### Dashboard — 3-tab compression
+
+- **Today** ([apps/dashboard/src/components/TodayView.tsx](apps/dashboard/src/components/TodayView.tsx) from Phase B) — morning check-in + calendar strip + habits reminder + Ask.
+- **Look Back** ([apps/dashboard/src/components/LookBackPanel.tsx](apps/dashboard/src/components/LookBackPanel.tsx) new) — minimal Phase C version: workout count vs target (3/week), 7-day morning-checkin strip, placeholders for "This month" (Phase D) + "Patterns" (Phase D).
+- **Stuff** ([apps/dashboard/src/components/StuffPanel.tsx](apps/dashboard/src/components/StuffPanel.tsx) new) — three sub-tabs persisted via `localStorage.household-os.stuff-tab`:
+  - **Routines** — wraps the surviving `RoutinesPage`.
+  - **Finance** — wraps the trimmed `FinancePanel` (FinanceDayLog stripped).
+  - **Assistant settings** — new [AssistantSettingsPanel.tsx](apps/dashboard/src/components/AssistantSettingsPanel.tsx): textarea for the live system prompt, version-history list with rollback, "Reset to seed" button. All round-trips against `/api/assistant-settings*`.
+
+Header icons collapsed from 4 to 1 (just `❔ Guide`). The previous Household Ops launcher, Food, Routines all retired (Routines is now a Stuff sub-tab; Household Ops is the unified `/api/chat` accessible from Today's AskPanel; Food retired entirely with the meal-week + grocery-list-paste surfaces).
+
+Legacy `household-os.view` localStorage migration in `readSavedView()`: any pre-Phase-C value (`home`, `today`, `schedule`, `workouts`, `finance`, `log`, `activity`, `journal`, `household`, `food`, `routines`) falls through to `'today'`. The new valid set is `['today', 'look_back', 'stuff', 'guide']`.
+
+### Shared types trim
+
+`packages/shared/src/types.ts` went from ~830 lines to ~370. Removed: `TodayPlan`, `PlanItem`, `SwapPoolItem`, `PublisherState`, `MoodLog`, `EnergyLog`, `DeferralEvent`, `DeferralPattern`, `WorkoutPattern`, `MealEffort`, `MealDay`, `MealWeek`, `ContextEntry/Input`, `ContextRelatedPersona`, `ContextSource`, `CheckIn` + 4 question-shape types + `CheckInType` + `CheckInStatus` + `ZoneStateLevel` + `ZoneAssessment` + `AdHocTask*` + `PatternInterruptContext` + `ZoneAssessmentContext`, `CalendarTask`, `DayView`, `ScheduleRoutineDue / ScheduleEntry / SchedulePendingAdHoc / ScheduleRangeResponse`, `EnergySuggestion`, `DeferReasonCode`, `DeferReason`, `WellbeingSource`, `DayType`, `ItemStatus`, `PersonaConfig`. `ActivityKind` shrunk from 25 → 10 values (kept: `workout_logged`, `trigger_added`, `routine_edited`, `finance_import_added`, `finance_snapshot_restored`, `appointment_created`, `appointment_rescheduled`, `appointment_deleted_externally`, `task_done`, `morning_checkin_logged`).
+
+### Spec deviations / design calls
+
+1. **Alexa skill left compiling-but-runtime-broken.** The skill's intent handlers + `client.ts` still call retired endpoints (`/today/swap`, `/zones/*`, `/checkins/*`, `/mood`, `/energy`, `/patterns/*`). §50 has a dedicated **Phase F — Alexa cleanup** for this. The skill compiles because it types its API responses independently in `client.ts`; calls will 404 at runtime against the new API. **Don't ship voice-flows-dependent demos until Phase F.** The daily morning push (Proactive Events) and the LWA-backed shopping list integration still work — those don't depend on retired endpoints.
+2. **Routine schema simplification deferred to Phase E.** §50 calls for removing `energy`, `flex_days`, `also_triggers`, `skip_if`, `prep_dependency`, `zone_rotation` from the Routine schema. Phase C leaves the schema as-is because (a) seed.ts still seeds those fields from `inventory.json`, (b) the Stuff/Routines table that Phase E rebuilds is the natural place to drop fields from the schema + every consumer in one coherent change. The `patchRoutine` allow-list in `services/routines.ts` still includes the doomed fields. Harmless until Phase E.
+3. **`get_calendar_range` simplified to events-only.** §50's tool spec just says "Upcoming events (default 7)." The old `scheduleRange` joined rolling-routine due dates + fixed-routine schedules + zone rotation + event-driven routines + ad-hoc tasks — almost all of which retire in Phase C. The Phase C replacement (`upcomingEvents` in `services/calendar.ts`) just lists Google Calendar events for an N-day window. The assistant can still answer "what's on the routine schedule this week" by calling `list_routines` and reasoning over the cadence math, but it won't get a pre-bucketed week view. Acceptable trade-off given the §50 ethos ("Calendar is always source of truth for time-bound things").
+4. **Look Back is a Phase C shell.** §50 Phase D will fill in This month (RocketMoney-import summary + projected income view) + Patterns (a small set of hardcoded queries like "skipped strength training 3 times in 30 days — all on groggy mornings"). Phase C ships the structural panel + the easiest data section ("This week" — workout count + check-in strip from existing services). Placeholders point at Stuff/Finance until Phase D.
+5. **`ChatMessage` collection still not built.** §50's Today-view spec mentions persisting chat history to a `ChatMessage` collection so Look Back can surface "what did I ask the assistant last Tuesday." Phase B noted this was deferred; Phase C doesn't add it either because Look Back is still a placeholder. Phase D is the natural time — if/when Look Back actually wants to render chat snippets.
+6. **Phase 6 Alexa Reminders deferred indefinitely per §50.** The hourly cron's reminders pass got stripped (was the second pass after appointment reconcile). LWA bootstrap stays because the shopping-list integration still uses it. `alexa-reminders.{ts,test.ts}` deleted; the `AlexaReminder` Mongo collection model deleted; the `Alexa Reminders` test count drops by 4.
+7. **Meal week calendar retired by default per §50.** §50 said "Diane should sanity-check whether she'd miss the meal week view" but Phase A and Phase B shipped without her flagging it. Defaulting to delete here means the Food tab + `MealWeekCalendar.tsx` + `meal-weeks` service + route + model + tests all go. The Mongo collection's data survives in Atlas; restore the code from git if Diane wants it back later.
+
+### Tests + build delta
+
+| Metric | Before Phase C | After Phase C | Delta |
+|---|---|---|---|
+| Tests passing | 384 API + 10 alexa-skill = 394 | 189 API + 10 alexa-skill = 199 | −195 (−49%) |
+| Test files | 41 + 1 | 17 + 1 | −24 |
+| Dashboard JS gzipped | 291 KB | 209 KB | −28% |
+| Dashboard modules transformed (Vite) | 63 | 46 | −27% |
+| Mongoose models | 20 | 10 | −50% |
+| API routes mounted under `/api` | 23 | 11 | −52% |
+| `ActivityKind` union members | 25 | 10 | −60% |
+
+All four workspaces typecheck clean; all 199 tests pass; dashboard production build succeeds.
+
+### Route cheat sheet (post-Phase C)
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/health` | GET | Health check (no auth) |
+| `/alexa` | POST | Alexa skill webhook (still mounted; handlers retire in Phase F) |
+| `/api/auth/google` | POST | Google ID token → session JWT (§38) |
+| `/api/routines` | GET | All active routines |
+| `/api/routines/:key` | PATCH | Update routine (allow-list) |
+| `/api/triggers` | GET / POST | Calendar event triggers |
+| `/api/workouts` | GET / POST | Retroactive workout log + history |
+| `/api/workouts/today` | GET | Today's slot + log |
+| `/api/workouts/by-date/:date` | GET | Specific day's slot + log |
+| `/api/finance/profile` | GET / PATCH | FinancialProfile singleton |
+| `/api/finance/outsourceable` | GET | Outsourceable routines with $/mo |
+| `/api/finance/affordability` | GET | Greedy-fit report |
+| `/api/finance/estimate-tax` | POST | Pure compute |
+| `/api/finance/imports` | GET / POST | RocketMoney imports |
+| `/api/finance/imports/:id/apply` | POST | Apply import → write profile + snapshot |
+| `/api/finance/snapshots` | GET | Profile history |
+| `/api/finance/snapshots/:id/restore` | POST | Restore profile from snapshot |
+| `/api/calendar/today` | GET | Today's Google Calendar events |
+| `/api/appointments/:key` | POST / DELETE | Schedule / unlink an appointment |
+| `/api/appointments/:key/reconcile` | POST | Force reconcile |
+| `/api/appointments/reconcile-all` | POST | Admin trigger for the cron logic |
+| `/api/alexa/auth-status` | GET | LWA configured? |
+| `/api/alexa/shopping-list/add` | POST | Bulk-add items to Alexa shopping list |
+| `/api/alexa/lwa/save-token` | POST | One-time LWA bootstrap |
+| `/api/chat` | POST | Unified assistant tool-use loop |
+| `/api/assistant-settings` | GET / PATCH | System prompt + version list |
+| `/api/assistant-settings/reset` | POST | Reset to seed prompt |
+| `/api/morning-checkin` | GET / POST | Today's check-in + upsert |
+| `/api/morning-checkin/:date` | GET | Specific day |
+| `/api/morning-checkin?days=N` | GET | Recent (newest-first) |
+
+### Open follow-ups for the next phase boundary
+
+- **Phase D (Look Back)**: fill in the "This month" section (RocketMoney import summary + projected income) and the "Patterns" surfacer. Decide whether to build the `ChatMessage` collection (so Look Back can show "what you asked the assistant about last week") or skip — it's a heavy persistence layer for a low-frequency use case.
+- **Phase E (Stuff)**: the Stuff panel is functional but Phase E refines it. Specifically: add `cadence_shift_strategy` to `update_routine` (modal + tool wiring), add `set_projected_income` (decide: new field on profile vs. new collection), simplify the Routine schema by dropping `energy` / `flex_days` / `also_triggers` / `skip_if` from the model + seed.ts + `patchRoutine` allow-list.
+- **Phase F (Alexa)**: this is the most-urgent remaining work because the live skill currently 404s against the trimmed API. Retool `WhatsLeftIntent` to read today's incomplete Calendar events directly; delete the rest of the intents (swap / mark-done / pull-from-pool / mood / energy / check-in answer / zone / etc.); update `client.ts` to only call surviving endpoints; verify the morning push still fires.
+- **Phase G (Final cleanup)**: relative timestamps on the Routines table + MorningCheckin summary line. Run a `find` for any orphaned tests or docs the Phase C purge missed.

@@ -1,16 +1,8 @@
-import { useEffect, useState } from 'react';
-import { api } from './api.js';
+import { useState } from 'react';
 import TodayView from './components/TodayView.js';
-import WorkoutPanel from './components/WorkoutPanel.js';
-import LogPanel from './components/LogPanel.js';
-import MealWeekCalendar from './components/MealWeekCalendar.js';
-import ShoppingListPanel from './components/ShoppingListPanel.js';
-import PersonaLauncher from './components/PersonaLauncher.js';
-import RoutinesPage from './components/RoutinesPage.js';
+import LookBackPanel from './components/LookBackPanel.js';
+import StuffPanel from './components/StuffPanel.js';
 import HowToGuide from './components/HowToGuide.js';
-import FinancePanel from './components/FinancePanel.js';
-import DayPanel from './components/DayPanel.js';
-import SchedulePanel from './components/SchedulePanel.js';
 import ThemeToggle from './components/ThemeToggle.js';
 import LoginScreen from './components/LoginScreen.js';
 import {
@@ -20,66 +12,39 @@ import {
   writeSession,
   type AuthSession,
 } from './auth.js';
-import type { TodayPlan } from '@household-os/shared/types';
 
 /**
- * Phase 3 §47 — Tab structure refactor.
+ * §50 Phase C — compressed to three views.
  *
- * Tabs (6): Home, Today, Schedule, Workouts, Finance, Log
- * Header icons (4): Household Ops (💬), Food (🛒), Routines (⚙️), Guide (❔)
+ *   today      → Phase B's TodayView (check-in + calendar + habits + Ask)
+ *   look_back  → Phase C minimal LookBackPanel (Phase D fills in patterns)
+ *   stuff      → Phase C StuffPanel with three sub-tabs (Routines, Finance, Assistant)
  *
- * Spec called for 3 header icons but didn't account for the existing
- * "Household Ops" persona launcher — it was previously a top-level tab and
- * would have lost its surface entirely. Demoting it to a 4th icon keeps the
- * spec's intent ("demote secondary surfaces to icons") without regressing.
+ * Plus a single 'guide' header-icon route that opens the existing in-app
+ * Guide tab (HowToGuide) — kept because it's the end-user reference per §30
+ * of HANDOFF.
  *
- * `activity` and `journal` from the pre-refactor View union both fold into
- * the new `log` tab; the legacy-localStorage migration in readSavedView()
- * maps them.
+ * Legacy view-ID migration: every pre-Phase-C value lands on 'today'.
  */
-type View =
-  | 'home'
-  | 'today'
-  | 'schedule'
-  | 'workouts'
-  | 'finance'
-  | 'log'
-  | 'household'
-  | 'food'
-  | 'routines'
-  | 'guide';
+type View = 'today' | 'look_back' | 'stuff' | 'guide';
 
-const VIEWS: readonly View[] = [
-  'home',
-  'today',
-  'schedule',
-  'workouts',
-  'finance',
-  'log',
-  'household',
-  'food',
-  'routines',
-  'guide',
-] as const;
-
-/** Pre-refactor view IDs that now map onto the new structure. */
-const LEGACY_VIEW_MAP: Record<string, View> = {
-  activity: 'log',
-  journal: 'log',
-};
+const VIEWS: readonly View[] = ['today', 'look_back', 'stuff', 'guide'] as const;
 
 const VIEW_KEY = 'household-os.view';
 
 function readSavedView(): View {
   try {
     const v = localStorage.getItem(VIEW_KEY);
-    if (!v) return 'home';
+    if (!v) return 'today';
     if ((VIEWS as readonly string[]).includes(v)) return v as View;
-    if (v in LEGACY_VIEW_MAP) return LEGACY_VIEW_MAP[v]!;
+    // Phase C migration: any legacy view key (home, today, schedule, workouts,
+    // finance, log, activity, journal, household, food, routines) falls
+    // through to today. Finance / routines / assistant land in Stuff but a
+    // hard fallback to today is the safe move per §50.
   } catch {
     /* localStorage unavailable */
   }
-  return 'home';
+  return 'today';
 }
 
 function writeSavedView(view: View): void {
@@ -96,20 +61,9 @@ export default function App() {
     writeSavedView(v);
     setViewRaw(v);
   };
-  const [plan, setPlan] = useState<TodayPlan | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<AuthSession | null>(() =>
     AUTH_ENABLED ? readSession() : null,
   );
-
-  async function refresh() {
-    try {
-      setPlan(await api.today.get());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }
 
   function handleLogin(s: AuthSession) {
     writeSession(s);
@@ -119,13 +73,7 @@ export default function App() {
   function handleLogout() {
     clearSession();
     setSession(null);
-    setPlan(null);
   }
-
-  useEffect(() => {
-    if (AUTH_ENABLED && !session) return;
-    void refresh();
-  }, [session]);
 
   if (AUTH_ENABLED && !session) {
     return <LoginScreen onLogin={handleLogin} />;
@@ -144,36 +92,6 @@ export default function App() {
             justifyContent: 'flex-end',
           }}
         >
-          <button
-            type="button"
-            className={`header-icon${view === 'household' ? ' active' : ''}`}
-            onClick={() => setView('household')}
-            title="Open Household Ops persona launcher"
-            aria-label="Household Ops"
-          >
-            <span aria-hidden>💬</span>
-            <span className="header-icon-label">Ops</span>
-          </button>
-          <button
-            type="button"
-            className={`header-icon${view === 'food' ? ' active' : ''}`}
-            onClick={() => setView('food')}
-            title="Open Grocery Manager"
-            aria-label="Food"
-          >
-            <span aria-hidden>🛒</span>
-            <span className="header-icon-label">Food</span>
-          </button>
-          <button
-            type="button"
-            className={`header-icon${view === 'routines' ? ' active' : ''}`}
-            onClick={() => setView('routines')}
-            title="Manage routines"
-            aria-label="Routines"
-          >
-            <span aria-hidden>⚙️</span>
-            <span className="header-icon-label">Routines</span>
-          </button>
           <button
             type="button"
             className={`header-icon${view === 'guide' ? ' active' : ''}`}
@@ -209,73 +127,28 @@ export default function App() {
 
       <div className="tabs">
         <button
-          className={view === 'home' ? 'active' : ''}
-          onClick={() => setView('home')}
+          className={view === 'today' ? 'active' : ''}
+          onClick={() => setView('today')}
         >
           Today
         </button>
         <button
-          className={view === 'today' ? 'active' : ''}
-          onClick={() => setView('today')}
+          className={view === 'look_back' ? 'active' : ''}
+          onClick={() => setView('look_back')}
         >
-          Day
+          Look Back
         </button>
         <button
-          className={view === 'schedule' ? 'active' : ''}
-          onClick={() => setView('schedule')}
+          className={view === 'stuff' ? 'active' : ''}
+          onClick={() => setView('stuff')}
         >
-          Schedule
-        </button>
-        <button
-          className={view === 'workouts' ? 'active' : ''}
-          onClick={() => setView('workouts')}
-        >
-          Workouts
-        </button>
-        <button
-          className={view === 'finance' ? 'active' : ''}
-          onClick={() => setView('finance')}
-        >
-          Finance
-        </button>
-        <button
-          className={view === 'log' ? 'active' : ''}
-          onClick={() => setView('log')}
-        >
-          Log
+          Stuff
         </button>
       </div>
 
-      {error && (
-        <div className="panel" style={{ borderColor: 'var(--bad)' }}>
-          <strong>Error:</strong> {error}
-        </div>
-      )}
-
-      {/*
-        §50 Phase B — `home` view is now the new TodayView (morning check-in +
-        calendar + habits + Ask). The `today` view key now hosts the existing
-        DayPanel date navigator (renamed "Day" in the tab strip). The §47
-        Phase 3 HomePanel widget grid is unmounted but kept in code until
-        Phase C does the broader compression to 3 tabs.
-      */}
-      {view === 'home' && <TodayView />}
-      {view === 'today' && (
-        <DayPanel initialPlan={plan} onPlanChange={setPlan} />
-      )}
-      {view === 'schedule' && <SchedulePanel />}
-      {view === 'workouts' && <WorkoutPanel />}
-      {view === 'finance' && <FinancePanel />}
-      {view === 'log' && <LogPanel />}
-      {view === 'household' && <PersonaLauncher persona="household" />}
-      {view === 'food' && (
-        <>
-          <MealWeekCalendar />
-          <ShoppingListPanel />
-          <PersonaLauncher persona="grocery" />
-        </>
-      )}
-      {view === 'routines' && <RoutinesPage />}
+      {view === 'today' && <TodayView />}
+      {view === 'look_back' && <LookBackPanel />}
+      {view === 'stuff' && <StuffPanel />}
       {view === 'guide' && <HowToGuide />}
     </div>
   );

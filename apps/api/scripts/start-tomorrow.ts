@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import { connect, disconnect } from '../src/db/connection.js';
 import { Routine } from '../src/db/models/Routine.js';
-import { TodayPlan } from '../src/db/models/TodayPlan.js';
 
 /**
  * "Official launch tomorrow" — backdate every never-completed rolling routine
@@ -10,8 +9,10 @@ import { TodayPlan } from '../src/db/models/TodayPlan.js';
  * Anything with a real `last_done` is left alone so we never overwrite real
  * completion history.
  *
- * Also clears any TodayPlan in the DB so the next morning-gen run produces a
- * fresh plan grounded in the new last_done values.
+ * §50 Phase C trim: previously also cleared `TodayPlan` so the next
+ * morning-gen would rebuild against the new last_done values. TodayPlan +
+ * morning-gen retired in Phase C; the backdating part is still useful for
+ * keeping rolling-routine due dates spread sanely.
  */
 
 function hashOffset(key: string, mod: number): number {
@@ -59,11 +60,6 @@ for (const r of routines) {
     `${r.key.padEnd(28)} ${String(interval).padStart(6)}d  ${nextDue.toISOString().slice(0, 10)}`,
   );
 }
-
-const cleared = await TodayPlan.deleteMany({});
-console.log(
-  `\nCleared ${cleared.deletedCount ?? 0} TodayPlan doc(s) — next morning-gen will rebuild from the new last_done values.`,
-);
 
 await disconnect();
 process.exit(0);
