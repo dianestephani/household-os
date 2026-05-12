@@ -14,6 +14,7 @@ import type {
   CheckIn,
   ActivityKind,
   ActivityLogEntry,
+  AwakenessLevel,
   CalendarDayResponse,
   CalendarTask,
   ContextEntry,
@@ -25,12 +26,27 @@ import type {
   ImportKind,
   MealWeek,
   MoodLog,
+  MorningCheckin,
   RocketMoneyImport,
   ScheduleRangeResponse,
   FinancialProfile,
   OutsourceableSummary,
   TaxEstimate,
 } from '@household-os/shared/types';
+
+/** Response shape for POST /api/chat (§50 Phase A). */
+export interface ChatResult {
+  text: string;
+  blocks: unknown[];
+  tool_rounds: number;
+  usage?: Record<string, number | undefined>;
+  live: boolean;
+}
+
+export type ChatMessage = {
+  role: 'user' | 'assistant';
+  content: string | unknown;
+};
 
 export interface AffordabilityReport {
   profile: FinancialProfile;
@@ -303,6 +319,32 @@ export const api = {
       }>('/zones/assess', {
         method: 'POST',
         body: JSON.stringify({ zone, level, notes }),
+      }),
+  },
+  morningCheckin: {
+    get: (date?: string) =>
+      request<MorningCheckin | null>(
+        date ? `/morning-checkin/${date}` : '/morning-checkin',
+      ),
+    recent: (days = 14) =>
+      request<MorningCheckin[]>(`/morning-checkin?days=${days}`),
+    save: (input: {
+      date?: string;
+      mood: MoodLevel;
+      energy: EnergyLevel;
+      awakeness: AwakenessLevel;
+      note?: string;
+    }) =>
+      request<MorningCheckin>('/morning-checkin', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+  },
+  chat: {
+    send: (messages: ChatMessage[]) =>
+      request<ChatResult>('/chat', {
+        method: 'POST',
+        body: JSON.stringify({ messages }),
       }),
   },
   finance: {

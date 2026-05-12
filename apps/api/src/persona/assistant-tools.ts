@@ -9,6 +9,7 @@ import {
 import { todaysEvents } from '../services/calendar.js';
 import { scheduleRange } from '../services/schedule.js';
 import { addImport, listImports } from '../services/finance-history.js';
+import { getCheckin, recentCheckins } from '../services/morning-checkin.js';
 import type {
   EnergyLevel,
   FilingStatus,
@@ -121,5 +122,15 @@ export const assistantTools: Record<string, ToolImpl> = {
     const text = (input.text as string | undefined)?.trim();
     if (!text) throw new Error('add_rocketmoney_paste requires `text`');
     return addImport({ kind: 'paste', raw: text });
+  },
+
+  get_morning_checkin: async (input) => {
+    const date = input.date as string | undefined;
+    return getCheckin(date);
+  },
+
+  recent_checkins: async (input) => {
+    const days = Number((input.days as number | undefined) ?? 14);
+    return recentCheckins(Number.isFinite(days) ? days : 14);
   },
 };

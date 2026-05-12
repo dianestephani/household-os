@@ -2402,14 +2402,18 @@ Each phase is independently shippable. Diane can stop after any phase.
 
 **Test delta: +21 (7 assistant-settings + 9 assistant-tools + 5 runner).** New API total: **370 tests across 41 files** (380 total with alexa-skill). Typecheck clean across all four workspaces. Detail in §51.
 
-**Phase B — MorningCheckin + Today view (~3-4 hr)**
-- New `MorningCheckin` model (with unique index on `date`).
-- New `services/morning-checkin.ts` + `routes/morning-checkin.ts` (`GET /api/morning-checkin/:date?`, `POST /api/morning-checkin`).
-- Build `MorningCheckinForm` component (3 button-row pickers + note + save).
-- Build static `HabitsReminder` component (no DB).
-- Compose new Today view from `MorningCheckinForm` + existing `CalendarTodayWidget` (Phase 3) + `HabitsReminder` + a new `AskPanel`.
-- Implement `AskPanel` using the `POST /api/chat` endpoint.
-- Replace the existing Today/Home tab as the default landing.
+**Phase B — MorningCheckin + Today view (~3-4 hr) — SHIPPED 2026-05-11**
+- ✅ New [MorningCheckin model](apps/api/src/db/models/MorningCheckin.ts) with unique index on `date` (YYYY-MM-DD), required mood/energy/awakeness, optional 500-char note. New `MorningCheckin` + `MorningCheckinInput` + `AwakenessLevel` types in shared.
+- ✅ New `services/morning-checkin.ts` with `upsertCheckin` (insert-or-update + fires `morning_checkin_logged` activity with `operation: 'create' | 'update'`), `getCheckin(date?)` (defaults to today, falls back to today on malformed date), `recentCheckins(days)` (clamped to [1, 90], newest-first).
+- ✅ New `routes/morning-checkin.ts` — `GET /api/morning-checkin` (today), `GET /api/morning-checkin/:date`, `GET /api/morning-checkin?days=N` (recent list), `POST /api/morning-checkin` (upsert).
+- ✅ Two new ASSISTANT_TOOLS un-deferred: `get_morning_checkin` + `recent_checkins`. Removed from `DEFERRED_TOOL_NAMES`. Live tool count: 16 (was 14).
+- ✅ Built [MorningCheckinForm.tsx](apps/dashboard/src/components/MorningCheckinForm.tsx) — three button-row pickers + optional note + Save. Collapses to a one-line summary (✓ Logged at 2:14 PM — Good · Medium energy · Alert) once today's check-in exists; Edit button reopens the form pre-filled with the saved values.
+- ✅ Built [HabitsReminder.tsx](apps/dashboard/src/components/HabitsReminder.tsx) — static four-pill row (Litter scoop · Sweep pet zones · Kitchen reset · Pet food + water). No DB, no buttons, no tracking. Pure visual nudge per §50's "habits aren't tracked, appointments are."
+- ✅ Built [AskPanel.tsx](apps/dashboard/src/components/AskPanel.tsx) — chat surface against `POST /api/chat`. In-memory conversation state (no `ChatMessage` collection yet — see Open follow-ups). Renders the offline message verbatim when `live: false`, shows tool-round count on assistant turns, ⌘/Ctrl+Enter to send.
+- ✅ Composed new [TodayView.tsx](apps/dashboard/src/components/TodayView.tsx): MorningCheckinForm → CalendarDayPanel (reused) → HabitsReminder → AskPanel. **Made the default landing**: the `home` view key now renders TodayView; the tab strip's first button is labeled "Today" (was "Home"). The old §47 Phase 3 HomePanel widget grid is unmounted (kept in code; deleted in Phase C). The DayPanel date navigator moved to a new "Day" tab so Diane keeps her past/future day forensic surface through the transition.
+- ⏸️ Diane's smoke-test of `/api/chat` — still requires `ANTHROPIC_API_KEY`. AskPanel will surface the offline notice until she sets it.
+
+**Test delta: +14 (11 morning-checkin service + 3 new assistant-tools cases for get_morning_checkin + recent_checkins).** New API total: **384 tests across 41 files** (394 total with alexa-skill). All four workspaces typecheck clean; dashboard production build verified (291 KB JS / 16 KB CSS gzipped). Detail in §52.
 
 **Phase C — Deletes + tab compression (~3-4 hr)**
 - Delete the model + service + route + cron + dashboard component lists in "What gets DELETED" above.
@@ -2565,6 +2569,99 @@ Until the API key is set, the route returns `{live: false, text: '[assistant off
 
 ### Open follow-ups for the next phase boundary
 
-- **Phase B**: build `MorningCheckin` model + `morning-checkin.ts` service + route; add `get_morning_checkin` + `recent_checkins` to `ASSISTANT_TOOLS` (remove from `DEFERRED_TOOL_NAMES`); compose the new Today view with `AskPanel` calling `POST /api/chat`.
-- **Phase C** (deferred-from-A): delete `packages/shared/src/personas/{household,finance,grocery}.ts` + `personas/index.ts` + the launcher consumers (`PersonaLauncher.tsx`) + `tools.ts` + `tools.test.ts` + the MCP layer. Remove the `./personas/*` exports from `packages/shared/package.json`.
+- **Phase B** (shipped — see §52): MorningCheckin + Today view + assistant chat surface.
+- **Phase C** (deferred-from-A + the broader compression): delete `packages/shared/src/personas/{household,finance,grocery}.ts` + `personas/index.ts` + the launcher consumers (`PersonaLauncher.tsx`) + `tools.ts` + `tools.test.ts` + the MCP layer + the unmounted `HomePanel.tsx` + the model/service/route/cron lists in §50's "What gets DELETED." Remove the `./personas/*` exports from `packages/shared/package.json`. Compress to 3 tabs (Today, Look Back, Stuff).
 - **Phase E**: add `update_routine` cadence-shift wiring; add `set_projected_income` (needs a new field or collection — decision pending); add `create_calendar_event` / `update_calendar_event` / `delete_calendar_event` if the assistant should mutate Calendar directly (or punt to "assistant proposes; user confirms in Calendar UI").
+
+---
+
+## 52. Phase B — MorningCheckin + Today view (SHIPPED 2026-05-11)
+
+Phase B of the §50 rebuild. Lands the new daily-touchpoint surface — a single morning check-in document plus the four-section Today view that becomes the new default landing.
+
+### What landed
+
+**Shared types**
+
+- New `AwakenessLevel` (`'groggy' | 'meh' | 'alert'`), `MorningCheckin`, and `MorningCheckinInput` interfaces in [packages/shared/src/types.ts](packages/shared/src/types.ts).
+- New `ActivityKind` value `morning_checkin_logged`.
+- Two tools un-deferred in [packages/shared/src/persona/assistant.ts](packages/shared/src/persona/assistant.ts): `get_morning_checkin` (optional `date`; defaults to today) and `recent_checkins` (`days?`, default 14, max 90). `DEFERRED_TOOL_NAMES` shrunk from 6 to 4.
+
+**API — model**
+
+- [apps/api/src/db/models/MorningCheckin.ts](apps/api/src/db/models/MorningCheckin.ts) — `date` is required + unique-indexed (one doc per local day), mood/energy/awakeness required-with-enum, note optional with schema-level `maxlength: 500`. Defensive `mongoose.models.MorningCheckin ?? mongoose.model(...)` pattern matching the rest of the repo.
+
+**API — service**
+
+- [apps/api/src/services/morning-checkin.ts](apps/api/src/services/morning-checkin.ts):
+  - `upsertCheckin(input)` — validates the three enums explicitly (Mongoose enum errors are noisier than necessary), trims + truncates `note` to 500 chars, defaults `date` to today's `ymd()` when omitted or malformed. Detects insert-vs-update by pre-checking for an existing doc so the activity-log entry can phrase it correctly. Filter `{date}` + `$set` mutables + `$setOnInsert: {date, created_at}` — same pattern as `setFinancialProfile` / `upsertMealWeek` to avoid the "would create a conflict at 'date'" Mongoose error.
+  - `getCheckin(date?)` — `null` when missing. Malformed date silently falls back to today (callers shouldn't ever pass garbage but this keeps the route handler simple).
+  - `recentCheckins(days)` — clamped to [1, 90], newest-first, returns up to `days` worth of rows. Uses `$gte` on the string date (works because YYYY-MM-DD sorts correctly lexically).
+- Activity-log entry on every upsert: `kind: 'morning_checkin_logged'`, metadata `{date, mood, energy, awakeness, has_note, operation: 'create' | 'update'}`. Look Back will read this to show timestamps.
+
+**API — route**
+
+- [apps/api/src/routes/morning-checkin.ts](apps/api/src/routes/morning-checkin.ts):
+  - `GET /api/morning-checkin` — today's check-in (or `null`)
+  - `GET /api/morning-checkin?days=N` — recent list (newest-first)
+  - `GET /api/morning-checkin/:date` — specific day; strict YYYY-MM-DD regex (400 otherwise)
+  - `POST /api/morning-checkin` — body `{date?, mood, energy, awakeness, note?}`; 400 if any of the three required fields is missing or invalid
+- Mounted under the existing `requireToken` guard in [apps/api/src/index.ts](apps/api/src/index.ts).
+
+**API — assistant tools**
+
+- [apps/api/src/persona/assistant-tools.ts](apps/api/src/persona/assistant-tools.ts) gained `get_morning_checkin` (passes optional `date` through) and `recent_checkins` (forwards `days` with the same clamp the service applies). Both delegate directly to the service. No new state.
+- Total live assistant tools: 16 (was 14). The drift detector in [assistant-tools.test.ts](apps/api/src/persona/assistant-tools.test.ts) automatically picked up the two new ones — no test edit needed for the schema/impl parity check.
+
+**Dashboard — API client**
+
+- [apps/dashboard/src/api.ts](apps/dashboard/src/api.ts) gained `api.morningCheckin.{get, recent, save}` and `api.chat.send`. New exported types `ChatResult` and `ChatMessage`.
+
+**Dashboard — components**
+
+- [apps/dashboard/src/components/MorningCheckinForm.tsx](apps/dashboard/src/components/MorningCheckinForm.tsx) — three button-row pickers (Down/Neutral/Good · Low/Medium/High · Groggy/Meh/Alert) + optional textarea (500-char client cap mirroring the server). Loads today's check-in on mount; if it exists, renders a one-line summary (`✓ Morning check-in at 2:14 PM — Good · Medium energy · Alert`) with an Edit toggle. Edit reopens the form pre-filled. Cancel restores the saved values without saving. Errors surface inline.
+- [apps/dashboard/src/components/HabitsReminder.tsx](apps/dashboard/src/components/HabitsReminder.tsx) — static pill row. Zero state, zero buttons, no API calls. Pure visual nudge.
+- [apps/dashboard/src/components/AskPanel.tsx](apps/dashboard/src/components/AskPanel.tsx) — chat surface against `POST /api/chat`. In-memory conversation (last 40 rendered; full history is whatever the component holds). User-role messages get a subtle background fill, assistant-role plain. Tool-round count shown when nonzero ("3 tool calls"). When `live: false`, renders an inline hint about `ANTHROPIC_API_KEY`. ⌘/Ctrl+Enter to send; plain Enter inserts a newline (matches Slack/Linear conventions).
+- [apps/dashboard/src/components/TodayView.tsx](apps/dashboard/src/components/TodayView.tsx) — single-column stack composing the four sections. Reuses the existing `CalendarDayPanel` from §47 Phase 3 (no duplication).
+
+**Dashboard — wiring**
+
+- [apps/dashboard/src/App.tsx](apps/dashboard/src/App.tsx): the `home` view key now renders `TodayView` (replaces the §47 Phase 3 widget grid as the default landing). The tab strip's first button is labeled "Today" (was "Home"). The `today` view key now hosts the existing `DayPanel` date navigator; that tab is labeled "Day" so Diane keeps the forensic past/future surface through the transition. The old `HomePanel.tsx` import was removed (file kept in code; Phase C deletes it). `readSavedView()` still returns `'home'` as the default — no localStorage migration needed because the key didn't change.
+
+### Tests added (+14)
+
+- [apps/api/src/services/morning-checkin.test.ts](apps/api/src/services/morning-checkin.test.ts) (11): default-date-today behavior; idempotent upsert (no duplicate doc); activity-log fires with the right `operation` flag on create + update; invalid mood/energy/awakeness rejection; 500-char note truncation; explicit-date backfill; null on missing doc; default-today `getCheckin()`; malformed-date fallback; newest-first `recentCheckins` order; days-param clamping doesn't throw.
+- [apps/api/src/persona/assistant-tools.test.ts](apps/api/src/persona/assistant-tools.test.ts) (+3): `get_morning_checkin` null path; `get_morning_checkin` happy path; `recent_checkins` newest-first.
+
+**Deliberately NOT tested:**
+
+- Dashboard components — no React testing infra in this repo (same situation as §47 Phases 3-6). First regression candidates if it's ever introduced: `MorningCheckinForm` collapsed-summary state, Edit/Cancel restore, `AskPanel` ⌘+Enter send, offline-message rendering.
+- `POST /api/chat` and `POST /api/morning-checkin` route layers — thin wrappers over the services, which are fully covered. Following the established repo pattern.
+
+### Spec deviations / design calls
+
+1. **Tab strip kept at 6 tabs, not 3.** §50 Phase B says "Replace the existing Today/Home tab as the default landing" but Phase C is the explicit "tab compression" phase. Phase B made the new TodayView the default landing (the `home` view key) and renamed the labels to make the new structure read sensibly through the transition. The old `HomePanel` widget grid is unmounted but kept in source until Phase C does the broader deletion + 3-tab compression in one coherent change. This matches §50's "the deployed app stays running through every phase" guarantee.
+2. **`ChatMessage` collection NOT built.** §50's Today-view spec says "full history persists to a new `ChatMessage` collection ... for Look Back access." Phase B's AskPanel is in-memory only because (a) Look Back isn't built until Phase D, so there's no consumer yet, and (b) the cheap path of storing chat history in localStorage works fine for a single-user system and avoids a write-amplification surface during the rebuild. Phase D can add the collection if the Look Back wants to surface "what did I ask the assistant last Tuesday."
+3. **`HabitsReminder` list is hardcoded, not user-editable.** §50 explicitly says habits aren't tracked — they're a visual nudge. Making the list editable would invite cadence creep ("ok but if I edit this maybe I should also know when I last did it…"). Keep it dumb. If Diane ever wants different habits, she edits the constant array and ships a one-line change.
+4. **`MorningCheckinForm` collapses to summary on existing check-in.** §50's spec: "only when today's check-in is not yet saved. Once saved, collapses to a one-line summary." Built exactly to spec — the form vanishes after save and the summary line includes the actual save time so it doubles as a "when did I check in" tell.
+5. **Note cap enforced at three layers** — Mongoose `maxlength: 500`, service trim+slice, dashboard textarea `maxLength` equivalent via `slice(0, 500)` on every `onChange`. Defense in depth so a paste of a 10K-character article can't blow up the DB write or chat panel.
+6. **`recent_checkins` description tells the model NOT to volunteer patterns.** Per §50 tone guidance: "Surface patterns when asked ... Don't volunteer them as advice." The tool description encodes this so the model treats it as introspection, not prescription.
+
+### Route cheat sheet additions
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/morning-checkin` | GET | Today's check-in (or `null`) |
+| `/api/morning-checkin?days=N` | GET | Recent check-ins, newest-first, clamped [1, 90] |
+| `/api/morning-checkin/:YYYY-MM-DD` | GET | Specific day's check-in |
+| `/api/morning-checkin` | POST | Upsert (body `{date?, mood, energy, awakeness, note?}`) |
+
+### Diane's manual setup (no change vs Phase A)
+
+If `ANTHROPIC_API_KEY` is set, `AskPanel` will round-trip against `/api/chat` immediately. If it's not, the panel shows the offline message verbatim — the rest of TodayView (check-in + calendar + habits) works regardless. Nothing about Phase B blocks on the API key.
+
+### Open follow-ups for Phase C
+
+- Delete `HomePanel.tsx` (now unmounted), `personas/{household,finance,grocery}.ts` + index, `PersonaLauncher.tsx`, `tools.ts` + drift-detector test, MCP layer, and the broader model/service/cron list from §50's "What gets DELETED."
+- Compress to 3 tabs: Today (the new view we just shipped), Look Back, Stuff. Migrate the salvageable Schedule/Workouts/Finance/Log surfaces into Look Back / Stuff per §50.
+- Migration for already-persisted `household-os.view` localStorage values that become invalid — fall through to `'today'` (or whatever the new default-landing key is named in Phase C; the current `'home'` key may want a rename).

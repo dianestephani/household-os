@@ -2,6 +2,30 @@ export type EnergyLevel = 'low' | 'medium' | 'high';
 
 export type MoodLevel = 'good' | 'neutral' | 'down';
 
+/** §50 Phase B — third pulse logged alongside mood + energy each morning. */
+export type AwakenessLevel = 'groggy' | 'meh' | 'alert';
+
+export interface MorningCheckin {
+  _id?: string;
+  /** Local YYYY-MM-DD. Unique. */
+  date: string;
+  mood: MoodLevel;
+  energy: EnergyLevel;
+  awakeness: AwakenessLevel;
+  /** Optional one-line narrative context, ≤500 chars. */
+  note?: string;
+  created_at?: Date | string;
+  updated_at?: Date | string;
+}
+
+export interface MorningCheckinInput {
+  date?: string;
+  mood: MoodLevel;
+  energy: EnergyLevel;
+  awakeness: AwakenessLevel;
+  note?: string;
+}
+
 export type DeferReasonCode =
   | 'tired'
   | 'not_in_mood'
@@ -395,7 +419,8 @@ export type ActivityKind =
   | 'meal_week_saved'
   | 'appointment_created'
   | 'appointment_rescheduled'
-  | 'appointment_deleted_externally';
+  | 'appointment_deleted_externally'
+  | 'morning_checkin_logged';
 
 export type ActivityActor = 'user' | 'system' | 'cron';
 

@@ -277,6 +277,35 @@ export const ASSISTANT_TOOLS: PersonaToolDef[] = [
       required: ['text'],
     },
   },
+  {
+    name: 'get_morning_checkin',
+    description:
+      "Get Diane's morning check-in for a given date (mood + energy + " +
+      "awakeness + optional note). Date defaults to today. Returns null if " +
+      "she hasn't logged one yet. Call when she mentions how she's feeling " +
+      "to ground the conversation in her own words from that morning.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        date: {
+          type: 'string',
+          description: 'YYYY-MM-DD; defaults to today if omitted.',
+        },
+      },
+    },
+  },
+  {
+    name: 'recent_checkins',
+    description:
+      'Recent morning check-ins (default 14 days, max 90). Newest-first. ' +
+      'Use to spot patterns when she asks how things have been going — ' +
+      "never volunteer this; she's explicitly asked for introspection, not " +
+      'prescription.',
+    input_schema: {
+      type: 'object',
+      properties: { days: { type: 'integer' } },
+    },
+  },
 ];
 
 /**
@@ -284,8 +313,11 @@ export const ASSISTANT_TOOLS: PersonaToolDef[] = [
  * phases. Kept here as documentation; not added to ASSISTANT_TOOLS so the
  * model never tries to call them mid-build.
  *
- *   - get_morning_checkin   → Phase B (MorningCheckin model)
- *   - recent_checkins       → Phase B (MorningCheckin model)
+ * Shipped:
+ *   - get_morning_checkin   → Phase B (live)
+ *   - recent_checkins       → Phase B (live)
+ *
+ * Still deferred:
  *   - set_projected_income  → Phase E (new field/collection)
  *   - create_calendar_event → Phase E (calendar mutations via assistant)
  *   - update_calendar_event → Phase E
@@ -293,8 +325,6 @@ export const ASSISTANT_TOOLS: PersonaToolDef[] = [
  *   - update_routine cadence_shift_strategy → Phase E
  */
 export const DEFERRED_TOOL_NAMES = [
-  'get_morning_checkin',
-  'recent_checkins',
   'set_projected_income',
   'create_calendar_event',
   'update_calendar_event',

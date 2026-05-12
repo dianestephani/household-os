@@ -26,6 +26,7 @@ import alexaRouter from './routes/alexa.js';
 import authRouter from './routes/auth.js';
 import chatRouter from './routes/chat.js';
 import assistantSettingsRouter from './routes/assistant-settings.js';
+import morningCheckinRouter from './routes/morning-checkin.js';
 import { requireToken } from './middleware/auth.js';
 import { mcpAuth, mcpHandler } from './mcp/route.js';
 import { generateTodayPlan } from './cron/morning-gen.js';
@@ -109,6 +110,7 @@ app.get('/', (_req, res) => {
         '/api/auth/google',
         '/api/chat',
         '/api/assistant-settings',
+        '/api/morning-checkin',
       ],
     },
   });
@@ -140,6 +142,7 @@ app.use('/api/appointments', appointmentsRouter);
 app.use('/api/alexa', alexaRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/assistant-settings', assistantSettingsRouter);
+app.use('/api/morning-checkin', morningCheckinRouter);
 
 cron.schedule('30 5 * * *', () => {
   console.log('[cron] ingesting calendar triggers');
