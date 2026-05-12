@@ -6,8 +6,7 @@ import {
   getFinancialProfile,
   listOutsourceable,
 } from '../services/finance.js';
-import { todaysEvents } from '../services/calendar.js';
-import { scheduleRange } from '../services/schedule.js';
+import { todaysEvents, upcomingEvents } from '../services/calendar.js';
 import { addImport, listImports } from '../services/finance-history.js';
 import { getCheckin, recentCheckins } from '../services/morning-checkin.js';
 import type {
@@ -34,7 +33,7 @@ export const assistantTools: Record<string, ToolImpl> = {
   get_calendar_range: async (input) => {
     const days = Number((input.days as number | undefined) ?? 7);
     const safe = Number.isFinite(days) ? days : 7;
-    return scheduleRange(new Date(), safe);
+    return upcomingEvents(safe);
   },
 
   list_routines: async (input) =>

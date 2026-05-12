@@ -3,7 +3,6 @@ import { connect, disconnect } from '../src/db/connection.js';
 import { addTrigger } from '../src/services/triggers.js';
 import { Routine } from '../src/db/models/Routine.js';
 import { Trigger } from '../src/db/models/Trigger.js';
-import { TodayPlan } from '../src/db/models/TodayPlan.js';
 import { listEvents } from '../src/utils/google-calendar.js';
 
 const TARGET_DATE = '2026-05-23';
@@ -67,11 +66,8 @@ console.log(
   `  → next_due = ${TARGET_DATE} + 21d = 2026-06-13 (routine's interval — separate from the 6-week cleaner cadence; cleaner visits drive zone-rotation, not this routine)`,
 );
 
-// 5. Clear stale TodayPlan so the next morning-gen rebuilds against new state
-const cleared = await TodayPlan.deleteMany({});
-console.log(
-  `\nCleared ${cleared.deletedCount ?? 0} TodayPlan doc(s) — next morning-gen rebuilds against updated state.`,
-);
+// (§50 Phase C trim: previously cleared TodayPlan here so morning-gen would
+// rebuild. TodayPlan + morning-gen retired.)
 
 await disconnect();
 process.exit(0);

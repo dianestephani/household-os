@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type AffordabilityReport } from '../api.js';
 import type {
-  ActivityLogEntry,
-  ContextEntry,
   FilingStatus,
   FinancialProfile,
   FinancialProfileSnapshot,
@@ -11,8 +9,6 @@ import type {
   SnapshotSource,
   TaxEstimate,
 } from '@household-os/shared/types';
-import PersonaLauncher from './PersonaLauncher.js';
-import DayNavigator, { formatHeader, localToday } from './DayNavigator.js';
 
 const FILING_OPTIONS: { value: FilingStatus; label: string }[] = [
   { value: 'single', label: 'Single' },
@@ -326,185 +322,9 @@ export default function FinancePanel() {
         </p>
       </div>
 
-      <FinanceDayLog />
-
-      <PersonaLauncher persona="finance" />
     </>
   );
 }
-
-const FINANCE_FIELD_PATTERNS = [
-  'income',
-  'tax',
-  'expenses',
-  'expense_breakdown',
-  'extra_withholding',
-  'state',
-  'filing_status',
-  'outsource',
-];
-
-/**
- * Heuristic for "is this activity entry finance-related?" — used to filter
- * the per-day log on the Finance tab without adding a dedicated activity
- * kind for finance events. Kept narrow on purpose: false positives clutter
- * the log; the global Activity feed is the place to see everything.
- */
-function isFinanceActivity(e: ActivityLogEntry): boolean {
-  // context_logged entries already render via the context list — exclude here
-  // to avoid duplicate rendering of the same event.
-  if (e.kind === 'context_logged') return false;
-  if (e.kind === 'routine_edited') {
-    const meta = (e.metadata ?? {}) as { fields?: string[] };
-    const fields = meta.fields ?? [];
-    return fields.some((f) =>
-      FINANCE_FIELD_PATTERNS.some((p) => f.toLowerCase().includes(p)),
-    );
-  }
-  return false;
-}
-
-function FinanceDayLog() {
-  const [date, setDate] = useState(localToday());
-  const [context, setContext] = useState<ContextEntry[]>([]);
-  const [activity, setActivity] = useState<ActivityLogEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void (async () => {
-      try {
-        const [c, a] = await Promise.all([
-          api.context.onDate(date, 'finance'),
-          api.activity.onDate(date),
-        ]);
-        if (cancelled) return;
-        setContext(c);
-        setActivity(a.filter(isFinanceActivity));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [date]);
-
-  const isEmpty = !loading && context.length === 0 && activity.length === 0;
-
-  return (
-    <>
-      <DayNavigator date={date} onChange={setDate} />
-      <div className="panel">
-        <strong>Finance log — {formatHeader(date)}</strong>
-        <p className="muted" style={{ marginTop: '0.25rem', fontSize: '0.85rem' }}>
-          Journal entries tagged finance (or "both") plus profile / outsource-cost
-          edits that landed on this day. The static state above always reflects
-          current values — this view is the per-day record of changes.
-        </p>
-
-        {loading && <div className="muted">Loading…</div>}
-        {isEmpty && (
-          <div className="muted" style={{ marginTop: '0.4rem' }}>
-            Nothing logged for finance on this day.
-          </div>
-        )}
-
-        {context.length > 0 && (
-          <div style={{ marginTop: '0.5rem' }}>
-            <strong style={{ fontSize: '0.9rem' }}>Journal entries</strong>
-            <ul style={{ listStyle: 'none', padding: 0, margin: '0.3rem 0 0 0' }}>
-              {context.map((c) => (
-                <li
-                  key={String(c._id)}
-                  style={{
-                    padding: '0.4rem 0',
-                    borderBottom: '1px solid var(--border)',
-                  }}
-                >
-                  <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
-                    {new Date(c.ts).toLocaleTimeString([], {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
-                    {c.related_persona && ` · ${c.related_persona}`}
-                  </div>
-                  <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem' }}>
-                    {c.text}
-                  </div>
-                  {((c.dogsit_count !== undefined && c.dogsit_count !== null) ||
-                    c.energy ||
-                    c.mood) && (
-                    <div
-                      className="muted"
-                      style={{ fontSize: '0.78rem', marginTop: '0.15rem' }}
-                    >
-                      {c.energy && <>energy: {c.energy} · </>}
-                      {c.mood && <>mood: {c.mood} · </>}
-                      {c.dogsit_count !== undefined &&
-                        c.dogsit_count !== null && <>dogs: {c.dogsit_count}</>}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {activity.length > 0 && (
-          <div style={{ marginTop: '0.6rem' }}>
-            <strong style={{ fontSize: '0.9rem' }}>Edits</strong>
-            <ul style={{ listStyle: 'none', padding: 0, margin: '0.3rem 0 0 0' }}>
-              {activity.map((e) => {
-                const fields =
-                  ((e.metadata ?? {}) as { fields?: string[] }).fields ?? [];
-                return (
-                  <li
-                    key={String(e._id ?? `${e.ts}-${e.summary}`)}
-                    style={{
-                      padding: '0.4rem 0',
-                      borderBottom: '1px solid var(--border)',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'baseline',
-                      gap: '0.5rem',
-                    }}
-                  >
-                    <span style={{ fontSize: '0.9rem' }}>
-                      {e.summary}
-                      {fields.length > 0 && (
-                        <span className="muted" style={{ fontSize: '0.78rem' }}>
-                          {' '}
-                          · fields: {fields.join(', ')}
-                        </span>
-                      )}
-                    </span>
-                    <span
-                      className="muted"
-                      style={{
-                        fontSize: '0.78rem',
-                        fontVariantNumeric: 'tabular-nums',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {new Date(e.ts).toLocaleTimeString([], {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-export { isFinanceActivity };
 
 // =====================================================================
 // FinanceImports — §47 Phase 5

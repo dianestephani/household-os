@@ -1,3 +1,18 @@
+/**
+ * Shared types — §50 Phase C trimmed. Retired types (with their consumers)
+ * removed: TodayPlan, PlanItem, SwapPoolItem, PublisherState, MoodLog,
+ * EnergyLog, DeferralEvent, DeferralPattern, WorkoutPattern, MealEffort,
+ * MealDay, MealWeek, ContextEntry/Input, CheckIn + all check-in question
+ * shapes, ZoneAssessment, ZoneStateLevel, AdHocTask, CalendarTask, DayView,
+ * ScheduleRoutineDue / ScheduleEntry / SchedulePendingAdHoc /
+ * ScheduleRangeResponse, EnergySuggestion, DeferReasonCode / DeferReason,
+ * WellbeingSource, DayType, ItemStatus, PersonaConfig (the three-persona
+ * launcher pattern retired).
+ *
+ * If you need any of these for a future feature, restore from git history
+ * — they were intentionally removed to shrink the surface area.
+ */
+
 export type EnergyLevel = 'low' | 'medium' | 'high';
 
 export type MoodLevel = 'good' | 'neutral' | 'down';
@@ -26,24 +41,9 @@ export interface MorningCheckinInput {
   note?: string;
 }
 
-export type DeferReasonCode =
-  | 'tired'
-  | 'not_in_mood'
-  | 'out_of_time'
-  | 'over_budget'
-  | 'manual_swap'
-  | 'energy_drop'
-  | 'other';
-
 export type WorkoutStatus = 'done' | 'skipped' | 'partial';
 
 export type WorkoutSlotKey = 'pt_tue' | 'pt_thu' | 'lift_flex' | 'ad_hoc';
-
-export type DayType =
-  | 'day_off'
-  | 'catering_day'
-  | 'weekday_default'
-  | 'tue_thu_pt';
 
 export type Category =
   | 'pet'
@@ -95,45 +95,28 @@ export interface Routine {
   also_triggers?: string[];
   last_done?: Date | string | null;
   active: boolean;
-  /**
-   * Whether this routine is something Diane could plausibly outsource (cleaner,
-   * pet sitter, lawn service, wash-and-fold, Airbnb cleaner, etc.). Default
-   * false; system seeds reasonable defaults from the inventory.
-   */
   outsourceable?: boolean;
   /** Typical local-market cost per occurrence in USD. */
   outsource_cost_estimate?: number;
   /**
-   * Whether suggesting this routine should consult the Finance persona first.
-   * Use for booked services Diane wants on a cadence but only when finances
-   * allow (head spa, massage, housecleaner-cadence bump). See the
-   * `budget_gated_services` memory.
+   * Whether suggesting this routine should consult finance first. Used for
+   * booked services Diane wants on a cadence but only when finances allow
+   * (head spa, massage, housecleaner-cadence bump).
    */
   budget_gated?: boolean;
-  /**
-   * Typical out-of-pocket cost per occurrence in USD, distinct from
-   * `outsource_cost_estimate` which means "cost to outsource a thing I do
-   * myself." `cost_estimate` is for things she always pays for (head spa,
-   * haircut, massage). Used by budget-gated suggestion logic.
-   */
+  /** Typical out-of-pocket cost per occurrence in USD. */
   cost_estimate?: number;
   /**
    * Per-appointment Google Calendar event for this routine, if applicable.
-   * Wired up in Phase 4 of §47 (see HANDOFF). When `enabled: true`, this
-   * routine maps to a real calendar event the user manages directly — Diane
-   * edits/reschedules in Google Calendar and the system picks up the change
-   * via the appointment-reconcile cron. Phase 2 ships only the shape.
+   * See §47 Phase 4 + the appointment-reconcile cron.
    */
   appointment?: RoutineAppointment;
 }
 
 export interface RoutineAppointment {
   enabled: boolean;
-  /** Populated after the first calendar event is created. */
   calendar_event_id?: string;
-  /** Default minutes used when creating a new event (e.g. head_spa = 90). */
   default_duration_minutes?: number;
-  /** When the reconcile cron last touched this routine's appointment. */
   last_synced_at?: Date | string;
   /**
    * Start time of the last-known calendar event. Used by the reconcile cron
@@ -167,18 +150,13 @@ export interface FinancialProfile {
   /**
    * Free-form RocketMoney-derived context. Diane pastes whatever summary feels
    * useful — category breakdown, recurring subscriptions, top spending lines,
-   * income split, etc. The Finance persona reads this as additional grounding
-   * for affordability questions; we never parse it structurally.
+   * income split, etc. The assistant reads this as additional grounding for
+   * affordability questions; we never parse it structurally.
    */
   expense_breakdown?: string;
   updated_at: Date | string;
 }
 
-/**
- * Append-only history of `FinancialProfile` saves. Every PATCH to the
- * singleton profile writes one of these so Diane can browse historical state
- * and restore a prior snapshot.
- */
 export type SnapshotSource =
   | 'dashboard_edit'
   | 'paste_import'
@@ -197,10 +175,6 @@ export interface FinancialProfileSnapshot {
 
 export type ImportKind = 'paste' | 'csv';
 
-/**
- * Best-effort structured parse of a RocketMoney paste or CSV. Always optional
- * — if parsing fails the raw text still lives on the record.
- */
 export interface ParsedImport {
   categories: { name: string; amount: number; count?: number }[];
   total: number;
@@ -250,77 +224,7 @@ export interface OutsourceableSummary {
   items: OutsourceableSummaryItem[];
 }
 
-export type ItemStatus = 'pending' | 'in_progress' | 'done' | 'deferred';
-
-export interface PlanItem {
-  routine_key: string;
-  name: string;
-  estimate_minutes: number;
-  energy: EnergyLevel;
-  status: ItemStatus;
-  order: number;
-  completed_at?: Date | string | null;
-}
-
-/**
- * Subset of {@link DeferReasonCode} that the in-plan swap_pool tracks.
- * Richer reasons (`tired`, `not_in_mood`, `out_of_time`) live on the
- * persistent {@link DeferralEvent} record.
- */
-export type DeferReason = DeferReasonCode;
-
-export interface SwapPoolItem {
-  routine_key: string;
-  name: string;
-  estimate_minutes: number;
-  energy: EnergyLevel;
-  deferred_at: Date | string;
-  reason: DeferReason;
-}
-
-export interface PublisherState {
-  calendar_event_id?: string | null;
-  alexa_notif_id?: string | null;
-  last_synced_at?: Date | string | null;
-}
-
-export interface TodayPlan {
-  _id?: string;
-  date: string; // YYYY-MM-DD
-  day_type: DayType;
-  budget_minutes: number;
-  current_energy: EnergyLevel;
-  items: PlanItem[];
-  swap_pool: SwapPoolItem[];
-  publisher: PublisherState;
-}
-
-export type WellbeingSource = 'voice' | 'dashboard' | 'shortcut' | 'cron-default';
-
-export interface EnergyLog {
-  _id?: string;
-  ts: Date | string;
-  level: EnergyLevel;
-  source: WellbeingSource;
-}
-
-export interface MoodLog {
-  _id?: string;
-  ts: Date | string;
-  level: MoodLevel;
-  source: WellbeingSource;
-}
-
-export interface DeferralEvent {
-  _id?: string;
-  ts: Date | string;
-  date: string; // YYYY-MM-DD the routine was deferred FROM
-  routine_key: string;
-  routine_name: string;
-  reason: DeferReasonCode;
-  notes?: string;
-  source: 'auto' | 'user';
-}
+// ----- Workouts (retroactive log only after §50 Phase C) -----
 
 export interface WorkoutLog {
   _id?: string;
@@ -333,93 +237,18 @@ export interface WorkoutLog {
   notes?: string;
 }
 
-export interface DeferralPattern {
-  routine_key: string;
-  routine_name: string;
-  count: number;
-  window_days: number;
-  reasons: Partial<Record<DeferReasonCode, number>>;
-  last_deferred_at: Date | string;
-}
-
-export interface WorkoutPattern {
-  window_days: number;
-  scheduled: number;
-  done: number;
-  skipped: number;
-  partial: number;
-  recent_streaks: { kind: 'done' | 'skipped'; length: number }[];
-}
-
-// ----- Meal weeks (Grocery Manager output) -----
-
-/**
- * How much hands-on work a meal takes. Used by the dashboard for the
- * day-pill badge so Diane can scan the week at a glance.
- *   - 'cook' = real cooking session (~20-40 min)
- *   - 'easy' = microwave / minimal prep (~5-10 min)
- *   - 'grab' = pre-made leftover or no-effort pull-from-fridge
- */
-export type MealEffort = 'cook' | 'easy' | 'grab';
-
-export interface MealDay {
-  /** Display label, e.g. "Monday, May 11" — used for the recipe panel header. */
-  day: string;
-  title: string;
-  effort: MealEffort;
-  /** Effort badge text incl. emoji, e.g. "🍳 Cook" / "⚡ Easy" / "🥡 Grab & Go". */
-  effort_label: string;
-  /** Hands-on time, e.g. "~30 min". */
-  time: string;
-  /** Approx protein per serving, e.g. "~45g protein". */
-  protein: string;
-  /** Servings/yield, e.g. "2-3 servings". */
-  servings: string;
-  /** Optional contextual note shown below the recipe body. */
-  note?: string;
-  ingredients: string[];
-  steps: string[];
-}
-
-export interface MealWeek {
-  _id?: string;
-  /** Monday of the week, YYYY-MM-DD. The unique key. */
-  start_date: string;
-  /** Optional display title, e.g. "High-protein, low-effort". */
-  title?: string;
-  /** Always 7 entries — Mon through Sun for `start_date`. */
-  meals: MealDay[];
-  created_at?: Date | string;
-  updated_at?: Date | string;
-}
-
-// ----- Activity log -----
+// ----- Activity log (kept as invisible infrastructure) -----
 
 export type ActivityKind =
-  | 'task_done'
-  | 'task_deferred'
-  | 'task_swapped'
-  | 'task_pulled'
-  | 'task_created'
-  | 'task_cancelled'
-  | 'plan_generated'
-  | 'plan_regenerated'
-  | 'energy_logged'
-  | 'mood_logged'
   | 'workout_logged'
-  | 'zone_assessed'
-  | 'check_in_created'
-  | 'check_in_answered'
-  | 'check_in_skipped'
   | 'trigger_added'
   | 'routine_edited'
-  | 'context_logged'
   | 'finance_import_added'
   | 'finance_snapshot_restored'
-  | 'meal_week_saved'
   | 'appointment_created'
   | 'appointment_rescheduled'
   | 'appointment_deleted_externally'
+  | 'task_done'
   | 'morning_checkin_logged';
 
 export type ActivityActor = 'user' | 'system' | 'cron';
@@ -437,11 +266,6 @@ export interface ActivityLogEntry {
 
 // ----- Calendar (Google Calendar passthrough for dashboard display) -----
 
-/**
- * Normalized event shape returned by the dashboard calendar endpoint. We
- * intentionally don't expose the full Google Schema$Event — the dashboard
- * only needs enough to render a day strip with a click-through.
- */
 export interface CalendarEvent {
   id: string;
   summary: string;
@@ -467,243 +291,7 @@ export interface CalendarDayResponse {
   open_in_calendar_url: string;
 }
 
-// ----- Google Tasks (the to-do product, surfaced on Calendar's grid) -----
-
-/**
- * Normalized shape for a single Google Tasks item. We track `tasklist_id`
- * because the Tasks API requires it to mutate the task (mark complete) — a
- * Tasks ID alone isn't enough.
- */
-export interface CalendarTask {
-  id: string;
-  tasklist_id: string;
-  title: string;
-  notes?: string;
-  /** RFC 3339 date (Google stores due as date-only at UTC midnight). */
-  due?: string;
-  status: 'needsAction' | 'completed';
-  /** Set when status flipped to 'completed'. */
-  completed?: string;
-}
-
-// ----- Day view (single-day navigator on the Today tab) -----
-
-/**
- * Bundle the dashboard needs to render any single day. Today and past days
- * carry a real `plan` (today is auto-created if missing); future days carry a
- * `forecast` of what would be due. Calendar events + context entries are
- * always included if available.
- */
-export interface DayView {
-  /** YYYY-MM-DD, local. */
-  date: string;
-  is_today: boolean;
-  is_past: boolean;
-  is_future: boolean;
-  /** The stored TodayPlan for that date, if any. Null for future days and for
-   *  past days where morning-gen never ran. */
-  plan: TodayPlan | null;
-  /** What would be due that day, when no real plan exists (future). Empty for
-   *  today/past — those use `plan` instead. */
-  forecast: ScheduleRoutineDue[];
-  events: CalendarEvent[];
-  /**
-   * Google Tasks with `due` matching this date. Empty when the OAuth token
-   * hasn't been re-consented for the tasks scope, or in test mode.
-   */
-  tasks: CalendarTask[];
-  context: ContextEntry[];
-}
-
-// ----- Schedule preview (week / month look-ahead) -----
-
-/**
- * A single routine that's due on a specific day in the schedule window.
- * `source` distinguishes the upstream classifier so the UI can group/style
- * appropriately (rolling overdue items look different from this-week's
- * fixed-day trash etc.).
- */
-export interface ScheduleRoutineDue {
-  routine_key: string;
-  name: string;
-  category?: string;
-  estimate_minutes: number;
-  energy: EnergyLevel;
-  source: 'rolling' | 'fixed' | 'zone_rotation' | 'event_driven';
-  /**
-   * Human-readable note about why this is on this day:
-   *   rolling     → "due" / "overdue 3d"
-   *   fixed       → "Tue evening" / "biweekly"
-   *   zone        → "week 3"
-   *   event       → "Airbnb checkin tomorrow" / "Landscaper today"
-   */
-  cadence_note: string;
-}
-
-export interface ScheduleEntry {
-  /** YYYY-MM-DD, local. */
-  date: string;
-  is_today: boolean;
-  events: CalendarEvent[];
-  routines_due: ScheduleRoutineDue[];
-}
-
-export interface SchedulePendingAdHoc {
-  id: string;
-  name: string;
-  zone: Zone;
-  severity: ZoneStateLevel;
-  estimate_minutes: number;
-}
-
-export interface ScheduleRangeResponse {
-  /** YYYY-MM-DD inclusive. */
-  start: string;
-  /** YYYY-MM-DD exclusive — the day AFTER the last day in `days`. */
-  end: string;
-  days: ScheduleEntry[];
-  /** Open ad-hoc zone tasks; not date-anchored, shown at top of UI. */
-  pending_adhoc_tasks: SchedulePendingAdHoc[];
-  calendar_connected: boolean;
-  /** Permalink to the user's Google Calendar at the start of the range. */
-  open_in_calendar_url: string;
-}
-
-// ----- Context journal -----
-
-/**
- * Append-only narrative journal shared by both personas. Lets Diane (or a
- * persona on her behalf) drop qualitative context — "5 dogs today, exhausted,
- * couldn't leave the house" — that the system can reason about later.
- *
- * Structured fields are optional but encouraged: they make the entries
- * queryable for patterns (e.g. "high dogsit_count days correlate with low
- * energy and skipped workouts") rather than just LLM-readable prose.
- */
-export type ContextRelatedPersona = 'household' | 'finance' | 'both';
-
-export type ContextSource = 'voice' | 'dashboard' | 'persona' | 'api';
-
-export interface ContextEntry {
-  _id?: string;
-  ts: Date | string;
-  /** Required free-form narrative — the truth of record. */
-  text: string;
-  /** Free-form descriptive labels (e.g. ["dogsit-stress", "weather"]). */
-  tags?: string[];
-  energy?: EnergyLevel;
-  mood?: MoodLevel;
-  /** How many guest dogs are present (excluding Diane's own 2). */
-  dogsit_count?: number;
-  /**
-   * Activities the user said she couldn't / didn't do because of context.
-   * Free-form strings (e.g. "workout", "errands", "leave_house").
-   */
-  blocked_activities?: string[];
-  /** Which persona this entry is most relevant to. Default 'both'. */
-  related_persona?: ContextRelatedPersona;
-  source: ContextSource;
-}
-
-/** Input shape used by the service / API / personas to add an entry. */
-export interface ContextEntryInput {
-  text: string;
-  tags?: string[];
-  energy?: EnergyLevel;
-  mood?: MoodLevel;
-  dogsit_count?: number;
-  blocked_activities?: string[];
-  related_persona?: ContextRelatedPersona;
-  source?: ContextSource;
-}
-
-// ----- Check-ins -----
-
-export type CheckInType =
-  | 'morning_intent'
-  | 'evening_retro'
-  | 'weekly_review'
-  | 'pattern_interrupt'
-  | 'zone_assessment';
-
-export type ZoneStateLevel = 'fine' | 'meh' | 'rough';
-
-export interface ZoneAssessment {
-  _id?: string;
-  ts: Date | string;
-  zone: Zone;
-  level: ZoneStateLevel;
-  notes?: string;
-  source_checkin_id?: string;
-}
-
-export type AdHocTaskStatus = 'open' | 'done' | 'cancelled';
-
-export interface AdHocTask {
-  _id?: string;
-  ts: Date | string;
-  zone: Zone;
-  name: string;
-  /**
-   * What surface created this task. `zone_assessment` is the original
-   * pathway via `recordAssessment`; `voice`, `mcp`, `persona`, `manual` cover
-   * the direct-creation pathways added later.
-   */
-  source: 'zone_assessment' | 'voice' | 'mcp' | 'persona' | 'manual';
-  source_assessment_id?: string;
-  severity: ZoneStateLevel;
-  estimate_minutes: number;
-  energy: EnergyLevel;
-  status: AdHocTaskStatus;
-  done_at?: Date | string | null;
-}
-
-export type CheckInStatus = 'pending' | 'answered' | 'skipped' | 'expired';
-
-export type QuestionType = 'text' | 'choice' | 'mood' | 'energy';
-
-export interface CheckInQuestion {
-  /** Stable id used to track answers longitudinally — e.g. `one_thing_today`. */
-  id: string;
-  text: string;
-  type: QuestionType;
-  /** Required for `choice` questions. */
-  choices?: { value: string; label: string }[];
-  /** The user's response. Shape depends on `type`. */
-  answer?: string | null;
-  /**
-   * Optional side-effect to apply on answer. The service routes mood/energy
-   * answers into MoodLog/EnergyLog as well as storing them on the CheckIn.
-   */
-  side_effect?: 'log_mood' | 'log_energy';
-}
-
-export interface PatternInterruptContext {
-  kind: 'frequent_deferral' | 'missed_workouts';
-  routine_key?: string;
-  routine_name?: string;
-  count?: number;
-  window_days?: number;
-}
-
-export interface ZoneAssessmentContext {
-  kind: 'zone_assessment';
-  zone: Zone;
-}
-
-export type CheckInContext = PatternInterruptContext | ZoneAssessmentContext;
-
-export interface CheckIn {
-  _id?: string;
-  type: CheckInType;
-  /** When the prompt is intended for. Used for ordering + expiry. */
-  scheduled_for: Date | string;
-  status: CheckInStatus;
-  questions: CheckInQuestion[];
-  context?: CheckInContext;
-  answered_at?: Date | string | null;
-  created_at: Date | string;
-}
+// ----- Triggers (Google Calendar event ingestion) -----
 
 export type TriggerType =
   | 'airbnb_checkin'
@@ -723,14 +311,8 @@ export interface Trigger {
   notes?: string;
 }
 
-export interface EnergySuggestion {
-  level: EnergyLevel;
-  suggested_swaps_in: { routine_key: string; name: string; estimate_minutes: number; energy: EnergyLevel }[];
-  suggested_swaps_out: { routine_key: string; name: string; estimate_minutes: number; energy: EnergyLevel }[];
-  rationale: string;
-}
-
 // ----- inventory.json typing -----
+
 export interface InventoryRollingRoutine {
   key: string;
   name: string;
@@ -798,7 +380,12 @@ export interface InventoryProtectedSlot {
 }
 
 export interface Inventory {
-  energy_budgets_minutes: Record<DayType, number>;
+  /**
+   * Energy budgets in minutes per day type. Kept on the inventory shape for
+   * backward compat with the seed JSON; the §50 system no longer uses
+   * day-type-driven budgets because TodayPlan retired.
+   */
+  energy_budgets_minutes?: Record<string, number>;
   rolling_routines: InventoryRollingRoutine[];
   fixed_routines: InventoryFixedRoutine[];
   zone_rotation_6wk: InventoryZoneWeek[];
@@ -807,24 +394,10 @@ export interface Inventory {
   protected_slots: InventoryProtectedSlot[];
 }
 
-// ----- Persona config -----
+// ----- Persona tool defs (used by the unified assistant in §50 Phase A) -----
+
 export interface PersonaToolDef {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
-}
-
-export interface PersonaConfig {
-  name: string;
-  model: string;
-  systemPrompt: string;
-  tools: PersonaToolDef[];
-  /**
-   * Hardcoded Claude.ai Project URL the dashboard's PersonaLauncher links to.
-   * On iOS, tapping these URLs triggers Universal Links → Claude app prompt
-   * when the app is installed. Optional in the type so a future persona can
-   * exist before its Project is created; in practice all three live personas
-   * have one set.
-   */
-  projectUrl?: string;
 }

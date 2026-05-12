@@ -75,3 +75,48 @@ export async function todaysEvents(
     open_in_calendar_url: openInCalendarUrl(now),
   };
 }
+
+/**
+ * §50 Phase C — simple N-day window of calendar events for the assistant's
+ * `get_calendar_range` tool. Replaces the heavier `scheduleRange` service
+ * (deleted in Phase C) which also bucketed routines coming due — the §50
+ * unified assistant just needs the raw events for week-ahead questions.
+ *
+ * `days` clamped to [1, 60]. Returns `{start, end, connected, events,
+ * open_in_calendar_url}`.
+ */
+export async function upcomingEvents(
+  days = 7,
+  now: Date = new Date(),
+): Promise<{
+  start: string;
+  end: string;
+  connected: boolean;
+  events: CalendarEvent[];
+  open_in_calendar_url: string;
+}> {
+  const safeDays = Math.max(1, Math.min(60, Math.floor(days || 7)));
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + safeDays);
+
+  const connected = isCalendarConnected();
+  const raw = connected
+    ? await listEvents(start.toISOString(), end.toISOString())
+    : [];
+  const events = raw
+    .map(normalizeEvent)
+    .filter((e): e is CalendarEvent => e !== null);
+
+  const view: 'day' | 'week' | 'month' =
+    safeDays <= 1 ? 'day' : safeDays <= 14 ? 'week' : 'month';
+
+  return {
+    start: ymd(start),
+    end: ymd(end),
+    connected,
+    events,
+    open_in_calendar_url: openInCalendarUrl(start, view),
+  };
+}
