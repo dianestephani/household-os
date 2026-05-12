@@ -5,6 +5,7 @@ import {
 } from '@household-os/shared/persona/assistant';
 import { assistantTools } from './assistant-tools.js';
 import { Routine } from '../db/models/Routine.js';
+import { upsertCheckin } from '../services/morning-checkin.js';
 
 /**
  * Drift detector + shape tests for the unified assistant. Mirrors the
@@ -115,6 +116,47 @@ describe('assistantTools impls (smoke)', () => {
     await expect(
       assistantTools.add_rocketmoney_paste!({ text: '   ' }),
     ).rejects.toThrow(/text/);
+  });
+
+  it('get_morning_checkin returns null when nothing logged', async () => {
+    const out = await assistantTools.get_morning_checkin!({
+      date: '2099-12-31',
+    });
+    expect(out).toBeNull();
+  });
+
+  it('get_morning_checkin returns the matching doc when one exists', async () => {
+    await upsertCheckin({
+      date: '2026-05-11',
+      mood: 'good',
+      energy: 'medium',
+      awakeness: 'alert',
+    });
+    const out = (await assistantTools.get_morning_checkin!({
+      date: '2026-05-11',
+    })) as { mood: string; energy: string; awakeness: string } | null;
+    expect(out?.mood).toBe('good');
+    expect(out?.energy).toBe('medium');
+    expect(out?.awakeness).toBe('alert');
+  });
+
+  it('recent_checkins returns newest-first', async () => {
+    await upsertCheckin({
+      date: '2026-05-09',
+      mood: 'down',
+      energy: 'low',
+      awakeness: 'groggy',
+    });
+    await upsertCheckin({
+      date: '2026-05-11',
+      mood: 'good',
+      energy: 'high',
+      awakeness: 'alert',
+    });
+    const out = (await assistantTools.recent_checkins!({ days: 60 })) as {
+      date: string;
+    }[];
+    expect(out.map((c) => c.date)).toEqual(['2026-05-11', '2026-05-09']);
   });
 
   it('estimate_tax returns the federal/FICA/state breakdown', async () => {

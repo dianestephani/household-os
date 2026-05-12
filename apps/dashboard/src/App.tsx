@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
-import HomePanel from './components/HomePanel.js';
+import TodayView from './components/TodayView.js';
 import WorkoutPanel from './components/WorkoutPanel.js';
 import LogPanel from './components/LogPanel.js';
 import MealWeekCalendar from './components/MealWeekCalendar.js';
@@ -212,13 +212,13 @@ export default function App() {
           className={view === 'home' ? 'active' : ''}
           onClick={() => setView('home')}
         >
-          Home
+          Today
         </button>
         <button
           className={view === 'today' ? 'active' : ''}
           onClick={() => setView('today')}
         >
-          Today
+          Day
         </button>
         <button
           className={view === 'schedule' ? 'active' : ''}
@@ -252,7 +252,14 @@ export default function App() {
         </div>
       )}
 
-      {view === 'home' && <HomePanel onNavigate={(v) => setView(v as View)} />}
+      {/*
+        §50 Phase B — `home` view is now the new TodayView (morning check-in +
+        calendar + habits + Ask). The `today` view key now hosts the existing
+        DayPanel date navigator (renamed "Day" in the tab strip). The §47
+        Phase 3 HomePanel widget grid is unmounted but kept in code until
+        Phase C does the broader compression to 3 tabs.
+      */}
+      {view === 'home' && <TodayView />}
       {view === 'today' && (
         <DayPanel initialPlan={plan} onPlanChange={setPlan} />
       )}
