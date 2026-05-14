@@ -4,7 +4,7 @@ Diane's personal household assistant — a single-user system organized around a
 
 The original v1 design and the full rebuild history live in [HANDOFF.md](./HANDOFF.md). This README covers what's actually shipped after the §50 rebuild.
 
-> **§50 rebuild status — Phases A + B + C + D + E shipped (A/B/C on 2026-05-11, D on 2026-05-13, E on 2026-05-14).** The system has been re-shaped from a six-tab "Household Ops planner" into a three-view interface (Today / Look Back / Stuff) with one unified Claude assistant in place of the three-persona launcher pattern. **Phases F-G remain. Phase F is the most-urgent — the Alexa skill currently 404s against the trimmed API.** Phase G is final polish.
+> **§50 rebuild status — Phases A + B + C + D + E + F shipped (A/B/C on 2026-05-11, D on 2026-05-13, E + F on 2026-05-14).** The system has been re-shaped from a six-tab "Household Ops planner" into a three-view interface (Today / Look Back / Stuff) with one unified Claude assistant in place of the three-persona launcher pattern. Only Phase G (final polish) remains.
 
 For end-user docs (every dashboard tab, every cron job, every privacy boundary), open the dashboard and click the **❔ Guide** icon in the header. That's the canonical reference; this README is just for orientation + setup.
 
@@ -15,11 +15,11 @@ household-os/
   packages/shared/       — types + seed inventory + unified-assistant config
   apps/api/              — Express + Mongoose + 2 crons + Alexa webhook
   apps/dashboard/        — React + Vite frontend (3 tabs + Guide icon)
-  apps/alexa-skill/      — Alexa custom skill (under repair — Phase F)
+  apps/alexa-skill/      — Alexa custom skill (one intent: WhatsLeftIntent → Calendar)
   render.yaml            — Render Blueprint for one-click prod deploy
 ```
 
-The skill is mounted on the API server via `ask-sdk-express-adapter`, so deploying the API also deploys the skill (`POST /alexa`). The skill's intent handlers still reference Phase-C-retired endpoints — Phase F retools them.
+The skill is mounted on the API server via `ask-sdk-express-adapter`, so deploying the API also deploys the skill (`POST /alexa`). Post-§50 it has a single household-specific intent — `WhatsLeftIntent`, which reads today's upcoming Google Calendar events.
 
 ## Subsystems shipped (post-§50 rebuild)
 
@@ -41,7 +41,7 @@ The skill is mounted on the API server via `ask-sdk-express-adapter`, so deployi
 | **Alexa Shopping List integration** (paste a grocery list, parse `## section` headers + bullet rows, bulk-add to your default Alexa list. **Read-only — never touches Amazon cart, never places orders.** Requires one-time LWA permission grant in the Alexa app. Currently has no dashboard UI after Phase C — the assistant can drive it via tools in Phase E) | [apps/api/src/services/alexa-shopping-list.ts](apps/api/src/services/alexa-shopping-list.ts), [apps/api/src/services/grocery-list-parser.ts](apps/api/src/services/grocery-list-parser.ts), [apps/api/src/services/alexa-lwa.ts](apps/api/src/services/alexa-lwa.ts) |
 | **Theme + typography** (light/dark toggle persisted in localStorage with prefers-color-scheme fallback, Inter body + Fraunces display from Google Fonts, strict-grayscale palette + muted semantic colors) | [apps/dashboard/src/styles.css](apps/dashboard/src/styles.css), [apps/dashboard/src/components/ThemeToggle.tsx](apps/dashboard/src/components/ThemeToggle.tsx), [apps/dashboard/index.html](apps/dashboard/index.html) |
 | **Google sign-in wall** (Google Identity Services button, email allowlist, signed-JWT session in localStorage with 30-day expiry; API middleware accepts either the legacy `API_TOKEN` *or* a valid session JWT) | [apps/dashboard/src/components/LoginScreen.tsx](apps/dashboard/src/components/LoginScreen.tsx), [apps/dashboard/src/auth.ts](apps/dashboard/src/auth.ts), [apps/api/src/services/session.ts](apps/api/src/services/session.ts), [apps/api/src/middleware/auth.ts](apps/api/src/middleware/auth.ts), [apps/api/src/routes/auth.ts](apps/api/src/routes/auth.ts) |
-| **Alexa skill** (intent handlers still reference retired endpoints — Phase F retools `WhatsLeftIntent` against the Calendar instead of the deleted `TodayPlan`, drops the rest. The webhook stays mounted at `POST /alexa` and the morning proactive push still fires) | [apps/alexa-skill/](apps/alexa-skill/) |
+| **Alexa skill** (§50 Phase F — collapsed to one household-specific intent: `WhatsLeftIntent` reads today's upcoming Google Calendar events ("you have 2 events left today: dentist, and pickup time"). 11 retired intents (TodayBrief, Swap, MarkDone, PullFromPool, UpdateEnergy, LogMood, LogWorkout, AssessZone, AddTask, AnswerMorningCheckIn, AskHousehold, etc.) and the morning proactive push are gone) | [apps/alexa-skill/](apps/alexa-skill/) |
 
 ## Quick start (local)
 
@@ -81,7 +81,7 @@ Open <http://localhost:5173>. **Today** is the landing page (morning check-in + 
 ## Tests
 
 ```bash
-npm test                 # all workspaces — currently 228 tests (218 API + 10 alexa-skill)
+npm test                 # all workspaces — currently 224 tests (218 API + 6 alexa-skill)
 npm run typecheck        # all workspaces
 ```
 
@@ -104,7 +104,7 @@ Coverage spans (post-§50 Phase C):
 - **Workouts** — retroactive log validation + history
 - **Auth** — session JWT round-trip + tamper-rejection + secret-rotation rejection + length-requirement enforcement; allowlist case-insensitive + comma-separated + closed-by-default; middleware accepts `API_TOKEN` *or* a valid JWT
 - **Alexa shopping list** — grocery-list-parser (`## section` + bullet rows + fence stripping); shopping-list service no-token gating
-- **Alexa client** — token-fallback, base-URL resolution, header construction (10 alexa-skill tests)
+- **Alexa skill** (§50 Phase F) — `filterUpcoming` decides which Calendar events get spoken: drops timed events that already started, keeps all-day events through midnight, drops missing/unparseable starts, returns empty when nothing's left, preserves input order (6 alexa-skill tests)
 
 Test environment isolation: `NODE_ENV=test` short-circuits Google Calendar + LWA reads/writes (see [apps/api/src/utils/google-calendar.ts](apps/api/src/utils/google-calendar.ts), [apps/api/src/services/alexa-lwa.ts](apps/api/src/services/alexa-lwa.ts)) so tests don't depend on the developer's actual calendar contents or LWA token.
 

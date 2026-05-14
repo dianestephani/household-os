@@ -2467,11 +2467,19 @@ Each phase is independently shippable. Diane can stop after any phase.
 
 **Test delta: +15 (12 projected-income service tests + 1 outsourceable-override test + 2 cadence-shift patchRoutine tests).** New API total: **218 tests across 19 files** (228 with alexa-skill). All four workspaces typecheck clean; dashboard build verified (218 KB JS gzipped, +5 KB from Phase D for the cadence-shift modal + ProjectedIncomeEditor). Detail in §55.
 
-**Phase F — Alexa cleanup (~1-2 hr)**
-- Delete most skill intents per the "What gets DELETED" list.
-- Retool `WhatsLeftIntent` to read incomplete Calendar events for today (not TodayPlan items).
-- Verify the daily morning push still fires.
-- If Phase 6 Alexa Reminders/LWA infrastructure shipped: leave the code in place but disable the cron that pushes Reminders. Mark as deprecated.
+**Phase F — Alexa cleanup (~1-2 hr) — SHIPPED 2026-05-14**
+- ✅ Deleted four handler files for retired intents: `wellbeing.ts` (UpdateEnergy / LogMood / LogWorkout / TodaysWorkout), `zones.ts` (AssessZone / AddTask), `checkins.ts` (AnswerMorningCheckIn / ListPendingCheckIns), `info.ts` (AskHousehold / Patterns / WhatDidIDo). Also deleted from `today.ts`: TodayBriefHandler / SwapTaskHandler / MarkDoneHandler / PullFromPoolHandler.
+- ✅ **Retooled `WhatsLeftHandler`** against `GET /api/calendar/today` instead of the deleted `/api/today/whats-left`. New semantics: "what's left" now means "Calendar events later today that haven't started yet" (was: incomplete TodayPlan items). All-day events count as still-happening until midnight. Disconnected Calendar state gets a clear "I can't see your calendar right now" reply rather than a 500. New pure helper `filterUpcoming(events, now)` for the cutoff logic — unit-tested.
+- ✅ Slimmed `client.ts` from ~225 lines to 50. Only the `GET /api/calendar/today` round-trip survives. Dropped: `getToday` / `swap` / `markDone` / `pullFromPool` / `whatsLeft` / `setEnergy` / `setMood` / `todaysWorkout` / `logWorkout` / `assessZone` / `addAdHocTask` / `pendingCheckIns` / `answerCheckIn` / `skipCheckIn` / `frequentDeferrals` / `workoutSummary` / `recentActivity` / `chat` + their type definitions. Also dropped: `fuzzyMatch` + `relativeTime` helpers (their consumers retired).
+- ✅ Rewrote `skill.ts` to register only LaunchRequest + WhatsLeftIntent + Help + CancelStop + Fallback + SessionEnded + Error handlers. The 13-intent handler list collapsed to 1 household-specific intent + 5 Alexa built-ins. Updated `LaunchRequest` + `Help` copy to reflect the slimmer surface ("everything else lives on the dashboard now").
+- ✅ Rewrote `interaction-model.en-US.json` from 345 lines to 31 — only `WhatsLeftIntent` + the four built-ins remain. Added two extra sample utterances ("what's on my calendar", "what's still on the calendar") to match the new Calendar-events semantics.
+- ✅ Updated `skill.json` manifest — dropped the `alexa::devices:all:reminders:write` + `alexa::household:lists:write` + `alexa::devices:all:notifications:write` permissions (those integrations all retired). Updated the publishing copy and example phrases to match the slimmer skill.
+- ✅ Updated `index.ts` exports — dropped `fuzzyMatch` / `relativeTime` + 13 type exports; only `apiClient` + `CalendarEvent` + `CalendarDayResponse` remain.
+- ✅ Rewrote `client.test.ts` — `fuzzyMatch` + `relativeTime` tests dropped along with their helpers. New tests for `filterUpcoming` (drops past timed events, keeps all-day, handles missing/unparseable starts, empty when nothing upcoming, preserves input order).
+- ⏸️ **The morning Proactive Events push was NOT verified — it doesn't exist anymore.** §50 Phase F's spec said "Verify the daily morning push still fires," but that push (driven by the deleted Publisher's `syncToAlexa` + the deleted `checkin-generators.morning_intent`) was already removed in Phase C. The skill's surviving webhook (`POST /alexa`) only handles request-driven intents now; there's no scheduled push from the API.
+- ⏸️ **Account-linking / LWA infrastructure stays in code** (`AlexaAuth` model + `alexa-lwa.ts` + `alexa-shopping-list.ts` + `/api/alexa/auth-status` + `/api/alexa/shopping-list/add` + `/api/alexa/lwa/save-token`). §50 explicitly kept the shopping-list integration; LWA is its underlying access-token plumbing. The dashboard's ShoppingListPanel retired in Phase C, so the shopping-list integration is currently only reachable from the assistant's `add_to_shopping_list`-style tool — except that tool doesn't exist yet. Tool wiring is a small Phase G addition if Diane wants it.
+
+**Test delta: −4 (4 fuzzyMatch + relativeTime tests retired; 6 new filterUpcoming tests added; net change in the alexa-skill workspace was 10 → 6).** API tests unchanged at 218. New monorepo total: **224 tests across 20 files** (218 API + 6 alexa-skill). All four workspaces typecheck clean; dashboard production build verified. Detail in §56.
 
 **Phase G — Final cleanup + polish (~1-2 hr)**
 - Delete the MCP server files.
@@ -3008,3 +3016,86 @@ Added between the profile rollup and the imports list. Native `<input type="mont
 - Optional simplification pass: drop `zone` and `estimate_minutes` from `Routine` if Diane confirms she doesn't miss them in the table display.
 - Relative timestamps on the Routines table row's `last_done` + MorningCheckin summary line (currently shows absolute times).
 - Final `find` for orphaned tests/docs the Phase C purge missed.
+
+---
+
+## 56. Phase F — Alexa cleanup (SHIPPED 2026-05-14)
+
+Phase F of the §50 rebuild. The Alexa skill was compiling-but-runtime-broken after Phase C's API trim (every intent except WhatsLeft pointed at deleted endpoints). Phase F retools the one surviving intent against Google Calendar and deletes the rest.
+
+### What landed
+
+**Handler files deleted** (4): `wellbeing.ts`, `zones.ts`, `checkins.ts`, `info.ts`. Intents retired with them: `UpdateEnergyIntent`, `LogMoodIntent`, `LogWorkoutIntent`, `TodaysWorkoutIntent`, `AssessZoneIntent`, `AddTaskIntent`, `AnswerMorningCheckInIntent`, `ListPendingCheckInsIntent`, `AskHouseholdIntent`, `PatternsIntent`, `WhatDidIDoIntent`.
+
+**Handler functions deleted** from `today.ts`: `TodayBriefHandler`, `SwapTaskHandler`, `MarkDoneHandler`, `PullFromPoolHandler`. The intents they served (`TodayBriefIntent`, `SwapTaskIntent`, `MarkDoneIntent`, `PullFromPoolIntent`) hit `/api/today/*` which retired in Phase C.
+
+**`WhatsLeftHandler` retooled** ([apps/alexa-skill/src/handlers/today.ts](apps/alexa-skill/src/handlers/today.ts)). Before: read open `PlanItem`s off `/api/today/whats-left` and reported their names + total minutes. After: reads `/api/calendar/today` and reports the events that haven't started yet. New pure helper `filterUpcoming(events, now)`:
+
+- Drops timed events that already started.
+- Keeps all-day events until midnight (Diane probably wants the reminder).
+- Drops events with missing or unparseable `start`.
+- Preserves input order (Google's `events.list` already returns chronological).
+
+Disconnected-Calendar state ("I can't see your calendar right now. Reconnect Google Calendar to use this.") replaces what would otherwise have been a 500. No events still upcoming → "You don't have anything scheduled for the rest of today."
+
+**`client.ts` slimmed** ([apps/alexa-skill/src/client.ts](apps/alexa-skill/src/client.ts)) from ~225 lines to 50. Kept: the request helper + `apiClient.calendarToday()` + the `CalendarEvent` / `CalendarDayResponse` types. Dropped: every other type (PlanItem, EnergySuggestion, CheckIn, etc.), every other method (`getToday`/`swap`/`markDone`/`pullFromPool`/`whatsLeft`/`setEnergy`/`setMood`/`todaysWorkout`/`logWorkout`/`assessZone`/`addAdHocTask`/`pendingCheckIns`/`answerCheckIn`/`skipCheckIn`/`frequentDeferrals`/`workoutSummary`/`recentActivity`/`chat`), and the `fuzzyMatch` + `relativeTime` helpers (no consumers left).
+
+**`skill.ts` rebuilt** ([apps/alexa-skill/src/skill.ts](apps/alexa-skill/src/skill.ts)). Handler registry went from 17 entries to 6: `LaunchRequestHandler` + `WhatsLeftHandler` + `HelpHandler` + `CancelStopHandler` + `FallbackHandler` + `SessionEndedHandler`. Error handler still registered.
+
+**`core.ts` updated** ([apps/alexa-skill/src/handlers/core.ts](apps/alexa-skill/src/handlers/core.ts)). `LaunchRequest` speech updated from "Household Ops here. What's up?" to "Household Ops here. Ask what's left on your calendar today." `Help` updated from a list of all the deleted voice flows to a single sentence: "You can ask 'what's left for the day' to hear your remaining Calendar events. Everything else lives on the dashboard now."
+
+**`interaction-model.en-US.json` rebuilt** ([apps/alexa-skill/interaction-model.en-US.json](apps/alexa-skill/interaction-model.en-US.json)) — went from 345 lines to 31. Only `WhatsLeftIntent` + the four Alexa built-ins remain. Added two sample utterances matching the new Calendar-events semantics: "what's on my calendar", "what's still on the calendar." **Diane needs to re-upload this to the Alexa Developer Console and rebuild the model** for the slim interaction model to take effect on the deployed skill.
+
+**`skill.json` manifest updated** ([apps/alexa-skill/skill.json](apps/alexa-skill/skill.json)):
+
+- Dropped all three permissions (`alexa::devices:all:notifications:write` + `alexa::devices:all:reminders:write` + `alexa::household:lists:write`). The two new permissions added in §47 Phase 6 retired when their integrations did; the original notifications permission was for the morning Proactive Events push which retired in Phase C.
+- Publishing summary + description + example phrases updated to reflect the slimmer skill.
+
+**`index.ts` exports trimmed** ([apps/alexa-skill/src/index.ts](apps/alexa-skill/src/index.ts)) — only `apiClient` + `CalendarEvent` + `CalendarDayResponse` re-export. 14 type re-exports and the two helpers retired.
+
+### Tests rebuilt
+
+**Old `client.test.ts`** had 10 tests across `fuzzyMatch` (6) and `relativeTime` (4). Both helpers retired.
+
+**New `client.test.ts`** has 6 tests for `filterUpcoming`:
+
+- Drops timed events that have already started
+- Keeps all-day events even when "now" is mid-day
+- Drops events with no start time
+- Drops events with unparseable `start`
+- Returns empty array when nothing is upcoming
+- Preserves input order (no re-sorting)
+
+**Deliberately not tested**: the `WhatsLeftHandler` end-to-end speech rendering. Same rationale as every other phase — Alexa SDK handler tests need a request-envelope shim that's more brittle than valuable. `filterUpcoming` is the pure-helper seam and gets full coverage; the handler is a thin wrapper that adds Oxford-joined English copy.
+
+### Spec deviations / design calls
+
+1. **"The daily morning push" referenced in §50 Phase F doesn't exist.** §50 said "Verify the daily morning push still fires," but Phase C deleted the Publisher's `syncToAlexa` fan-out + the `checkin-generators.morning_intent` flow + the `alexa-push` service that powered it. The morning Proactive Events push is gone, not broken. The Help text in the surviving skill points Diane at the dashboard for everything except `WhatsLeftIntent` so this won't surprise her.
+2. **Account-linking / LWA infra stayed in code.** §50 said "Account-linking ... stays only for the shopping-list integration." LWA + `AlexaAuth` + `alexa-shopping-list.ts` + `/api/alexa/*` routes all survive. The dashboard's ShoppingListPanel retired in Phase C, so the integration currently has no UI consumer. The assistant could surface it via a new `add_to_shopping_list({items})` tool — that's a 30-minute Phase G addition if Diane wants voice/chat to drive the Alexa shopping list.
+3. **`WhatsLeftIntent` semantics shifted.** Pre-§50 "what's left" meant "incomplete TodayPlan items." Post-§50 it means "Calendar events later today that haven't started yet." Different concept, same intent name. Kept the intent name because (a) the existing utterances ("what am I still missing for the day") read naturally for either interpretation, and (b) renaming the intent forces a model rebuild + relink on Diane's end with no real upside.
+4. **All-day events included in "what's left."** A purist filter might exclude all-day events since they don't have a clear "start time" left in the day. Decision: include them because they're often the most actionable thing (e.g. "Quarterly maintenance — kitchen", or trash-day reminders) and Diane probably wants the nudge even if she's heard it at breakfast. Easy to flip later if it gets noisy.
+5. **No new assistant tool for `WhatsLeftIntent`.** The assistant already has `get_calendar_today` which returns the full event list — the AskPanel can answer the same question with richer context (event details, locations, all-day flagging) than the voice flow can. Adding a dedicated `whats_left` tool would just be `get_calendar_today + filter`; let the model do the filter.
+6. **No tests of `apiClient.calendarToday()` itself.** The function is two lines (request wrapper + path). Behavior is owned by `apps/api/src/services/calendar.ts`'s `todaysEvents()`, which has full test coverage. Mocking `fetch` here would be testing the SDK wrapper, not our logic.
+
+### Diane's manual setup steps
+
+After Phase F's code ships:
+
+1. **Alexa Developer Console**: re-upload the new `interaction-model.en-US.json` and rebuild the model. The deployed skill currently has 13 intents in its model; the rebuild prunes to 1 + built-ins.
+2. **Permissions screen**: the three permissions in the previous manifest will show as "no longer requested." Toggle them off in the Alexa app to clean up the skill's permission list (cosmetic — they were unused on the deployed skill after Phase C anyway).
+3. **Re-link the skill** in the Alexa app (Disable → Enable). Surfaces the new permission state and re-issues the LWA refresh token (which the shopping-list integration still wants, even though there's no dashboard UI driving it right now).
+
+None of these block the new `WhatsLeftHandler` from working against the deployed API — they just keep the Alexa-side metadata clean.
+
+### Route cheat sheet
+
+No changes. The skill webhook still mounts at `POST /alexa`. `WhatsLeftHandler` calls `GET /api/calendar/today` (already in the surviving route set).
+
+### Open follow-ups for Phase G
+
+- Optional: add an `add_to_shopping_list({items: string[]})` assistant tool so voice/chat can drive the (still-mounted-but-unused) Alexa Lists API integration.
+- §55 carryover: drop `zone` + `estimate_minutes` from `Routine` if Diane confirms she doesn't miss them in the Routines table display.
+- Relative timestamps on the Routines `last_done` column + the MorningCheckin summary line.
+- `find` sweep for orphaned tests/docs across the post-rebuild tree.
+- Audit `apps/alexa-skill/README.md` if it exists — likely references deleted intents.
+- Decide whether to retire the `AlexaAuth` model + `alexa-lwa.ts` + `alexa-shopping-list.ts` + `/api/alexa/*` routes entirely (a clean "we're not going to use voice for shopping lists" decision) or keep them dormant.

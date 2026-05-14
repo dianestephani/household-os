@@ -6,22 +6,11 @@
  * - `handler` — Lambda handler, in case you want to deploy via AWS Lambda
  *   instead.
  *
- * The actual intent handlers live in `./handlers/*.ts`.
+ * §50 Phase F — surface trimmed to match the remaining `WhatsLeftIntent`.
+ * The fuzzy-match + relative-time helpers retired with the intents that
+ * used them. Most type exports retired too — `CalendarEvent` and
+ * `CalendarDayResponse` are the only ones left.
  */
 export { handler, skill } from './skill.js';
-export { apiClient, fuzzyMatch, relativeTime } from './client.js';
-export type {
-  ActivityEntry,
-  CheckIn,
-  CheckInQuestion,
-  DeferReason,
-  EnergyLevel,
-  EnergySuggestion,
-  MoodLevel,
-  PlanItem,
-  TodayPlan,
-  WorkoutSlot,
-  WorkoutStatus,
-  Zone,
-  ZoneLevel,
-} from './client.js';
+export { apiClient } from './client.js';
+export type { CalendarEvent, CalendarDayResponse } from './client.js';

@@ -7,49 +7,24 @@ import {
   LaunchRequestHandler,
   SessionEndedHandler,
 } from './handlers/core.js';
-import {
-  MarkDoneHandler,
-  PullFromPoolHandler,
-  SwapTaskHandler,
-  TodayBriefHandler,
-  WhatsLeftHandler,
-} from './handlers/today.js';
-import {
-  LogMoodHandler,
-  LogWorkoutHandler,
-  TodaysWorkoutHandler,
-  UpdateEnergyHandler,
-} from './handlers/wellbeing.js';
-import { AddTaskHandler, AssessZoneHandler } from './handlers/zones.js';
-import {
-  AnswerMorningCheckInHandler,
-  ListPendingCheckInsHandler,
-} from './handlers/checkins.js';
-import {
-  AskHouseholdHandler,
-  PatternsHandler,
-  WhatDidIDoHandler,
-} from './handlers/info.js';
+import { WhatsLeftHandler } from './handlers/today.js';
 
+/**
+ * §50 Phase F — slimmed skill. The only remaining household-specific intent
+ * is `WhatsLeftIntent`, which now reads today's incomplete Calendar events
+ * (was: incomplete TodayPlan items before TodayPlan retired in Phase C).
+ * Everything else — TodayBrief, Swap, MarkDone, PullFromPool, UpdateEnergy,
+ * LogMood, LogWorkout, TodaysWorkout, AssessZone, AddTask,
+ * AnswerMorningCheckIn, ListPendingCheckIns, WhatDidIDo, Patterns,
+ * AskHousehold — retired with their underlying endpoints.
+ *
+ * Core built-ins (Launch, Help, Cancel/Stop, Fallback, SessionEnded, Error)
+ * stay because Alexa requires them.
+ */
 const builder = SkillBuilders.custom()
   .addRequestHandlers(
     LaunchRequestHandler,
-    TodayBriefHandler,
     WhatsLeftHandler,
-    SwapTaskHandler,
-    MarkDoneHandler,
-    PullFromPoolHandler,
-    UpdateEnergyHandler,
-    LogMoodHandler,
-    TodaysWorkoutHandler,
-    LogWorkoutHandler,
-    AssessZoneHandler,
-    AddTaskHandler,
-    ListPendingCheckInsHandler,
-    AnswerMorningCheckInHandler,
-    WhatDidIDoHandler,
-    PatternsHandler,
-    AskHouseholdHandler,
     HelpHandler,
     CancelStopHandler,
     FallbackHandler,

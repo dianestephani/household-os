@@ -11,12 +11,18 @@ export const LaunchRequestHandler: RequestHandler = {
   },
   handle(input) {
     return input.responseBuilder
-      .speak("Household Ops here. What's up?")
-      .reprompt('Try "what\'s on today" or "I\'m low energy".')
+      .speak("Household Ops here. Ask what's left on your calendar today.")
+      .reprompt('Try "what\'s left for the day".')
       .getResponse();
   },
 };
 
+/**
+ * §50 Phase F — Help text trimmed to the surviving intent. The full
+ * household-Ops voice flow (mark done, swap, energy, mood, check-ins, etc.)
+ * retired with the underlying endpoints. Everything else lives in the
+ * dashboard now.
+ */
 export const HelpHandler: RequestHandler = {
   canHandle(input) {
     return (
@@ -27,9 +33,9 @@ export const HelpHandler: RequestHandler = {
   handle(input) {
     return input.responseBuilder
       .speak(
-        'You can say things like: "what\'s on today", "mark trash done", "I\'m low energy", "the kitchen is rough", "I worked out", "what did I do today", or "answer my morning check-in".',
+        'You can ask "what\'s left for the day" to hear your remaining Calendar events. Everything else lives on the dashboard now.',
       )
-      .reprompt('What do you want to do?')
+      .reprompt('Try "what\'s left for the day".')
       .getResponse();
   },
 };

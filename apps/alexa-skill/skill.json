@@ -4,14 +4,13 @@
       "locales": {
         "en-US": {
           "name": "Household Ops",
-          "summary": "Diane's household routines, briefed and steered by voice.",
-          "description": "Hear today's plan, mark tasks done, swap items, or update energy — all routed through your Household OS API.",
+          "summary": "Quick voice check on what's left on your Google Calendar today.",
+          "description": "Hear the events still upcoming on your Google Calendar for today.",
           "examplePhrases": [
-            "Alexa, ask Home Ops what's on today",
-            "Alexa, ask Home Ops to mark trash done",
-            "Alexa, tell Home Ops I'm low energy"
+            "Alexa, ask Home Ops what's left for the day",
+            "Alexa, ask Home Ops what's on my calendar"
           ],
-          "keywords": ["household", "routines", "todo"],
+          "keywords": ["calendar", "schedule", "today"],
           "smallIconUri": "",
           "largeIconUri": ""
         }
@@ -30,10 +29,6 @@
       }
     },
     "manifestVersion": "1.0",
-    "permissions": [
-      { "name": "alexa::devices:all:notifications:write" },
-      { "name": "alexa::devices:all:reminders:write" },
-      { "name": "alexa::household:lists:write" }
-    ]
+    "permissions": []
   }
 }

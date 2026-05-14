@@ -1,60 +1,74 @@
 import { describe, it, expect } from 'vitest';
-import { fuzzyMatch, relativeTime, type PlanItem } from './client.js';
+import { filterUpcoming } from './handlers/today.js';
 
-const items: PlanItem[] = [
-  { routine_key: 'litter_scoop', name: 'Scoop both litter boxes', estimate_minutes: 8, energy: 'low', status: 'pending' },
-  { routine_key: 'trash_prep', name: 'Bins to curb + swap liners', estimate_minutes: 20, energy: 'low', status: 'pending' },
-  { routine_key: 'kitchen_reset', name: 'Counter + sink reset', estimate_minutes: 8, energy: 'low', status: 'pending' },
-];
+/**
+ * §50 Phase F — the skill's surface slimmed down to a single intent
+ * (`WhatsLeftIntent`) backed by `GET /api/calendar/today`. The
+ * `fuzzyMatch` + `relativeTime` helpers retired with the intents that used
+ * them (TodayBrief, MarkDone, Swap, etc. — see Phase C deletes).
+ *
+ * Tests left here cover the only pure helper still in the skill:
+ * `filterUpcoming` (decides which events get spoken).
+ */
 
-describe('fuzzyMatch', () => {
-  it('matches exact name', () => {
-    const m = fuzzyMatch(items, 'Counter + sink reset');
-    expect(m?.routine_key).toBe('kitchen_reset');
+interface E {
+  id: string;
+  summary: string;
+  start: string;
+  is_all_day: boolean;
+}
+
+const NOW = new Date('2026-05-14T12:00:00-07:00');
+
+describe('filterUpcoming', () => {
+  it('drops timed events that have already started', () => {
+    const events: E[] = [
+      { id: '1', summary: 'Past meeting', start: '2026-05-14T10:00:00-07:00', is_all_day: false },
+      { id: '2', summary: 'Soon', start: '2026-05-14T14:00:00-07:00', is_all_day: false },
+    ];
+    const result = filterUpcoming(events, NOW);
+    expect(result.map((e) => e.id)).toEqual(['2']);
   });
 
-  it('matches case-insensitively', () => {
-    const m = fuzzyMatch(items, 'COUNTER + SINK RESET');
-    expect(m?.routine_key).toBe('kitchen_reset');
+  it('keeps all-day events even when "now" is mid-day', () => {
+    const events: E[] = [
+      { id: '1', summary: 'Quarterly maintenance', start: '2026-05-14', is_all_day: true },
+    ];
+    const result = filterUpcoming(events, NOW);
+    expect(result.map((e) => e.id)).toEqual(['1']);
   });
 
-  it('matches by partial substring (slot phrase contained in name)', () => {
-    const m = fuzzyMatch(items, 'litter');
-    expect(m?.routine_key).toBe('litter_scoop');
+  it('drops events with no start time', () => {
+    const events: E[] = [
+      { id: '1', summary: 'Missing start', start: '', is_all_day: false },
+    ];
+    expect(filterUpcoming(events, NOW)).toEqual([]);
   });
 
-  it('matches when slot phrase fully contains the routine name', () => {
-    const m = fuzzyMatch(items, 'oh yeah counter + sink reset right now');
-    expect(m?.routine_key).toBe('kitchen_reset');
+  it('drops events with unparseable start', () => {
+    const events: E[] = [
+      { id: '1', summary: 'Garbage start', start: 'not-a-date', is_all_day: false },
+    ];
+    expect(filterUpcoming(events, NOW)).toEqual([]);
   });
 
-  it('returns null on no match', () => {
-    expect(fuzzyMatch(items, 'walk the dog')).toBeNull();
+  it('returns empty when nothing is upcoming', () => {
+    const events: E[] = [
+      { id: '1', summary: 'Morning thing', start: '2026-05-14T08:00:00-07:00', is_all_day: false },
+      { id: '2', summary: 'Lunch', start: '2026-05-14T11:30:00-07:00', is_all_day: false },
+    ];
+    expect(filterUpcoming(events, NOW)).toEqual([]);
   });
 
-  it('returns null on empty phrase', () => {
-    expect(fuzzyMatch(items, '')).toBeNull();
-  });
-});
-
-describe('relativeTime', () => {
-  it('reports "just now" for recent timestamps', () => {
-    const ts = new Date(Date.now() - 10_000).toISOString();
-    expect(relativeTime(ts)).toBe('just now');
-  });
-
-  it('reports minutes for sub-hour gaps', () => {
-    const ts = new Date(Date.now() - 8 * 60_000).toISOString();
-    expect(relativeTime(ts)).toMatch(/^\d+ minutes? ago$/);
-  });
-
-  it('reports hours when between 1 and 24', () => {
-    const ts = new Date(Date.now() - 5 * 60 * 60_000).toISOString();
-    expect(relativeTime(ts)).toMatch(/^\d+ hours? ago$/);
-  });
-
-  it('reports days when over 24 hours', () => {
-    const ts = new Date(Date.now() - 3 * 24 * 60 * 60_000).toISOString();
-    expect(relativeTime(ts)).toMatch(/^\d+ days? ago$/);
+  it('returns events in input order (does not re-sort)', () => {
+    const events: E[] = [
+      { id: '1', summary: 'Later', start: '2026-05-14T17:00:00-07:00', is_all_day: false },
+      { id: '2', summary: 'Sooner', start: '2026-05-14T14:00:00-07:00', is_all_day: false },
+      { id: '3', summary: 'Past', start: '2026-05-14T09:00:00-07:00', is_all_day: false },
+    ];
+    // Sorting (if needed) is the caller's responsibility — Google's events.list
+    // already returns chronological order by default.
+    const result = filterUpcoming(events, NOW);
+    expect(result.map((e) => e.id)).toEqual(['1', '2']);
   });
 });
