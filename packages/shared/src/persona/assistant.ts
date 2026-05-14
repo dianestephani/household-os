@@ -143,10 +143,13 @@ export const ASSISTANT_TOOLS: PersonaToolDef[] = [
           },
         },
         estimate_minutes: { type: 'integer' },
-        energy: { type: 'string', enum: ['low', 'medium', 'high'] },
         outsourceable: { type: 'boolean' },
         outsource_cost_estimate: { type: 'number' },
-        notes: { type: 'string' },
+        monthly_occurrences_override: {
+          type: 'number',
+          description:
+            "Override for the outsourceable cost math. Use when the routine's interval doesn't match real-world booking cadence.",
+        },
       },
       required: ['key', 'name'],
     },
@@ -154,16 +157,23 @@ export const ASSISTANT_TOOLS: PersonaToolDef[] = [
   {
     name: 'update_routine',
     description:
-      "Patch a routine's cadence, estimate, energy, outsource fields, or " +
-      'active flag. Pass `key` and a `patch` object with the fields to ' +
-      'change. NOTE: appointment-aware cadence shifts (cadence_shift_strategy ' +
-      'one_off | shift_all | skip_one) arrive in Phase E; for now this is a ' +
-      'flat field-level patch.',
+      "Patch a routine's cadence, estimate, outsource fields, or active flag. " +
+      'Pass `key`, a `patch` object with the fields to change, and an ' +
+      'optional `cadence_shift_strategy` for appointment-enabled routines. ' +
+      "Strategies: 'shift_all' (default — cadence change applies forward), " +
+      "'skip_one' (clears the upcoming Calendar event; interval_days " +
+      "unchanged), 'one_off' (no side effects beyond the patch; signals " +
+      'this is a one-time tweak rather than a cadence change). ALWAYS ' +
+      'ask Diane which strategy she wants if her message is ambiguous.',
     input_schema: {
       type: 'object',
       properties: {
         key: { type: 'string' },
         patch: { type: 'object' },
+        cadence_shift_strategy: {
+          type: 'string',
+          enum: ['one_off', 'shift_all', 'skip_one'],
+        },
       },
       required: ['key', 'patch'],
     },
@@ -306,6 +316,30 @@ export const ASSISTANT_TOOLS: PersonaToolDef[] = [
       properties: { days: { type: 'integer' } },
     },
   },
+  {
+    name: 'set_projected_income',
+    description:
+      'Record the projected income number for a specific month (YYYY-MM). ' +
+      'Diane projects her income on paper monthly; this is the integration ' +
+      "— one number per month. Pass `amount: null` to clear that month's " +
+      'override (falls back to `monthly_gross_income`). NEVER guess the ' +
+      'month — ask if unclear.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        month: {
+          type: 'string',
+          description: 'Format: YYYY-MM (e.g. "2026-05").',
+        },
+        amount: {
+          type: ['number', 'null'],
+          description:
+            "Dollars projected for the month. Pass null to clear that month's override.",
+        },
+      },
+      required: ['month', 'amount'],
+    },
+  },
 ];
 
 /**
@@ -316,16 +350,18 @@ export const ASSISTANT_TOOLS: PersonaToolDef[] = [
  * Shipped:
  *   - get_morning_checkin   → Phase B (live)
  *   - recent_checkins       → Phase B (live)
+ *   - set_projected_income  → Phase E (live)
+ *   - update_routine cadence_shift_strategy → Phase E (live)
  *
- * Still deferred:
- *   - set_projected_income  → Phase E (new field/collection)
- *   - create_calendar_event → Phase E (calendar mutations via assistant)
- *   - update_calendar_event → Phase E
- *   - delete_calendar_event → Phase E
- *   - update_routine cadence_shift_strategy → Phase E
+ * Still deferred — deliberately, not from lack of phasing. The assistant
+ * proposes calendar event changes through `update_routine` (for appointment-
+ * enabled routines, which Phase 4 sync handles), or asks Diane to make the
+ * change in Calendar herself. Wiring create/update/delete event tools would
+ * give the assistant a parallel write path that's harder to keep coherent
+ * with the appointment-reconcile cron. Add them later only if the indirect
+ * path actually proves friction.
  */
 export const DEFERRED_TOOL_NAMES = [
-  'set_projected_income',
   'create_calendar_event',
   'update_calendar_event',
   'delete_calendar_event',

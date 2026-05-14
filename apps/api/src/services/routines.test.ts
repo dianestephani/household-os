@@ -13,9 +13,8 @@ const BASE_ROUTINE = {
   name: 'Test routine',
   category: 'cleaning',
   zone: 'kitchen',
-  scheduling: { type: 'rolling', interval_days: 7, flex_days: 1 },
+  scheduling: { type: 'rolling', interval_days: 7 },
   estimate_minutes: 10,
-  energy: 'low',
   active: true,
 };
 
@@ -25,12 +24,10 @@ describe('patchRoutine — allow-list', () => {
     const updated = await patchRoutine('test_routine', {
       name: 'Renamed',
       estimate_minutes: 25,
-      energy: 'medium',
       active: false,
     });
     expect(updated?.name).toBe('Renamed');
     expect(updated?.estimate_minutes).toBe(25);
-    expect(updated?.energy).toBe('medium');
     expect(updated?.active).toBe(false);
   });
 
@@ -41,27 +38,63 @@ describe('patchRoutine — allow-list', () => {
       // These are NOT on the allow-list — must be ignored:
       key: 'sneaky_rename',
       _id: '000000000000000000000000',
-      outsourceable: true,
-      outsource_cost_estimate: 999,
+      // §50 Phase E — `energy` retired from the schema, also not on the
+      // allow-list anymore. Make sure it's still silently dropped.
+      energy: 'high',
     } as Record<string, unknown>);
 
     const after = await getRoutine('test_routine');
     expect(after?.name).toBe('Allowed');
     expect(after?.key).toBe('test_routine'); // key not overwritten
-    // outsourceable/outsource_cost_estimate aren't on the allow-list so the
-    // schema defaults stay in place.
-    expect(after?.outsourceable).toBe(false);
-    expect(after?.outsource_cost_estimate).toBe(0);
+  });
+
+  it('outsourceable + outsource_cost_estimate + monthly_occurrences_override ARE on the allow-list', async () => {
+    // §50 Phase E added monthly_occurrences_override + opened outsourceable to
+    // patching (it was off the allow-list before but needed for the Finance
+    // module's listOutsourceable math).
+    await Routine.create(BASE_ROUTINE);
+    await patchRoutine('test_routine', {
+      outsourceable: true,
+      outsource_cost_estimate: 250,
+      monthly_occurrences_override: 1,
+    });
+    const after = await getRoutine('test_routine');
+    expect(after?.outsourceable).toBe(true);
+    expect(after?.outsource_cost_estimate).toBe(250);
+    expect(after?.monthly_occurrences_override).toBe(1);
   });
 
   it('supports patching the nested scheduling object', async () => {
     await Routine.create(BASE_ROUTINE);
     await patchRoutine('test_routine', {
-      scheduling: { type: 'rolling', interval_days: 14, flex_days: 2 },
+      scheduling: { type: 'rolling', interval_days: 14 },
     });
     const after = await getRoutine('test_routine');
     expect(after?.scheduling?.interval_days).toBe(14);
-    expect(after?.scheduling?.flex_days).toBe(2);
+  });
+
+  it('skip_one cadence_shift_strategy clears the linked appointment', async () => {
+    await Routine.create({
+      ...BASE_ROUTINE,
+      key: 'haircut',
+      appointment: {
+        enabled: true,
+        calendar_event_id: 'evt_abc',
+        last_event_start: new Date('2026-05-20T17:00:00Z'),
+        default_duration_minutes: 60,
+      },
+    });
+    await patchRoutine(
+      'haircut',
+      { scheduling: { type: 'rolling', interval_days: 42 } },
+      { cadence_shift_strategy: 'skip_one' },
+    );
+    const after = await getRoutine('haircut');
+    expect(after?.appointment?.calendar_event_id).toBeFalsy();
+    expect(after?.appointment?.last_event_start).toBeFalsy();
+    // appointment.enabled should NOT be touched — the routine is still
+    // appointment-style, she just skipped this booking.
+    expect(after?.appointment?.enabled).toBe(true);
   });
 
   it('updating last_done is allowed (used by start-tomorrow + mark-done)', async () => {

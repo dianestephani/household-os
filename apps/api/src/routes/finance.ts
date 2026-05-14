@@ -3,8 +3,10 @@ import {
   affordabilityReport,
   estimateMonthlyTax,
   getFinancialProfile,
+  getProjectedIncomeForMonth,
   listOutsourceable,
   setFinancialProfile,
+  setProjectedIncomeForMonth,
 } from '../services/finance.js';
 import {
   addImport,
@@ -127,6 +129,39 @@ router.post('/snapshots/:id/restore', async (req, res) => {
  * and any extra monthly withholding. Returns a breakdown the dashboard can
  * surface and the persona can reason about. Pure compute; doesn't persist.
  */
+// §50 Phase E — projected-income overrides (per-month).
+
+router.get('/projected-income/:month', async (req, res) => {
+  try {
+    const result = await getProjectedIncomeForMonth(req.params.month);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+router.post('/projected-income', async (req, res) => {
+  const body = (req.body ?? {}) as { month?: string; amount?: number | null };
+  if (typeof body.month !== 'string') {
+    res.status(400).json({ error: 'month (YYYY-MM) required' });
+    return;
+  }
+  if (body.amount !== null && typeof body.amount !== 'number') {
+    res.status(400).json({ error: 'amount must be a number or null' });
+    return;
+  }
+  try {
+    res.json(
+      await setProjectedIncomeForMonth({
+        month: body.month,
+        amount: body.amount,
+      }),
+    );
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
 router.post('/estimate-tax', async (req, res) => {
   const body = (req.body ?? {}) as {
     monthly_gross_income?: number;

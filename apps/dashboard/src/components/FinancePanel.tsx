@@ -255,6 +255,8 @@ export default function FinancePanel() {
         </div>
       </div>
 
+      <ProjectedIncomeEditor profileGross={grossNum} />
+
       <FinanceImports
         reloadKey={importsReloadKey}
         currentBreakdown={report.profile.expense_breakdown ?? ''}
@@ -785,6 +787,138 @@ function FinanceSnapshots({ reloadKey, onRestored }: FinanceSnapshotsProps) {
             );
           })}
         </ul>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// ProjectedIncomeEditor — §50 Phase E
+// =====================================================================
+
+function currentMonthKey(): string {
+  const now = new Date();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  return `${now.getFullYear()}-${m}`;
+}
+
+function ProjectedIncomeEditor({ profileGross }: { profileGross: number }) {
+  const [month, setMonth] = useState(currentMonthKey());
+  const [amount, setAmount] = useState<number | ''>('');
+  const [current, setCurrent] = useState<{
+    amount: number;
+    source: 'override' | 'gross_fallback';
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<Date | null>(null);
+
+  async function load(targetMonth: string) {
+    setError(null);
+    try {
+      const r = await api.finance.projectedIncome.get(targetMonth);
+      setCurrent(r);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    void load(month);
+  }, [month]);
+
+  async function save(amt: number | null) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.finance.projectedIncome.set(month, amt);
+      setSaved(new Date());
+      await load(month);
+      if (amt === null) setAmount('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <strong>Projected income (per month)</strong>
+      <p className="muted" style={{ marginTop: '0.25rem', fontSize: '0.85rem' }}>
+        Diane projects income on paper monthly. Override here per <code>YYYY-MM</code>;
+        if a month has no override, Look Back falls back to <strong>monthly gross
+        income</strong> (${profileGross.toLocaleString()}).
+      </p>
+      <div
+        style={{
+          display: 'flex',
+          gap: '0.5rem',
+          alignItems: 'baseline',
+          flexWrap: 'wrap',
+          marginTop: '0.4rem',
+        }}
+      >
+        <label>
+          Month:{' '}
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            disabled={busy}
+          />
+        </label>
+        <label>
+          Amount:{' '}
+          <input
+            type="number"
+            min={0}
+            value={amount}
+            onChange={(e) =>
+              setAmount(e.target.value === '' ? '' : Number(e.target.value))
+            }
+            disabled={busy}
+            placeholder="e.g. 5800"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            if (amount === '') return;
+            void save(Number(amount));
+          }}
+          disabled={busy || amount === ''}
+        >
+          {busy ? 'Saving…' : 'Save override'}
+        </button>
+        {current?.source === 'override' && (
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => void save(null)}
+            disabled={busy}
+            title="Clear this month's override (falls back to gross income)"
+          >
+            clear
+          </button>
+        )}
+      </div>
+      <div className="muted" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+        Current value for {month}:{' '}
+        {current
+          ? `$${current.amount.toLocaleString()} ` +
+            `(${current.source === 'override' ? 'override' : 'falling back to gross income'})`
+          : 'nothing set — neither override nor gross income'}
+        {saved && (
+          <span style={{ marginLeft: '0.5rem', color: 'var(--good)' }}>
+            ✓ Saved
+          </span>
+        )}
+      </div>
+      {error && (
+        <div className="muted" style={{ marginTop: '0.4rem', color: 'var(--bad)' }}>
+          {error}
+        </div>
       )}
     </div>
   );

@@ -198,11 +198,22 @@ function ThisWeekSection() {
   );
 }
 
+function currentMonthKey(): string {
+  const now = new Date();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  return `${now.getFullYear()}-${m}`;
+}
+
 function ThisMonthSection() {
   const [profile, setProfile] = useState<FinancialProfile | null>(null);
   const [latestImport, setLatestImport] = useState<RocketMoneyImport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // §50 Phase E — per-month projected income override. Falls back silently to
+  // `monthly_gross_income` if no override is set for the current month.
+  const [projectedIncomeSource, setProjectedIncomeSource] =
+    useState<'override' | 'gross_fallback' | null>(null);
+  const [projectedIncomeAmount, setProjectedIncomeAmount] = useState<number>(0);
 
   useEffect(() => {
     void (async () => {
@@ -213,6 +224,16 @@ function ThisMonthSection() {
         ]);
         setProfile(p);
         setLatestImport(imports[0] ?? null);
+
+        // Read the current month's projected income directly. The endpoint
+        // already does the override-vs-fallback resolution, so the dashboard
+        // doesn't have to re-derive it client-side.
+        const monthKey = currentMonthKey();
+        const projected = await api.finance.projectedIncome.get(monthKey);
+        if (projected) {
+          setProjectedIncomeAmount(projected.amount);
+          setProjectedIncomeSource(projected.source);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -243,14 +264,17 @@ function ThisMonthSection() {
     );
   }
 
-  const gross = profile?.monthly_gross_income ?? 0;
+  const projected =
+    projectedIncomeAmount > 0
+      ? projectedIncomeAmount
+      : profile?.monthly_gross_income ?? 0;
   const tax = profile?.monthly_tax_estimate ?? 0;
   const fixed = profile?.monthly_fixed_expenses ?? 0;
   const discretionarySpent =
     latestImport?.parsed?.total != null ? latestImport.parsed.total : null;
   const net =
-    gross > 0 && discretionarySpent !== null
-      ? gross - tax - fixed - discretionarySpent
+    projected > 0 && discretionarySpent !== null
+      ? projected - tax - fixed - discretionarySpent
       : null;
 
   const importDate = latestImport?.ts ? new Date(latestImport.ts) : null;
@@ -273,12 +297,12 @@ function ThisMonthSection() {
         <div style={{ fontSize: '0.95rem', marginBottom: '0.3rem' }}>
           Monthly profile
         </div>
-        {gross === 0 && (
+        {projected === 0 && (
           <div className="muted" style={{ fontSize: '0.85rem' }}>
             Nothing set yet — fill in Stuff → Finance to see the rollup.
           </div>
         )}
-        {gross > 0 && (
+        {projected > 0 && (
           <ul
             style={{
               listStyle: 'none',
@@ -288,7 +312,14 @@ function ThisMonthSection() {
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            <RollupRow label="Projected income" amount={gross} />
+            <RollupRow
+              label={
+                projectedIncomeSource === 'override'
+                  ? 'Projected income (this month)'
+                  : 'Projected income'
+              }
+              amount={projected}
+            />
             <RollupRow label="− Tax estimate" amount={-tax} />
             <RollupRow label="− Fixed expenses" amount={-fixed} />
             {discretionarySpent !== null && (

@@ -2449,12 +2449,23 @@ Each phase is independently shippable. Diane can stop after any phase.
 
 **Test delta: +14 (all on `patterns-simple.test.ts`).** New API total: **203 tests across 18 files** (213 with alexa-skill). All four workspaces typecheck clean; dashboard build verified (213 KB JS gzipped, +2 KB from Phase C for the LookBackPanel rebuild). Detail in §54.
 
-**Phase E — Stuff view (~3-4 hr)**
-- Build `StuffPanel` with three sub-tabs (Routines, Finance, Assistant Settings).
-- Routines sub-tab: reuse the `RoutinesPage` table if it survived Phase C; otherwise rebuild as a simple editable table.
-- Cadence-shift modal: invoked from both the inline edit row and from the chat tool path (`update_routine` with `cadence_shift_strategy`). Three options as buttons.
-- Finance sub-tab: surface the existing Phase 2/5 work (snapshot history, RocketMoney imports, upload/paste).
-- Assistant Settings sub-tab: textarea + version list + rollback.
+**Phase E — Stuff view (~3-4 hr) — SHIPPED 2026-05-14**
+- ✅ Routine schema simplification per §50's "What gets KEPT" list. Dropped fields from `Routine`: `energy`, `skip_if`, `also_triggers`, `budget_gated`, `cost_estimate`. Dropped from `Scheduling`: `flex_days`, `week_in_cycle`. Dropped from `SchedulingType`: `'zone_rotation'` (now `'rolling' | 'fixed' | 'as_needed' | 'event_driven'`). **Added**: `monthly_occurrences_override` on `Routine` for `listOutsourceable`'s cost math when the interval-based default is wrong (e.g. `regular_cleaning` at 21d interval but realistically booked monthly → set override = 1 to get the right $/mo figure).
+- ✅ Updated [Routine.ts Mongoose schema](apps/api/src/db/models/Routine.ts), [shared/types.ts](packages/shared/src/types.ts), [seed.ts](apps/api/src/seed.ts), [routines.ts](apps/api/src/services/routines.ts) `patchRoutine` allow-list, and [finance.ts](apps/api/src/services/finance.ts) `listOutsourceable` to honor the override. The Mongoose `strict: true` default silently drops the dropped fields on insert/update, so existing Atlas docs with `energy`/`flex_days`/etc. keep working — those fields just become invisible to the runtime.
+- ✅ **Cadence-shift strategy wiring** — new `CadenceShiftStrategy` type in shared (`'one_off' | 'shift_all' | 'skip_one'`). `patchRoutine` accepts a second-arg `{ cadence_shift_strategy }` option:
+  - `'shift_all'` (default) — patch applies forward; no extra side effects.
+  - `'skip_one'` — patch applies AND the routine's `appointment.calendar_event_id` + `appointment.last_event_start` get nulled out (Diane skipped this booking; cadence keeps its prior value). The Google Calendar event itself isn't deleted — Diane deletes it there herself, or the orphan stays tagged with the routine name and is harmless.
+  - `'one_off'` — patch applies; no calendar side effects; the strategy is recorded in the activity log so future analytics can distinguish "she fixed a typo" from "she intends to change the cadence."
+  - The strategy lands in `routine_edited` activity metadata regardless of which branch fires.
+- ✅ **`PATCH /api/routines/:key` route** accepts `cadence_shift_strategy` in the body and forwards it as an option (out of the patch payload — the `patchRoutine` allow-list would silently drop it anyway, but pulling it at the route layer keeps responsibilities clean).
+- ✅ **Cadence-shift modal in [RoutinesPage.tsx](apps/dashboard/src/components/RoutinesPage.tsx)**. Edit modal now lets her change `interval_days` directly (was the schema's hidden field before). On Save, when interval_days actually changed AND the routine is appointment-enabled, a `CadenceShiftModal` appears with three labeled buttons (Shift all / Skip the next one / Just this once). Each button has a description matching the strategy's semantics. For non-appointment routines or pure name/estimate edits, no modal — Save just patches and returns. Also removed the `energy` dropdown from the edit modal since the field retired.
+- ✅ **`set_projected_income` decision shipped**: added `monthly_projected_income_overrides?: Record<string, number>` on `FinancialProfile` (Mongoose `Map<string, Number>` for object-key round-tripping; flattened to a plain Record for the API consumer). New service methods `getProjectedIncomeForMonth(monthKey)` (returns `{amount, source: 'override' | 'gross_fallback'}` or null when no profile + no fallback) and `setProjectedIncomeForMonth({month, amount: number | null})` (clears with null). New routes `GET /api/finance/projected-income/:month` + `POST /api/finance/projected-income`. New assistant tool `set_projected_income({month, amount})`. New dashboard `ProjectedIncomeEditor` component in Stuff/Finance for per-month edits.
+- ✅ Look Back's "This month" updated to read the current month's projected income (override-or-gross-fallback) via the new endpoint. Label switches to "Projected income (this month)" when an override is active, signaling that the figure isn't the rolling monthly gross.
+- ✅ **Tool surface**: 17 live tools (was 16) — `set_projected_income` un-deferred. `update_routine` schema extended with optional `cadence_shift_strategy` enum. `DEFERRED_TOOL_NAMES` shrunk from 4 to 3 (only the three calendar-event mutators remain — see §55 for the rationale on keeping those deferred).
+- ⏸️ **Per-month "set_projected_income" decision**: §50 said "decision pending" between flat-monthly and per-month overrides. Phase E went with **per-month overrides as a `Record<string, number>` field on `FinancialProfile`** — least disruptive (no new collection), keeps the Phase D fall-back path working, and the assistant tool / dashboard editor surface the per-month axis cleanly.
+- ⏸️ **`zone` field on `Routine`**: §50's "what gets KEPT" list omits `zone`, but Phase E left it alone because it's purely descriptive metadata (kitchen / bathroom / yard) with no behavior attached. Dropping it would cascade through seed data + the dashboard's display logic for no functional gain. Phase G can revisit if she'd like the simplification.
+
+**Test delta: +15 (12 projected-income service tests + 1 outsourceable-override test + 2 cadence-shift patchRoutine tests).** New API total: **218 tests across 19 files** (228 with alexa-skill). All four workspaces typecheck clean; dashboard build verified (218 KB JS gzipped, +5 KB from Phase D for the cadence-shift modal + ProjectedIncomeEditor). Detail in §55.
 
 **Phase F — Alexa cleanup (~1-2 hr)**
 - Delete most skill intents per the "What gets DELETED" list.
@@ -2878,3 +2889,122 @@ Phase D of the §50 rebuild. Fills in the "This month" + "Patterns" sections of 
 ### Open follow-ups for Phase F
 
 - The Alexa skill is still the most-urgent remaining work — it 404s against the trimmed API. Phase F: retool `WhatsLeftIntent` against Google Calendar events (not the deleted TodayPlan), drop the rest of the intents.
+
+---
+
+## 55. Phase E — Stuff view (SHIPPED 2026-05-14)
+
+Phase E of the §50 rebuild. Cleans up the Routine schema per §50's "what gets KEPT" list, adds cadence-shift handling for appointment-style routines, and lands the per-month projected income override that Phase D had punted on.
+
+### What landed
+
+**Routine schema simplification**
+
+Dropped from [packages/shared/src/types.ts](packages/shared/src/types.ts) `Routine`:
+
+- `energy: EnergyLevel`
+- `skip_if?: string`
+- `also_triggers?: string[]`
+- `budget_gated?: boolean`
+- `cost_estimate?: number` (distinct from `outsource_cost_estimate`; was for budget-gated services in the old persona path)
+
+Dropped from `Scheduling`: `flex_days`, `week_in_cycle`. Dropped from `SchedulingType`: `'zone_rotation'`.
+
+Added to `Routine`: `monthly_occurrences_override?: number` — explicit per-routine override for `listOutsourceable`'s monthly-cost math. Use case: `regular_cleaning` at 21d interval would compute 30/21 ≈ 1.43 occurrences/mo, but Diane realistically books it once a month. Setting override = 1 gets the real $/mo figure.
+
+The Mongoose schema in [Routine.ts](apps/api/src/db/models/Routine.ts) was rewritten to match. Mongoose `strict: true` (default) silently strips unknown fields on insert/update, so any existing Atlas doc with `energy: 'low'` still loads fine — the field just becomes invisible to the runtime.
+
+**Cadence-shift strategy**
+
+New `CadenceShiftStrategy = 'one_off' | 'shift_all' | 'skip_one'` type in shared. `patchRoutine` signature changed:
+
+```ts
+patchRoutine(
+  key: string,
+  patch: Record<string, unknown>,
+  options: { cadence_shift_strategy?: CadenceShiftStrategy } = {},
+)
+```
+
+Strategy semantics:
+
+- **`'shift_all'`** (default) — patch applies forward. Appointment-enabled routines retain their `calendar_event_id` until the reconcile cron next pulls from Google Calendar.
+- **`'skip_one'`** — patch applies AND `appointment.calendar_event_id` + `appointment.last_event_start` get nulled. The Google Calendar event itself is NOT deleted — Diane deletes it there manually (or the orphan stays tagged with the routine name and is harmless). `appointment.enabled` is preserved so the routine remains appointment-style.
+- **`'one_off'`** — patch applies; no calendar side effects. Signals "this is a one-time tweak, not a cadence change" so future analytics can distinguish "fixed a typo" from "she actually wants this every 6 weeks now."
+
+The strategy is recorded in `routine_edited` activity metadata regardless of branch:
+
+```ts
+{ kind: 'routine_edited', metadata: { key, fields, cadence_shift_strategy } }
+```
+
+**Cadence-shift UX**
+
+[RoutinesPage.tsx](apps/dashboard/src/components/RoutinesPage.tsx) edit modal now lets her change `interval_days` directly (was unreachable from the dashboard before — only the assistant could touch cadence). On Save, when interval_days actually changed AND the routine is appointment-enabled, a `CadenceShiftModal` appears with three labeled buttons:
+
+- **Shift all going forward** — applies `'shift_all'`
+- **Skip the next one** — applies `'skip_one'`; copy adapts to whether the routine is currently linked to a Calendar event
+- **Just this once** — applies `'one_off'`
+
+For non-appointment routines or pure name/estimate edits, no modal — Save just patches and returns. The `energy` dropdown that was on the previous edit modal is gone (field retired).
+
+**Projected income per month**
+
+Decision shipped: **per-month overrides as `monthly_projected_income_overrides?: Record<string, number>` on `FinancialProfile`**. Keys are `YYYY-MM`. Stored as a Mongoose `Map<string, Number>` so object keys round-trip correctly; the service layer (`getFinancialProfile`) flattens it to a plain `Record<string, number>` before returning to keep JSON responses clean.
+
+New service methods in [finance.ts](apps/api/src/services/finance.ts):
+
+- `getProjectedIncomeForMonth(monthKey)` → `{amount, source: 'override' | 'gross_fallback'} | null`. Returns the override if set, falls back to `monthly_gross_income` if positive, returns null otherwise. Throws on malformed `YYYY-MM`.
+- `setProjectedIncomeForMonth({month, amount})` → upserts the singleton with a `$set` on the map entry. `amount: null` clears that month (uses `$unset` on the nested key). Logs `routine_edited` activity with `metadata: {fields: ['monthly_projected_income_overrides'], month, amount, before}`.
+
+New routes:
+
+- `GET /api/finance/projected-income/:month` — server-side resolved value
+- `POST /api/finance/projected-income` — body `{month, amount}`
+
+New assistant tool: `set_projected_income({month: 'YYYY-MM', amount: number | null})`. Un-deferred from `DEFERRED_TOOL_NAMES`.
+
+Look Back's `ThisMonthSection` now fetches the current month's projected income via the new endpoint and shows the override-vs-fallback source in the row label ("Projected income (this month)" when an override is active; plain "Projected income" otherwise). The Net math switches to use the override when present.
+
+**`ProjectedIncomeEditor` in Stuff/Finance**
+
+Added between the profile rollup and the imports list. Native `<input type="month">` for the YYYY-MM picker, number input for the amount. Save / Clear buttons (Clear only renders when an override is currently set for the selected month). Shows the current resolved value with its source ("override" vs "falling back to gross income"). Loads the current value automatically when the month picker changes.
+
+### Tests added (+15)
+
+- [services/finance.projected-income.test.ts](apps/api/src/services/finance.projected-income.test.ts) (12): null when no profile + no override; gross fallback path; override beats fallback; override is per-month (other months still fall back); malformed-month rejection (both getter + setter); multi-month independence; in-place updates don't create duplicate docs; `null` amount clears + falls back; negative-amount rejection; activity-log emission with metadata.
+- [services/routines.test.ts](apps/api/src/services/routines.test.ts) (+2): `outsourceable` + `outsource_cost_estimate` + `monthly_occurrences_override` now on the allow-list (added in this phase, weren't before); `skip_one` cadence_shift_strategy clears `calendar_event_id` + `last_event_start` while preserving `appointment.enabled`.
+- [services/finance.test.ts](apps/api/src/services/finance.test.ts) (+1): `monthly_occurrences_override` beats interval-based math (cleaner @ 21d interval with override=1 → exactly 1 visit/mo, $380/mo).
+
+**Deliberately NOT tested:**
+
+- Dashboard `CadenceShiftModal`, `EditRoutineModal` interval editor, `ProjectedIncomeEditor` flows — no React testing infra. First regression candidates if it's ever added: the "interval-changed AND appointment-enabled → show modal" gate, the strategy passthrough on Save, the Clear button visibility logic, the month-picker auto-load effect.
+- The `cadence_shift_strategy` route layer (just strips it out of the body and forwards). Service-level coverage already validates `skip_one` and the activity log captures the strategy in both `shift_all` and `one_off` branches.
+
+### Spec deviations / design calls
+
+1. **`zone` field kept on `Routine`.** §50's "what gets KEPT" omits `zone`, but Phase E left it alone because (a) it's purely descriptive metadata with no behavior attached, (b) dropping it would cascade through seed.ts + dashboard display + several inventory.json types for no functional gain, and (c) the simplification ROI is best targeted at the fields §50 explicitly called out as redundant. Phase G can revisit if Diane wants the cleaner shape.
+2. **`estimate_minutes` kept too.** §50's keep list also omits it, but it's still displayed in the Routines table meta (`14d · 60m`) and serves a real informational purpose. Dropping it would lose useful context for no win.
+3. **`monthly_projected_income_overrides` as a field on `FinancialProfile` rather than a new collection.** Two options were on the table: (a) `MonthlyProjectedIncome` collection keyed by month, (b) embedded map on the profile singleton. Chose (b) because the data volume is tiny (12 entries/year), it has a strict 1:1 relationship to the profile, and avoiding a new collection keeps the migration story simple. If she ever wanted per-month auditing (snapshot diffs per override), the collection path would be cleaner — but that's not a current need.
+4. **Mongoose `Map` type for the overrides.** Plain `Object`-typed schema fields don't round-trip dynamic keys cleanly (Mongoose treats unknown keys as schema violations under strict mode for path-style updates). `Map` works because keys are dynamic by definition. The service flattens to a plain Record for the API response so JSON consumers don't see Map serialization quirks.
+5. **`'skip_one'` does NOT delete the Google Calendar event.** The Mongoose link gets cleared (so the reconcile cron stops watching it), but the event stays in Google. Rationale: deleting events the user themselves created feels heavy-handed for a "skip the next one" gesture; the orphan event is tagged with the routine name and Diane can clean it up herself if it bothers her. The reconcile cron's `appointment_deleted_externally` handler also won't fire because we cleared the link before reconcile next runs.
+6. **Three calendar-event mutator tools stay deferred.** `create_calendar_event`, `update_calendar_event`, `delete_calendar_event` are still in `DEFERRED_TOOL_NAMES`. The assistant can already mutate the Calendar indirectly via `update_routine` on appointment-enabled routines (which triggers the appointment-reconcile cron's logic), or it can ask Diane to make the change in Calendar herself. Adding direct event-mutator tools would give the assistant a parallel write path that's harder to keep coherent with the reconcile logic. Adding them later is fine if the indirect path proves friction.
+7. **Mongoose `strict: true` strips dropped fields silently on existing docs.** Re-seeding `start-tomorrow` + the deployed Routines docs will keep working with `energy`/`flex_days`/etc. ignored. The clean migration path is just a normal re-seed after Phase E ships; no separate migration script needed.
+
+### Route cheat sheet additions
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/finance/projected-income/:YYYY-MM` | GET | Resolves to override-or-fallback; returns `{amount, source}` or `null` |
+| `/api/finance/projected-income` | POST | Body `{month, amount}`. `amount: null` clears that month's override. |
+| `/api/routines/:key` | PATCH | Now accepts `cadence_shift_strategy` in body (`'one_off' \| 'shift_all' \| 'skip_one'`). Stripped from patch payload before the allow-list runs. |
+
+### Open follow-ups for Phase F
+
+- The Alexa skill still 404s against the trimmed API. Retool `WhatsLeftIntent` against today's Google Calendar events (not the deleted TodayPlan); delete the rest of the intents (swap / mark-done / pull-from-pool / mood / energy / check-in / zone / patterns); update `client.ts` to only call surviving endpoints; verify the morning push still fires.
+
+### Open follow-ups for Phase G
+
+- Optional simplification pass: drop `zone` and `estimate_minutes` from `Routine` if Diane confirms she doesn't miss them in the table display.
+- Relative timestamps on the Routines table row's `last_done` + MorningCheckin summary line (currently shows absolute times).
+- Final `find` for orphaned tests/docs the Phase C purge missed.

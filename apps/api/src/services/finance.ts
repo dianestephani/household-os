@@ -28,10 +28,22 @@ const DAYS_PER_MONTH = 30;
 /**
  * Singleton getter for the financial profile. Returns a default-shaped profile
  * if nothing has been saved yet (so the dashboard always has something to render).
+ *
+ * Mongoose stores `monthly_projected_income_overrides` as a `Map` so object
+ * keys round-trip; we flatten it to a plain `Record<string, number>` here so
+ * the API response shape stays JSON-friendly.
  */
 export async function getFinancialProfile(): Promise<FinancialProfileType> {
   const existing = await FinancialProfile.findOne({ key: 'self' }).lean();
-  if (existing) return existing as unknown as FinancialProfileType;
+  if (existing) {
+    const overridesRaw = (existing as { monthly_projected_income_overrides?: unknown })
+      .monthly_projected_income_overrides;
+    const overrides = mapToObject(overridesRaw);
+    return {
+      ...(existing as unknown as FinancialProfileType),
+      monthly_projected_income_overrides: overrides,
+    };
+  }
   return {
     key: 'self',
     monthly_gross_income: 0,
@@ -44,6 +56,108 @@ export async function getFinancialProfile(): Promise<FinancialProfileType> {
     expense_breakdown: '',
     updated_at: new Date(),
   };
+}
+
+function mapToObject(
+  value: unknown,
+): Record<string, number> | undefined {
+  if (!value) return undefined;
+  if (value instanceof Map) {
+    return Object.fromEntries(value as Map<string, number>);
+  }
+  if (typeof value === 'object') {
+    return value as Record<string, number>;
+  }
+  return undefined;
+}
+
+/**
+ * §50 Phase E — returns the projected income for a given month (YYYY-MM).
+ * Falls back to `monthly_gross_income` when the month has no override.
+ * Returns `null` only when there's no profile at all + no fallback.
+ */
+export async function getProjectedIncomeForMonth(
+  monthKey: string,
+): Promise<{ amount: number; source: 'override' | 'gross_fallback' } | null> {
+  if (!/^\d{4}-\d{2}$/.test(monthKey)) {
+    throw new Error(`monthKey must be YYYY-MM, got: ${monthKey}`);
+  }
+  const profile = await getFinancialProfile();
+  const overrides = profile.monthly_projected_income_overrides ?? {};
+  if (typeof overrides[monthKey] === 'number') {
+    return { amount: overrides[monthKey]!, source: 'override' };
+  }
+  if (profile.monthly_gross_income > 0) {
+    return {
+      amount: profile.monthly_gross_income,
+      source: 'gross_fallback',
+    };
+  }
+  return null;
+}
+
+/**
+ * §50 Phase E — set the projected income for a specific `YYYY-MM`. Logs to
+ * the activity log (kind: routine_edited, metadata.fields includes
+ * 'monthly_projected_income_overrides'). Does NOT touch
+ * `monthly_gross_income`. Passing `amount = null` clears that month's
+ * override (useful for "I typo'd that, reset to gross").
+ */
+export async function setProjectedIncomeForMonth(input: {
+  month: string;
+  amount: number | null;
+}): Promise<FinancialProfileType> {
+  if (!/^\d{4}-\d{2}$/.test(input.month)) {
+    throw new Error(`month must be YYYY-MM, got: ${input.month}`);
+  }
+  const before = await FinancialProfile.findOne({ key: 'self' }).lean();
+  const beforeOverrides =
+    mapToObject(
+      (before as { monthly_projected_income_overrides?: unknown } | null)
+        ?.monthly_projected_income_overrides,
+    ) ?? {};
+
+  if (input.amount === null) {
+    await FinancialProfile.findOneAndUpdate(
+      { key: 'self' },
+      {
+        $unset: { [`monthly_projected_income_overrides.${input.month}`]: '' },
+        $set: { updated_at: new Date() },
+        $setOnInsert: { key: 'self' },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+  } else {
+    if (input.amount < 0) {
+      throw new Error('amount must be ≥ 0');
+    }
+    await FinancialProfile.findOneAndUpdate(
+      { key: 'self' },
+      {
+        $set: {
+          [`monthly_projected_income_overrides.${input.month}`]: input.amount,
+          updated_at: new Date(),
+        },
+        $setOnInsert: { key: 'self' },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+  }
+
+  await logActivity(
+    'routine_edited',
+    `Set projected income for ${input.month}`,
+    {
+      metadata: {
+        fields: ['monthly_projected_income_overrides'],
+        month: input.month,
+        amount: input.amount,
+        before: beforeOverrides[input.month] ?? null,
+      },
+    },
+  );
+
+  return getFinancialProfile();
 }
 
 export async function setFinancialProfile(input: {
@@ -269,13 +383,21 @@ export async function listOutsourceable(): Promise<OutsourceableSummary> {
 
   const items: OutsourceableSummaryItem[] = routines.map((r) => {
     const cost = r.outsource_cost_estimate ?? 0;
-    const occurrences = monthlyOccurrences(
-      (r.scheduling ?? {}) as {
-        type?: string;
-        interval_days?: number | null;
-        biweekly?: boolean | null;
-      },
-    );
+    // §50 Phase E — explicit override wins over interval-based math. Use case:
+    // a routine with `interval_days = 21` that Diane actually books once a
+    // month; the cadence math would say 30/21 ≈ 1.43, but `1` is the truth.
+    const override = (r as { monthly_occurrences_override?: number | null })
+      .monthly_occurrences_override;
+    const occurrences =
+      typeof override === 'number' && override > 0
+        ? override
+        : monthlyOccurrences(
+            (r.scheduling ?? {}) as {
+              type?: string;
+              interval_days?: number | null;
+              biweekly?: boolean | null;
+            },
+          );
     return {
       routine_key: r.key,
       routine_name: r.name ?? r.key,

@@ -48,7 +48,6 @@ describe('assistantTools impls (smoke)', () => {
       zone: 'whole-house',
       scheduling: { type: 'rolling', interval_days: 7 },
       estimate_minutes: 10,
-      energy: 'low',
       active: true,
     });
     await Routine.create({
@@ -58,7 +57,6 @@ describe('assistantTools impls (smoke)', () => {
       zone: 'kitchen',
       scheduling: { type: 'rolling', interval_days: 1 },
       estimate_minutes: 5,
-      energy: 'low',
       active: true,
     });
 
@@ -91,7 +89,6 @@ describe('assistantTools impls (smoke)', () => {
     expect(doc?.category).toBe('personal');
     expect(doc?.zone).toBe('whole-house');
     expect(doc?.estimate_minutes).toBe(15);
-    expect(doc?.energy).toBe('medium');
     expect(doc?.active).toBe(true);
   });
 
@@ -103,7 +100,6 @@ describe('assistantTools impls (smoke)', () => {
       zone: 'whole-house',
       scheduling: { type: 'rolling', interval_days: 7 },
       estimate_minutes: 10,
-      energy: 'low',
       active: true,
     });
     await assistantTools.delete_routine!({ key: 'dr_test' });

@@ -2,10 +2,34 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import type { Routine } from '@household-os/shared/types';
 
+/**
+ * §50 Phase E — Stuff/Routines table. Edit modal now lets her change the
+ * cadence (interval_days) directly; on Save, if the routine is appointment-
+ * enabled AND interval_days actually changed, a cadence-shift modal asks
+ * which strategy to apply ('one_off' | 'shift_all' | 'skip_one'). For
+ * non-appointment routines or pure name/estimate edits, no modal — Save
+ * just patches and returns.
+ *
+ * Dropped from the previous Phase 4 edit modal: the `energy` dropdown
+ * (`energy` retired in Phase E's Routine simplification). Added: an
+ * interval_days input that's only meaningful for `scheduling.type ===
+ * 'rolling'`.
+ */
+
+type CadenceStrategy = 'one_off' | 'shift_all' | 'skip_one';
+
+interface PendingPatch {
+  routine: Routine;
+  patch: Partial<Routine>;
+  /** True when interval_days changed on an appointment-enabled rolling routine. */
+  needsStrategy: boolean;
+}
+
 export default function RoutinesPage() {
   const [routines, setRoutines] = useState<Routine[] | null>(null);
   const [editing, setEditing] = useState<Routine | null>(null);
   const [scheduling, setScheduling] = useState<Routine | null>(null);
+  const [pendingStrategy, setPendingStrategy] = useState<PendingPatch | null>(null);
 
   useEffect(() => {
     void api.routines.list().then(setRoutines);
@@ -17,6 +41,19 @@ export default function RoutinesPage() {
     );
   }
 
+  async function applyPatch(
+    routine: Routine,
+    patch: Partial<Routine>,
+    strategy?: CadenceStrategy,
+  ) {
+    const updated = await api.routines.patch(
+      routine.key,
+      patch,
+      strategy ? { cadence_shift_strategy: strategy } : {},
+    );
+    replaceRoutine(updated);
+  }
+
   if (!routines) return <div className="muted">Loading…</div>;
 
   return (
@@ -26,6 +63,14 @@ export default function RoutinesPage() {
         const apptEnabled = r.appointment?.enabled === true;
         const linked = !!r.appointment?.calendar_event_id;
         const lastStart = r.appointment?.last_event_start;
+        const interval =
+          r.scheduling.type === 'rolling'
+            ? `${r.scheduling.interval_days}d`
+            : r.scheduling.type === 'fixed'
+              ? r.scheduling.biweekly
+                ? `${r.scheduling.day_of_week} biweekly`
+                : (r.scheduling.day_of_week ?? 'fixed')
+              : r.scheduling.type;
         return (
           <div key={r.key} className="row">
             <span className="name">
@@ -44,7 +89,7 @@ export default function RoutinesPage() {
               )}
             </span>
             <span className="meta">
-              {r.scheduling.type} · {r.estimate_minutes}m · {r.energy}
+              {interval} · {r.estimate_minutes}m
             </span>
             {apptEnabled && (
               <button
@@ -70,9 +115,22 @@ export default function RoutinesPage() {
         <EditRoutineModal
           routine={editing}
           onClose={() => setEditing(null)}
-          onSave={async (patch) => {
-            const updated = await api.routines.patch(editing.key, patch);
-            replaceRoutine(updated);
+          onSave={async (patch, intervalChanged) => {
+            const apptEnabled = editing.appointment?.enabled === true;
+            // Only prompt for a cadence-shift strategy when:
+            //  (a) interval_days actually changed, AND
+            //  (b) the routine is appointment-enabled (otherwise strategy is
+            //      meaningless — there's no Calendar event to skip).
+            if (intervalChanged && apptEnabled) {
+              setPendingStrategy({
+                routine: editing,
+                patch,
+                needsStrategy: true,
+              });
+              setEditing(null);
+              return;
+            }
+            await applyPatch(editing, patch);
             setEditing(null);
           }}
         />
@@ -88,20 +146,55 @@ export default function RoutinesPage() {
           }}
         />
       )}
+
+      {pendingStrategy && (
+        <CadenceShiftModal
+          routine={pendingStrategy.routine}
+          onClose={() => setPendingStrategy(null)}
+          onChoose={async (strategy) => {
+            await applyPatch(
+              pendingStrategy.routine,
+              pendingStrategy.patch,
+              strategy,
+            );
+            setPendingStrategy(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-interface ModalProps {
+interface EditModalProps {
   routine: Routine;
   onClose: () => void;
-  onSave: (patch: Partial<Routine>) => Promise<void>;
+  onSave: (patch: Partial<Routine>, intervalChanged: boolean) => Promise<void>;
 }
 
-function EditRoutineModal({ routine, onClose, onSave }: ModalProps) {
+function EditRoutineModal({ routine, onClose, onSave }: EditModalProps) {
   const [estimate, setEstimate] = useState(routine.estimate_minutes);
-  const [energy, setEnergy] = useState(routine.energy);
+  const [intervalDays, setIntervalDays] = useState<number>(
+    routine.scheduling.interval_days ?? 0,
+  );
   const [active, setActive] = useState(routine.active);
+  const isRolling = routine.scheduling.type === 'rolling';
+
+  const intervalChanged =
+    isRolling && intervalDays !== (routine.scheduling.interval_days ?? 0);
+
+  function handleSave() {
+    const patch: Partial<Routine> = {
+      estimate_minutes: estimate,
+      active,
+    };
+    if (intervalChanged) {
+      patch.scheduling = {
+        ...routine.scheduling,
+        interval_days: intervalDays,
+      };
+    }
+    void onSave(patch, intervalChanged);
+  }
 
   return (
     <div className="suggestion-modal" onClick={onClose}>
@@ -116,18 +209,20 @@ function EditRoutineModal({ routine, onClose, onSave }: ModalProps) {
           />
         </label>
         <br />
-        <label>
-          Energy:{' '}
-          <select
-            value={energy}
-            onChange={(e) => setEnergy(e.target.value as Routine['energy'])}
-          >
-            <option value="low">low</option>
-            <option value="medium">medium</option>
-            <option value="high">high</option>
-          </select>
-        </label>
-        <br />
+        {isRolling && (
+          <>
+            <label>
+              Interval (days):{' '}
+              <input
+                type="number"
+                min={1}
+                value={intervalDays}
+                onChange={(e) => setIntervalDays(Number(e.target.value))}
+              />
+            </label>
+            <br />
+          </>
+        )}
         <label>
           <input
             type="checkbox"
@@ -138,16 +233,111 @@ function EditRoutineModal({ routine, onClose, onSave }: ModalProps) {
         </label>
         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
           <button className="icon-btn" onClick={onClose}>cancel</button>
-          <button
-            onClick={() =>
-              onSave({ estimate_minutes: estimate, energy, active })
+          <button onClick={handleSave}>save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface CadenceModalProps {
+  routine: Routine;
+  onClose: () => void;
+  onChoose: (strategy: CadenceStrategy) => Promise<void>;
+}
+
+function CadenceShiftModal({ routine, onClose, onChoose }: CadenceModalProps) {
+  const [busy, setBusy] = useState(false);
+  const linked = !!routine.appointment?.calendar_event_id;
+
+  async function choose(strategy: CadenceStrategy) {
+    setBusy(true);
+    try {
+      await onChoose(strategy);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="suggestion-modal" onClick={onClose}>
+      <div className="box" onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ marginTop: 0 }}>How should this apply?</h3>
+        <p className="muted" style={{ fontSize: '0.88rem', marginBottom: '0.8rem' }}>
+          You changed the cadence on <strong>{routine.name}</strong>
+          {linked ? ', which has an upcoming Calendar event.' : '.'} Pick the
+          strategy that matches what you meant.
+        </p>
+        <div
+          style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
+        >
+          <StrategyButton
+            label="Shift all going forward"
+            description="The new cadence applies from now on. Upcoming Calendar event stays where it is — reconcile picks it up if you move it manually."
+            onClick={() => choose('shift_all')}
+            disabled={busy}
+          />
+          <StrategyButton
+            label="Skip the next one"
+            description={
+              linked
+                ? "Clears the upcoming Calendar event link; cadence (interval_days) keeps its prior value."
+                : 'Cadence keeps its prior value; this routine just gets one skip recorded.'
             }
-          >
-            save
+            onClick={() => choose('skip_one')}
+            disabled={busy}
+          />
+          <StrategyButton
+            label="Just this once"
+            description="One-time tweak. No side effects beyond the patch — useful when you're correcting a wrong number, not changing the cadence."
+            onClick={() => choose('one_off')}
+            disabled={busy}
+          />
+        </div>
+        <div style={{ marginTop: '0.8rem' }}>
+          <button className="icon-btn" onClick={onClose} disabled={busy}>
+            cancel
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+function StrategyButton({
+  label,
+  description,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  description: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        textAlign: 'left',
+        padding: '0.6rem 0.8rem',
+        border: '1px solid var(--border)',
+        borderRadius: '6px',
+        background: 'var(--bg)',
+        color: 'var(--text)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+        fontFamily: 'inherit',
+        fontSize: '0.92rem',
+      }}
+    >
+      <div style={{ fontWeight: 600 }}>{label}</div>
+      <div className="muted" style={{ fontSize: '0.82rem', marginTop: '0.2rem' }}>
+        {description}
+      </div>
+    </button>
   );
 }
 
@@ -167,8 +357,6 @@ function ScheduleAppointmentModal({
   const linkedStart = routine.appointment?.last_event_start;
   const linkedEventId = routine.appointment?.calendar_event_id;
 
-  // Default datetime-local value: tomorrow at 10:00 local. Native input
-  // wants "YYYY-MM-DDTHH:mm" (no timezone suffix, no seconds).
   const tomorrowAt10 = (() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
@@ -186,7 +374,6 @@ function ScheduleAppointmentModal({
     setSaving(true);
     setError(null);
     try {
-      // Convert local "YYYY-MM-DDTHH:mm" to a real ISO string with TZ.
       const local = new Date(startsAt);
       if (Number.isNaN(local.getTime())) {
         throw new Error('Invalid date/time');

@@ -1,14 +1,24 @@
 import mongoose, { Schema, type InferSchemaType, type Model } from 'mongoose';
 
+/**
+ * §50 Phase E — Routine schema simplification. Dropped fields: `energy`,
+ * `scheduling.flex_days`, `scheduling.week_in_cycle`, `skip_if`,
+ * `also_triggers`, `budget_gated`, `cost_estimate`. The `zone_rotation`
+ * scheduling type also retired (now only `rolling | fixed | as_needed |
+ * event_driven`). Added: `monthly_occurrences_override` for `listOutsourceable`'s
+ * cost math when the interval-based default is wrong.
+ *
+ * Mongoose strips unknown fields silently on insert/update with the default
+ * `strict: true`, so existing Atlas docs with dropped fields keep working —
+ * the dropped fields just become invisible to the runtime.
+ */
 const SchedulingSchema = new Schema(
   {
     type: { type: String, required: true },
     interval_days: Number,
-    flex_days: Number,
     day_of_week: String,
     biweekly: Boolean,
     trigger: String,
-    week_in_cycle: Number,
   },
   { _id: false },
 );
@@ -32,15 +42,11 @@ const RoutineSchema = new Schema(
     zone: String,
     scheduling: { type: SchedulingSchema, required: true },
     estimate_minutes: { type: Number, default: 0 },
-    energy: { type: String, default: 'low' },
-    skip_if: String,
-    also_triggers: [String],
     last_done: Date,
     active: { type: Boolean, default: true },
     outsourceable: { type: Boolean, default: false },
     outsource_cost_estimate: { type: Number, default: 0 },
-    budget_gated: { type: Boolean, default: false },
-    cost_estimate: { type: Number, default: 0 },
+    monthly_occurrences_override: { type: Number },
     appointment: { type: AppointmentSchema, default: undefined },
   },
   { timestamps: true },

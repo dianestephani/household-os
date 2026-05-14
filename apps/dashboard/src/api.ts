@@ -145,10 +145,14 @@ export const api = {
   },
   routines: {
     list: () => request<Routine[]>('/routines'),
-    patch: (key: string, patch: Partial<Routine>) =>
+    patch: (
+      key: string,
+      patch: Partial<Routine>,
+      options: { cadence_shift_strategy?: 'one_off' | 'shift_all' | 'skip_one' } = {},
+    ) =>
       request<Routine>(`/routines/${key}`, {
         method: 'PATCH',
-        body: JSON.stringify(patch),
+        body: JSON.stringify({ ...patch, ...options }),
       }),
   },
   appointments: {
@@ -236,6 +240,18 @@ export const api = {
           `/finance/snapshots/${snapshotId}/restore`,
           { method: 'POST' },
         ),
+    },
+    projectedIncome: {
+      get: (month: string) =>
+        request<{
+          amount: number;
+          source: 'override' | 'gross_fallback';
+        } | null>(`/finance/projected-income/${month}`),
+      set: (month: string, amount: number | null) =>
+        request<FinancialProfile>('/finance/projected-income', {
+          method: 'POST',
+          body: JSON.stringify({ month, amount }),
+        }),
     },
   },
 };

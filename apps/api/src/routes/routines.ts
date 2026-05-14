@@ -6,6 +6,13 @@ import {
   createRoutine,
   softDeleteRoutine,
 } from '../services/routines.js';
+import type { CadenceShiftStrategy } from '@household-os/shared/types';
+
+const VALID_STRATEGIES: CadenceShiftStrategy[] = [
+  'one_off',
+  'shift_all',
+  'skip_one',
+];
 
 const router: Router = Router();
 
@@ -24,7 +31,20 @@ router.get('/:key', async (req, res) => {
 });
 
 router.patch('/:key', async (req, res) => {
-  const r = await patchRoutine(req.params.key!, req.body ?? {});
+  // §50 Phase E — strip `cadence_shift_strategy` out of the patch body and
+  // pass it as an option instead. The allow-list inside `patchRoutine` would
+  // drop it silently anyway, but pulling it here keeps responsibilities clean.
+  const body = (req.body ?? {}) as Record<string, unknown> & {
+    cadence_shift_strategy?: CadenceShiftStrategy;
+  };
+  const { cadence_shift_strategy: rawStrategy, ...patch } = body;
+  const strategy =
+    rawStrategy && VALID_STRATEGIES.includes(rawStrategy as CadenceShiftStrategy)
+      ? (rawStrategy as CadenceShiftStrategy)
+      : undefined;
+  const r = await patchRoutine(req.params.key!, patch, {
+    cadence_shift_strategy: strategy,
+  });
   res.json(r);
 });
 

@@ -69,17 +69,14 @@ export type SchedulingType =
   | 'rolling'
   | 'fixed'
   | 'as_needed'
-  | 'event_driven'
-  | 'zone_rotation';
+  | 'event_driven';
 
 export interface Scheduling {
   type: SchedulingType;
   interval_days?: number;
-  flex_days?: number;
   day_of_week?: DayOfWeek;
   biweekly?: boolean;
   trigger?: string;
-  week_in_cycle?: number;
 }
 
 export interface Routine {
@@ -90,28 +87,29 @@ export interface Routine {
   zone: Zone;
   scheduling: Scheduling;
   estimate_minutes: number;
-  energy: EnergyLevel;
-  skip_if?: string;
-  also_triggers?: string[];
   last_done?: Date | string | null;
   active: boolean;
   outsourceable?: boolean;
   /** Typical local-market cost per occurrence in USD. */
   outsource_cost_estimate?: number;
   /**
-   * Whether suggesting this routine should consult finance first. Used for
-   * booked services Diane wants on a cadence but only when finances allow
-   * (head spa, massage, housecleaner-cadence bump).
+   * Optional override for `listOutsourceable`'s monthly-cost math. §50 Phase E
+   * — useful when the interval-based default doesn't match reality (e.g. a
+   * routine with `interval_days = 21` that Diane actually books once a month;
+   * setting `monthly_occurrences_override = 1` gets the right cost figure).
    */
-  budget_gated?: boolean;
-  /** Typical out-of-pocket cost per occurrence in USD. */
-  cost_estimate?: number;
+  monthly_occurrences_override?: number;
   /**
    * Per-appointment Google Calendar event for this routine, if applicable.
    * See §47 Phase 4 + the appointment-reconcile cron.
    */
   appointment?: RoutineAppointment;
 }
+
+/** §50 Phase E — passed to `patchRoutine` when a cadence-affecting field
+ *  changes. Surfaces the user's intent so the appointment side-effects can
+ *  branch correctly. */
+export type CadenceShiftStrategy = 'one_off' | 'shift_all' | 'skip_one';
 
 export interface RoutineAppointment {
   enabled: boolean;
@@ -154,6 +152,14 @@ export interface FinancialProfile {
    * affordability questions; we never parse it structurally.
    */
   expense_breakdown?: string;
+  /**
+   * Per-month projected income overrides keyed by `YYYY-MM` (e.g.
+   * `{'2026-05': 5800}`). §50 Phase E. Diane keeps her income projection on
+   * paper; the app accepts a single number per month as input. When this map
+   * doesn't have an entry for the queried month, callers fall back to
+   * `monthly_gross_income` as the projection.
+   */
+  monthly_projected_income_overrides?: Record<string, number>;
   updated_at: Date | string;
 }
 

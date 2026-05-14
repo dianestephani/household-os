@@ -284,6 +284,27 @@ describe('listOutsourceable', () => {
     const sum = summary.items.reduce((acc, i) => acc + i.monthly_cost, 0);
     expect(summary.total_monthly_cost).toBeCloseTo(sum, 2);
   });
+
+  it('monthly_occurrences_override beats interval-based math (§50 Phase E)', async () => {
+    // Cleaner @ 21d interval would compute 30/21 ≈ 1.43 occurrences/mo.
+    // With override=1, the math collapses to exactly 1 visit/mo.
+    await Routine.create({
+      key: 'cleaner',
+      name: 'House cleaner',
+      category: 'cleaning',
+      zone: 'whole-house',
+      scheduling: { type: 'rolling', interval_days: 21 },
+      estimate_minutes: 180,
+      active: true,
+      outsourceable: true,
+      outsource_cost_estimate: 380,
+      monthly_occurrences_override: 1,
+    });
+    const summary = await listOutsourceable();
+    const cleaner = summary.items.find((i) => i.routine_key === 'cleaner');
+    expect(cleaner?.occurrences_per_month).toBe(1);
+    expect(cleaner?.monthly_cost).toBeCloseTo(380, 2);
+  });
 });
 
 describe('affordabilityReport', () => {

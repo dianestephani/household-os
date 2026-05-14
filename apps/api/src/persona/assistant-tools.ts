@@ -5,11 +5,13 @@ import {
   estimateMonthlyTax,
   getFinancialProfile,
   listOutsourceable,
+  setProjectedIncomeForMonth,
 } from '../services/finance.js';
 import { todaysEvents, upcomingEvents } from '../services/calendar.js';
 import { addImport, listImports } from '../services/finance-history.js';
 import { getCheckin, recentCheckins } from '../services/morning-checkin.js';
 import type {
+  CadenceShiftStrategy,
   EnergyLevel,
   FilingStatus,
   MoodLevel,
@@ -61,14 +63,15 @@ export const assistantTools: Record<string, ToolImpl> = {
       zone: input.zone ?? 'whole-house',
       scheduling,
       estimate_minutes: input.estimate_minutes ?? 15,
-      energy: input.energy ?? 'medium',
       active: true,
     };
     if (input.outsourceable !== undefined) doc.outsourceable = input.outsourceable;
     if (input.outsource_cost_estimate !== undefined) {
       doc.outsource_cost_estimate = input.outsource_cost_estimate;
     }
-    if (input.notes !== undefined) doc.notes = input.notes;
+    if (input.monthly_occurrences_override !== undefined) {
+      doc.monthly_occurrences_override = input.monthly_occurrences_override;
+    }
     return createRoutine(doc);
   },
 
@@ -76,7 +79,10 @@ export const assistantTools: Record<string, ToolImpl> = {
     const key = input.key as string | undefined;
     if (!key) throw new Error('update_routine requires `key`');
     const patch = (input.patch as Record<string, unknown> | undefined) ?? {};
-    return patchRoutine(key, patch);
+    const strategy = input.cadence_shift_strategy as
+      | CadenceShiftStrategy
+      | undefined;
+    return patchRoutine(key, patch, { cadence_shift_strategy: strategy });
   },
 
   delete_routine: async (input) => {
@@ -131,5 +137,17 @@ export const assistantTools: Record<string, ToolImpl> = {
   recent_checkins: async (input) => {
     const days = Number((input.days as number | undefined) ?? 14);
     return recentCheckins(Number.isFinite(days) ? days : 14);
+  },
+
+  set_projected_income: async (input) => {
+    const month = input.month as string | undefined;
+    if (typeof month !== 'string') {
+      throw new Error('set_projected_income requires `month` (YYYY-MM)');
+    }
+    const amountRaw = input.amount as number | null | undefined;
+    if (amountRaw !== null && typeof amountRaw !== 'number') {
+      throw new Error('set_projected_income requires `amount` (number or null)');
+    }
+    return setProjectedIncomeForMonth({ month, amount: amountRaw });
   },
 };
