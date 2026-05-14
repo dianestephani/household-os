@@ -17,6 +17,13 @@ import type {
   TaxEstimate,
 } from '@household-os/shared/types';
 
+/** Response shape for GET /api/look-back/patterns (§50 Phase D). */
+export interface LookBackPattern {
+  kind: 'workout_skip_by_awakeness' | 'consecutive_low_mood';
+  observation: string;
+  details: Record<string, unknown>;
+}
+
 /** Response shape for GET /api/assistant-settings (§50 Phase A). */
 export interface AssistantSettingsView {
   system_prompt: string;
@@ -116,6 +123,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ messages }),
       }),
+  },
+  lookBack: {
+    patterns: (days = 30) =>
+      request<LookBackPattern[]>(`/look-back/patterns?days=${days}`),
   },
   assistantSettings: {
     get: () => request<AssistantSettingsView>('/assistant-settings'),

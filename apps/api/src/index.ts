@@ -15,6 +15,7 @@ import authRouter from './routes/auth.js';
 import chatRouter from './routes/chat.js';
 import assistantSettingsRouter from './routes/assistant-settings.js';
 import morningCheckinRouter from './routes/morning-checkin.js';
+import lookBackRouter from './routes/look-back.js';
 import { requireToken } from './middleware/auth.js';
 import { ingestCalendarTriggers } from './cron/calendar-ingest.js';
 import { reconcileAppointmentsCron } from './cron/appointment-reconcile.js';
@@ -89,6 +90,7 @@ app.get('/', (_req, res) => {
         '/api/chat',
         '/api/assistant-settings',
         '/api/morning-checkin',
+        '/api/look-back/patterns',
       ],
     },
   });
@@ -109,6 +111,7 @@ app.use('/api/alexa', alexaRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/assistant-settings', assistantSettingsRouter);
 app.use('/api/morning-checkin', morningCheckinRouter);
+app.use('/api/look-back', lookBackRouter);
 
 // 5:30 AM — pull next 7 days of triggers from Google Calendar
 cron.schedule('30 5 * * *', () => {

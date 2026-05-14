@@ -2433,10 +2433,21 @@ Each phase is independently shippable. Diane can stop after any phase.
 
 **Test delta: −195 (from 384 → 189).** Within §50's prediction of "roughly 100-130 tests survive" — slightly higher because the surviving subsystems (finance, appointments, csv-parser, routines, calendar, morning-checkin) have heavier coverage than the deletes did. Dashboard build dropped from 291 KB JS gzipped → 209 KB (28% smaller). Detail in §53.
 
-**Phase D — Look Back view (~3-4 hr)**
-- Build `LookBackPanel` component with the three sections (This week / This month / Patterns).
-- Implement the "patterns" surfacer as a small `services/patterns-simple.ts` (no cron — computed on demand). Start with one or two patterns: skipped-workouts-by-awakeness, skipped-workouts-by-sleep (if note text hints).
-- Wire workout target (3/week) as a constant for now; editable later from Stuff/Assistant Settings if she wants.
+**Phase D — Look Back view (~3-4 hr) — SHIPPED 2026-05-13**
+- ✅ New [services/patterns-simple.ts](apps/api/src/services/patterns-simple.ts) — on-demand surfacer with two detectors:
+  - `skippedWorkoutsByAwakeness(days)` — Threshold: ≥2 skips with same-day check-ins, and one awakeness level accounting for ≥75% of them. Skips without a same-day `MorningCheckin` are dropped from the denominator (can't correlate without it). All-match phrasing ("all on groggy mornings") vs majority phrasing ("3 of 4 skipped workouts were on groggy mornings").
+  - `consecutiveLowMood(days)` — Threshold: ≥3 consecutive `mood='down'` morning check-ins counting back from today. Allows gaps (days with no check-in don't break the run — we don't assume "no log = bad day"). Single-day dips don't qualify; this is about spotting trends, not flagging every bad day.
+  - `detectPatterns(windowDays)` orchestrator clamps to [1, 90], runs both, drops nulls. Empty array means "nothing notable" and the dashboard hides the section entirely.
+- ✅ New route `GET /api/look-back/patterns?days=N` ([apps/api/src/routes/look-back.ts](apps/api/src/routes/look-back.ts)) — mounted under the `requireToken` guard. The two other Look Back sections (This week + This month) compose from existing endpoints rather than getting dedicated rollup routes — keeps the API surface small.
+- ✅ Rebuilt [LookBackPanel.tsx](apps/dashboard/src/components/LookBackPanel.tsx) with three live sections:
+  - **This week** (unchanged from Phase C) — workout count vs target (3/week constant) + 7-day morning-checkin strip.
+  - **This month** (new) — `Monthly profile` rollup: gross income − tax estimate − fixed expenses − discretionary spent (from latest RocketMoney import's `parsed.total`) = Net. `Latest RocketMoney import` section: kind/filename/date/total + top 5 categories by amount. Handles three states (no profile, paste import (no parse), CSV import with parsed categories).
+  - **Patterns** (new) — fetches `api.lookBack.patterns(30)` and renders each observation as a bordered list item. Auto-hides when empty per §50.
+- ✅ Added `api.lookBack.patterns(days)` + `LookBackPattern` type to [apps/dashboard/src/api.ts](apps/dashboard/src/api.ts).
+- ⏸️ **Deferred (not in §50 spec for Phase D)**: per-month projected income field/collection. Phase D uses `FinancialProfile.monthly_gross_income` as the projected income — same single monthly figure Diane enters in Stuff/Finance. Phase E will decide whether to track per-month overrides (and add a `set_projected_income({month, amount})` assistant tool) or keep the flat-monthly figure.
+- ⏸️ **`ChatMessage` collection still not built.** §50's Today-view spec floated persisting chat history so Look Back could surface "what did I ask the assistant last Tuesday." Look Back is now built and didn't need it — the data the section actually wants is morning check-ins, workouts, and finance, all of which already persist. Punting indefinitely unless Diane asks for a chat-history retro view specifically.
+
+**Test delta: +14 (all on `patterns-simple.test.ts`).** New API total: **203 tests across 18 files** (213 with alexa-skill). All four workspaces typecheck clean; dashboard build verified (213 KB JS gzipped, +2 KB from Phase C for the LookBackPanel rebuild). Detail in §54.
 
 **Phase E — Stuff view (~3-4 hr)**
 - Build `StuffPanel` with three sub-tabs (Routines, Finance, Assistant Settings).
@@ -2799,3 +2810,71 @@ All four workspaces typecheck clean; all 199 tests pass; dashboard production bu
 - **Phase E (Stuff)**: the Stuff panel is functional but Phase E refines it. Specifically: add `cadence_shift_strategy` to `update_routine` (modal + tool wiring), add `set_projected_income` (decide: new field on profile vs. new collection), simplify the Routine schema by dropping `energy` / `flex_days` / `also_triggers` / `skip_if` from the model + seed.ts + `patchRoutine` allow-list.
 - **Phase F (Alexa)**: this is the most-urgent remaining work because the live skill currently 404s against the trimmed API. Retool `WhatsLeftIntent` to read today's incomplete Calendar events directly; delete the rest of the intents (swap / mark-done / pull-from-pool / mood / energy / check-in answer / zone / etc.); update `client.ts` to only call surviving endpoints; verify the morning push still fires.
 - **Phase G (Final cleanup)**: relative timestamps on the Routines table + MorningCheckin summary line. Run a `find` for any orphaned tests or docs the Phase C purge missed.
+
+---
+
+## 54. Phase D — Look Back view (SHIPPED 2026-05-13)
+
+Phase D of the §50 rebuild. Fills in the "This month" + "Patterns" sections of Look Back (Phase C shipped placeholders). Pure observation surface — no scoring, no nags, no streaks.
+
+### What landed
+
+**API — pattern surfacer**
+
+- [apps/api/src/services/patterns-simple.ts](apps/api/src/services/patterns-simple.ts) — on-demand (no cron). Two detectors plus an orchestrator:
+  - `skippedWorkoutsByAwakeness(days)` — cross-references `WorkoutLog.status='skipped'` with `MorningCheckin.awakeness` on the same date. Threshold: ≥2 observed skips (skips without a same-day check-in are dropped from the denominator), and one awakeness level accounts for ≥75% of the observed skips. Two phrasings: "all on groggy mornings" when ratio is 1.0, "3 of 4 skipped workouts were on groggy mornings" when between 0.75 and 1.0.
+  - `consecutiveLowMood(days)` — walks newest → oldest `MorningCheckin`s, counts the leading run of `mood='down'` entries. Surfaces only when run ≥ 3. **Allows gaps** — days with no check-in don't break the run, because "no log" ≠ "good day."
+  - `detectPatterns(windowDays)` — clamps window to [1, 90], runs both, drops nulls. Empty array → the dashboard hides the section entirely.
+- [apps/api/src/routes/look-back.ts](apps/api/src/routes/look-back.ts) — `GET /api/look-back/patterns?days=N`. The other two sections (This week + This month) compose from existing endpoints rather than getting dedicated rollup routes; resist adding `/api/look-back/this-month` unless server-side composition becomes genuinely necessary.
+
+**Dashboard — full Look Back rebuild**
+
+- [apps/dashboard/src/components/LookBackPanel.tsx](apps/dashboard/src/components/LookBackPanel.tsx) — three live sections, all read-only:
+  - **This week** (unchanged from Phase C) — workout count vs `STRENGTH_WEEKLY_TARGET=3` (hardcoded per §50 spec); 7-day morning-checkin strip with date + mood/energy/awakeness + note preview.
+  - **This month** (new) — two sub-panels:
+    - **Monthly profile** — `Projected income (= monthly_gross_income) − Tax estimate − Fixed expenses − Discretionary spent (from latest RocketMoney parsed.total) = Net`. Net only renders when there's a gross income AND a parsed import total; otherwise the math is suspect. Empty state when nothing is set yet ("fill in Stuff → Finance to see the rollup").
+    - **Latest RocketMoney import** — kind + filename + date + total in the meta line. Top 5 categories by amount as a list. Three terminal states handled explicitly: no imports (empty state with pointer to Stuff → Finance), paste import (no parse — just shows kind/date), CSV that didn't parse (clear "no matching outflow rows" notice).
+  - **Patterns** (new) — fetches `api.lookBack.patterns(30)` and renders each observation as a bordered list item. **Auto-hides the entire section** when the array is empty per §50 ("hides when there's nothing notable").
+- [apps/dashboard/src/api.ts](apps/dashboard/src/api.ts): new `api.lookBack.patterns(days)` + exported `LookBackPattern` type.
+
+### Tests added (+14)
+
+[apps/api/src/services/patterns-simple.test.ts](apps/api/src/services/patterns-simple.test.ts):
+
+- **`skippedWorkoutsByAwakeness`** (7): null below 2 skips; all-match phrasing at ratio 1.0; majority phrasing at ratio 0.75; null at ratio 0.5 (no dominant awakeness); skips without same-day check-in dropped from denominator; ignores `done` + `partial` workouts; respects the window (out-of-window skips don't count).
+- **`consecutiveLowMood`** (4): null below 3 consecutive; surfaces at 3-day run; breaks on first non-`down` day (most recent neutral → run is 0); null when no check-ins at all.
+- **`detectPatterns` orchestrator** (3): empty array when neither detector fires; returns both patterns when both fire simultaneously; clamps `windowDays` to [1, 90] without throwing.
+
+**Deliberately not tested:**
+
+- Dashboard components — same situation as every prior phase (no React testing infra). First regression candidates: `ThisMonthSection` empty-state branches (no profile / no import / paste-only / CSV-no-parse), `PatternsSection` auto-hide on empty array, the `Net` math conditional rendering.
+- The route layer — thin wrapper over the service which is fully covered.
+
+### Spec deviations / design calls
+
+1. **`FinancialProfile.monthly_gross_income` used as "projected income."** §50's "This month" section reads "the projected income number Diane entered" and Phase E lists `set_projected_income({month, amount})` as a deferred tool needing "a new field or collection — decision pending." Phase D punts that decision: it uses the existing flat-monthly `monthly_gross_income` field as the projected income source. Functionally identical when she doesn't actually want per-month overrides; Phase E can add per-month overrides later without changing this view's contract.
+2. **"This week" workout target hardcoded.** §50 says "Wire workout target (3/week) as a constant for now; editable later from Stuff/Assistant Settings if she wants." Done as `STRENGTH_WEEKLY_TARGET = 3` at the top of `LookBackPanel.tsx`. If she ever wants this editable, the cleanest path is a `WorkoutTargets` singleton (or a field on `FinancialProfile`-like settings doc) — not worth the abstraction today.
+3. **Two detectors, not five.** §50 said "Start with one or two patterns." Shipped two. Adding more is a one-function append to `patterns-simple.ts`. Candidates for later if Diane wants them: "X+ consecutive days of low energy," "appointment rescheduled N+ times this month for one routine" (via the `appointment_rescheduled` ActivityLog kind), "morning check-in skipped N days in a row." Don't add unless she asks.
+4. **`consecutive_low_mood` allows gaps in the run.** A more naive implementation would break on any day without a check-in. Decision: not logging a check-in could mean she forgot, was traveling, or was too overwhelmed to log — none of which should reset the "things have been hard lately" signal. Days with `mood='down'` only end the run when a check-in actually exists with a non-down mood.
+5. **`skippedWorkoutsByAwakeness` drops uncorrelated skips from the denominator.** If Diane skipped 5 workouts but only logged check-ins for 2 of them, we compute the ratio over 2, not 5. The unobserved skips can't tell us whether they correlated with awakeness — including them would inflate or deflate the ratio depending on how we handled them. The pattern only surfaces conclusions from data we actually have.
+6. **No `Patterns` assistant tool.** Could expose `detectPatterns` as an assistant tool (`get_patterns`) so the chat surface can reason over the same observations. Skipped because the assistant can already query `recent_workouts` + `recent_checkins` and synthesize the same observations on the fly; adding a redundant tool is just API surface debt.
+7. **No `ChatMessage` collection added.** §50's Today-view spec floated persisting AskPanel chat history to a `ChatMessage` collection so Look Back could surface "what did I ask the assistant last Tuesday." Phase D didn't need it — the three sections all draw from existing collections (MorningCheckin, WorkoutLog, FinancialProfile, RocketMoneyImport). Punting indefinitely unless Diane specifically asks for a chat-history retro view.
+
+### Route cheat sheet additions
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/look-back/patterns` | GET | `?days=N` (default 30, clamped [1, 90]). Returns `Pattern[]` — empty when nothing notable. Dashboard hides the Patterns section in that case. |
+
+### Open follow-ups for Phase E
+
+- **Routine schema simplification** — drop `energy`, `flex_days`, `also_triggers`, `skip_if` from the schema + seed + `patchRoutine` allow-list. Stuff → Routines table is the natural place to touch every consumer in one coherent change.
+- **`cadence_shift_strategy` on `update_routine`** — add the `'one_off' | 'shift_all' | 'skip_one'` modal in the Routines table, wire the strategy through `patchRoutine` to write to Google Calendar when the routine is appointment-enabled.
+- **`set_projected_income({month, amount})` decision** — Phase D punted to `monthly_gross_income`. Decide whether to:
+  - keep that flat-monthly figure (do nothing; Look Back is fine as-is), OR
+  - add per-month overrides as `MonthlyProjectedIncome` collection or a `monthly_projected_income_overrides: { 'YYYY-MM': number }` field on `FinancialProfile`.
+- **Stuff → Assistant Settings polish** — Phase C shipped a working textarea + version rollback. Could add diff view between versions, but unclear if she'd use it.
+
+### Open follow-ups for Phase F
+
+- The Alexa skill is still the most-urgent remaining work — it 404s against the trimmed API. Phase F: retool `WhatsLeftIntent` against Google Calendar events (not the deleted TodayPlan), drop the rest of the intents.
